@@ -1,0 +1,10 @@
+# Ignore Python bytecode and cache
+__pycache__/
+*.py[cod]
+
+# Ignore distribution/build directories
+build/
+dist/
+*.egg-info/
+
+
