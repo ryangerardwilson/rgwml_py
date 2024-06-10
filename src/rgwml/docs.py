@@ -1,8 +1,8 @@
 def show_docs():
-    """Prints out all methods in rgwml package with their signatures."""
-    methods = [
+    """Prints out all methods and classes in rgwml package with their signatures."""
+    items = [
         "add_one(number)",
         "add_two(number)",
     ]
-    for method in methods:
-        print(method)
+    for item in items:
+        print(item)
