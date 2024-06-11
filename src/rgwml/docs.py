@@ -1,8 +1,7 @@
 def show_docs():
-    """Prints out all methods and classes in rgwml package with their signatures."""
-    items = [
-        "add_one(number)",
-        "add_two(number)",
+    """Prints out all methods in rgwml package with their signatures."""
+    methods = [
+        "query_to_df(preset_name, query_str)",
     ]
-    for item in items:
-        print(item)
+    for method in methods:
+        print(method)
