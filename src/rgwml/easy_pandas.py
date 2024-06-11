@@ -10,15 +10,7 @@ class EP:
         self.df = None
 
     def frm(self, file_path):
-        """
-        Load a DataFrame from a file.
-        
-        Parameters:
-        file_path (str): Path to the file to load the DataFrame from.
-        
-        Returns:
-        self: EP instance with the loaded DataFrame.
-        """
+        """Load a DataFrame from a file."""
         file_extension = file_path.split('.')[-1]
         
         if file_extension == 'csv':
@@ -54,12 +46,7 @@ class EP:
         return self
 
     def frml(self):
-        """
-        List and select files to load a DataFrame from the Desktop, Downloads, and Documents directories.
-        
-        Returns:
-        self: EP instance with the loaded DataFrame.
-        """
+        """List and select files to load a DataFrame from the Desktop, Downloads, and Documents directories."""
         directories = [os.path.expanduser(f"~/{folder}") for folder in ["Desktop", "Downloads", "Documents"]]
         parseable_extensions = ['csv', 'xls', 'xlsx', 'json', 'parquet', 'h5', 'hdf5', 'feather', 'pkl']
 
@@ -128,12 +115,7 @@ class EP:
         return self
 
     def d(self):
-        """
-        Print the descriptive statistics of the DataFrame.
-        
-        Returns:
-        self: EP instance with the updated DataFrame containing the descriptive statistics.
-        """
+        """Print the descriptive statistics of the DataFrame."""
         if self.df is not None:
             description = self.df.describe()
             print(description)
@@ -144,15 +126,7 @@ class EP:
         return self
 
     def fnr(self, n):
-        """
-        Print the first n rows of the DataFrame in pretty JSON format.
-        
-        Parameters:
-        n (int): Number of rows to display.
-        
-        Returns:
-        self: EP instance.
-        """
+        """Print the first n rows of the DataFrame in pretty JSON format."""
         if self.df is not None:
             first_n_rows = self.df.head(n).to_json(orient="records", indent=4)
             print(first_n_rows)
@@ -162,15 +136,7 @@ class EP:
         return self
 
     def lnr(self, n):
-        """
-        Print the last n rows of the DataFrame in pretty JSON format.
-        
-        Parameters:
-        n (int): Number of rows to display.
-        
-        Returns:
-        self: EP instance.
-        """
+        """Print the last n rows of the DataFrame in pretty JSON format."""
         if self.df is not None:
             last_n_rows = self.df.tail(n).to_json(orient="records", indent=4)
             print(last_n_rows)
@@ -180,12 +146,7 @@ class EP:
         return self
 
     def p(self):
-        """
-        Print the DataFrame, its memory usage, and its column names.
-        
-        Returns:
-        self: EP instance.
-        """
+        """Print the DataFrame, its memory usage, and its column names."""
         if self.df is not None:
             # Print the DataFrame
             print(self.df)
@@ -202,15 +163,7 @@ class EP:
         return self
 
     def f(self, filter_expr):
-        """
-        Filter the DataFrame using a pandas-like query expression and print the result.
-        
-        Parameters:
-        filter_expr (str): Pandas query expression.
-        
-        Returns:
-        self: EP instance with the filtered DataFrame.
-        """
+        """Filter the DataFrame using a pandas-like query expression and print the result."""
         if self.df is not None:
             self.df = self.df.query(filter_expr)
             self.p()
@@ -220,12 +173,7 @@ class EP:
         return self
 
     def doc(self):
-        """
-        Print the names and docstrings of all methods in the EP class.
-        
-        Returns:
-        self: EP instance.
-        """
+        """Print the names and docstrings of all methods in the EP class."""
         methods = [method for method in dir(self) if callable(getattr(self, method)) and not method.startswith("__")]
         for method in methods:
             method_func = getattr(self, method)
@@ -234,8 +182,4 @@ class EP:
         return self
 
 
-
-# Example usage:
-# ep = EP().frml().d().fnr(5).lnr(5)
-# print(ep.df)
 
