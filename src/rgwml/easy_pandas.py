@@ -6,11 +6,16 @@ from datetime import datetime
 import collections
 import time
 import argparse
+import copy
 
-class EP:
-    def __init__(self):
+class p:
+    def __init__(self, df=None):
         """Initialize the EP class with an empty DataFrame."""
-        self.df = None
+        self.df = df
+
+    def clo(self):
+        """Create a deep copy of the current EP instance."""
+        return p(df=copy.deepcopy(self.df))
 
     def frm(self, file_path):
         """INSTANTIATE::Load a DataFrame from a file."""
@@ -45,7 +50,7 @@ class EP:
         else:
             raise ValueError(f"Unsupported file extension: {file_extension}")
         
-        self.p()
+        self.pr()
         return self
 
     def frml(self):
@@ -108,7 +113,7 @@ class EP:
                     else:
                         raise ValueError(f"Unsupported file extension: {file_extension}")
                     
-                    self.p()
+                    self.pr()
                     break
                 else:
                     print("Invalid choice. Please choose a valid number between 1 and 7.")
@@ -148,29 +153,11 @@ class EP:
         
         return self
 
-    def p(self):
-        """
-        INSPECT::Print the DataFrame, its memory usage, and its column names.
-        
-        Example:
-            >>> ep = EP()
-            >>> data = {'A': [1, 2], 'B': [3, 4]}
-            >>> ep.df = pd.DataFrame(data)
-            >>> ep.p()
-               A  B
-            0  1  3
-            1  2  4
-            Memory usage of DataFrame: 0.00 MB
-            Columns: ['A', 'B']
-            <easy_pandas.EP object at ...>
-        """
+    def pr(self):
+        """INSPECT::Print the DataFrame, its memory usage, and its column names."""
         if self.df is not None:
             # Print the DataFrame
             print(self.df)
-            
-            # Print the size of the DataFrame in memory
-            memory_usage = self.df.memory_usage(deep=True).sum() / (1024 * 1024)  # Convert bytes to MB
-            print(f"Memory usage of DataFrame: {memory_usage:.2f} MB")
             
             # Print all the column names
             print("Columns:", self.df.columns.tolist())
@@ -179,45 +166,33 @@ class EP:
 
         return self
 
+
+    def mem(self):
+        """INSPECT::Print the DataFrame's memory usage."""
+        if self.df is not None:
+
+            # Print the size of the DataFrame in memory
+            memory_usage = self.df.memory_usage(deep=True).sum() / (1024 * 1024)  # Convert bytes to MB
+            print(f"Memory usage of DataFrame: {memory_usage:.2f} MB")
+
+        else:
+            raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
+
+        return self
+
+
     def ft(self, filter_expr):
-        """
-        TINKER::Filter the DataFrame using a pandas-like query expression and print the result.
-        Example:
-            >>> ep = EP()
-            >>> data = {'A': [1, 2, 3, 4], 'B': [5, 6, 7, 8], 'C': ['foo', 'bar', 'baz', 'qux']}
-            >>> ep.df = pd.DataFrame(data)
-            >>> ep.ft("A > 2")
-               A  B    C
-            2  3  7  baz
-            3  4  8  qux
-            Memory usage of DataFrame: 0.00 MB
-            Columns: ['A', 'B', 'C']
-            <easy_pandas.EP object at ...>
-        """
+        """TINKER::Filter the DataFrame using a pandas-like query expression and print the result."""
         if self.df is not None:
             self.df = self.df.query(filter_expr)
-            self.p()
+            self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
 
         return self
 
     def fi(self, filter_expr):
-        """
-        INSPECT::Filter the DataFrame using a pandas-like query expression, print the result, and return the original object.
-        
-        Example:
-            >>> ep = EP()
-            >>> data = {'A': [1, 2, 3, 4], 'B': [5, 6, 7, 8], 'C': ['foo', 'bar', 'baz', 'qux']}
-            >>> ep.df = pd.DataFrame(data)
-            >>> ep.fi("A > 2")
-               A  B    C
-            2  3  7  baz
-            3  4  8  qux
-            Memory usage of DataFrame: 0.00 MB
-            Columns: ['A', 'B', 'C']
-            <easy_pandas.EP object at ...>
-        """
+        """INSPECT::Filter the DataFrame using a pandas-like query expression, print the result, and return the original object."""
         if self.df is not None:
             # Create a copy of the original DataFrame
             original_df = self.df.copy()
@@ -226,12 +201,78 @@ class EP:
             self.df = self.df.query(filter_expr)
             
             # Print the filtered DataFrame
-            self.p()
+            self.pr()
             
             # Restore the original DataFrame
             self.df = original_df
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+
+        return self
+
+    def fim(self, mobile_col):
+        """
+        Filter in rows where the mobile column contains a numerically parseable value starting with 6, 7, 8, or 9.
+        """
+        if self.df is not None:
+            self.df = self.df[self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+        return self
+
+    def fimc(self, mobile_col):
+        """
+        Filter out rows where the mobile column contains a numerically parseable value starting with 6, 7, 8, or 9.
+        """
+        if self.df is not None:
+            self.df = self.df[~self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+        return self
+
+    def gi(self, groupby_cols, agg_func):
+        """INSPECT::Group the DataFrame by the specified columns and aggregate using the given function, print the result, and return the original object."""
+        if self.df is not None:
+            original_df = self.df.copy()
+            self.df = self.df.groupby(groupby_cols).agg(agg_func)
+            self.pr()
+            self.df = original_df
+        else:
+            raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
+
+        return self
+
+    def gt(self, groupby_cols, agg_func):
+        """TINKER::Group the DataFrame by the specified columns and aggregate using the given function, print the result, and modify the original object."""
+        if self.df is not None:
+            self.df = self.df.groupby(groupby_cols).agg(agg_func)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
+
+        return self
+
+    def pi(self, index, columns, values, aggfunc='sum'):
+        """INSPECT::Pivot the DataFrame using the specified index, columns, and values, print the result, and return the original object."""
+        if self.df is not None:
+            original_df = self.df.copy()
+            self.df = self.df.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
+            self.pr()
+            self.df = original_df
+        else:
+            raise ValueError("No DataFrame to pivot. Please load a file first using the frm or frml method.")
+
+        return self
+
+    def pt(self, index, columns, values, aggfunc='sum'):
+        """TINKER::Pivot the DataFrame using the specified index, columns, and values, print the result, and modify the original object."""
+        if self.df is not None:
+            self.df = self.df.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to pivot. Please load a file first using the frm or frml method.")
 
         return self
 
@@ -277,4 +318,28 @@ class EP:
         return self
 
 
+    def s(self, name_or_path):
+        """Save the DataFrame as a CSV file on the desktop."""
+        if self.df is None:
+            raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
 
+        # Ensure the file has a .csv extension
+        if not name_or_path.lower().endswith('.csv'):
+            name_or_path += '.csv'
+
+        # Determine the desktop path
+        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+
+        # Handle the input to create the full path
+        if os.path.isabs(name_or_path):
+            full_path = name_or_path
+        else:
+            full_path = os.path.join(desktop_path, name_or_path)
+
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        # Save the DataFrame as a CSV file
+        self.df.to_csv(full_path, index=False)
+        print(f"DataFrame saved to {full_path}")
+        return self
