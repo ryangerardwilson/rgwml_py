@@ -139,6 +139,7 @@ class p:
         gc.collect()
         return self
 
+
     def fd(self):
         """INSTANTIATE::[d.fd()] From directory."""
         directories = [os.path.expanduser(f"~/{folder}") for folder in ["Desktop", "Downloads", "Documents"]]
@@ -146,8 +147,9 @@ class p:
 
         files = []
         for directory in directories:
-            for ext in parseable_extensions:
-                files.extend(glob.glob(os.path.join(directory, f'*.{ext}')))
+            for root, _, filenames in os.walk(directory):
+                for ext in parseable_extensions:
+                    files.extend(glob.glob(os.path.join(root, f'*.{ext}')))
 
         if not files:
             print("No parseable files found in the specified directories.")
@@ -211,6 +213,12 @@ class p:
                     else:
                         raise ValueError(f"Unsupported file extension: {file_extension}")
 
+                    # Debug statement to check if DataFrame is assigned correctly
+                    if self.df is not None:
+                        print("DataFrame loaded successfully.")
+                    else:
+                        print("Failed to load DataFrame.")
+
                     self.pr()
                     break
                 else:
@@ -258,8 +266,10 @@ class p:
     def pr(self):
         """INSPECT::[d.pr()] Print."""
         if self.df is not None:
+            print("aaa")
             # Print the DataFrame
             print(self.df)
+            print(self.df.columns.tolist())
         
             # Print all the column names with their data types in brackets
             columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
@@ -343,8 +353,18 @@ class p:
         return self
 
     def g(self, groupby_cols, agg_func):
-        """TRANSFORM::[d.g(['group_by_cols'], {'col7': 'sum'})] Group. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
+        """TRANSFORM::[d.g(['group_by_cols'], {'col7': 'sum'})] Group. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc."""
+        
+        def css(series):
+            """Comma-separated strings aggregation function."""
+            return ','.join(series.astype(str))
+
         if self.df is not None:
+            # Check for the 'css' function in agg_func and replace it with the custom css function
+            for col, func in agg_func.items():
+                if func == 'css':
+                    agg_func[col] = css
+            
             self.df = self.df.groupby(groupby_cols).agg(agg_func).reset_index()
             self.pr()
         else:
@@ -465,6 +485,74 @@ class p:
         gc.collect()
         return self
 
+    def atcar(self, timestamps_col, reference_col, new_col_name):
+        """APPEND::[d.atcar('timestamps', 'reference_time', 'count_after_reference')] Append count of timestamps after reference time."""
+        if self.df is not None:
+            # Ensure the reference_col is in datetime format
+            self.df[reference_col] = pd.to_datetime(self.df[reference_col])
+
+            # Function to count timestamps after reference_time
+            def count_timestamps_after(row):
+                if pd.isna(row[timestamps_col]):
+                    return 0
+                timestamps = row[timestamps_col].split(',')
+                reference_time = row[reference_col]
+                count = 0
+                for ts in timestamps:
+                    ts = ts.strip()
+                    try:
+                        ts_datetime = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        try:
+                            ts_datetime = datetime.strptime(ts, '%Y-%m-%d')
+                        except ValueError:
+                            continue
+                    if ts_datetime > reference_time:
+                        count += 1
+                return count
+
+            # Apply the function to each row
+            self.df[new_col_name] = self.df.apply(lambda row: count_timestamps_after(row), axis=1)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a timestamp count column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+    def atcbr(self, timestamps_col, reference_col, new_col_name):
+        """APPEND::[d.atcbr('timestamps', 'reference_time', 'count_before_reference')] Append count of timestamps before reference time."""
+        if self.df is not None:
+            # Ensure the reference_col is in datetime format
+            self.df[reference_col] = pd.to_datetime(self.df[reference_col])
+
+            # Function to count timestamps before reference_time
+            def count_timestamps_before(row):
+                if pd.isna(row[timestamps_col]):
+                    return 0
+                timestamps = row[timestamps_col].split(',')
+                reference_time = row[reference_col]
+                count = 0
+                for ts in timestamps:
+                    ts = ts.strip()
+                    try:
+                        ts_datetime = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        try:
+                            ts_datetime = datetime.strptime(ts, '%Y-%m-%d')
+                        except ValueError:
+                            continue
+                    if ts_datetime < reference_time:
+                        count += 1
+                return count
+
+            # Apply the function to each row
+            self.df[new_col_name] = self.df.apply(lambda row: count_timestamps_before(row), axis=1)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a timestamp count column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
     def uj(self, other):
         """JOINS::[d.uj(d2)] Union join."""
         if not isinstance(other, p):
@@ -499,7 +587,7 @@ class p:
             raise ValueError("Both instances must contain a DataFrame")
 
         joined_df = pd.merge(self.df, other.df, how='left', left_on=left_on, right_on=right_on)
-        self = joined_df
+        self.df = joined_df
         self.pr()
         gc.collect()
         return self
