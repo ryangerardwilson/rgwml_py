@@ -1,4 +1,5 @@
 import pandas as pd
+import pymssql
 import os
 import glob
 import json
@@ -8,6 +9,9 @@ import time
 import argparse
 import copy
 import gc
+import mysql.connector
+from clickhouse_driver import Client as ClickHouseClient
+from google.cloud import bigquery
 
 class p:
     def __init__(self, df=None):
@@ -18,6 +22,71 @@ class p:
         """[d.clo()] Clone."""
         gc.collect()
         return p(df=copy.deepcopy(self.df))
+
+
+    def fq(self, db_preset_name, query):
+        """INSTANTIATE::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
+        # Read the rgwml.config file from the Desktop
+        config_path = os.path.expanduser("~/Desktop/rgwml.config")
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        host = db_preset['host']
+        username = db_preset['username']
+        password = db_preset['password']
+        database = db_preset.get('database', '')
+
+        if db_type == 'mssql':
+            conn = pymssql.connect(server=host, user=username, password=password, database=database)
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            conn.close()
+        elif db_type == 'mysql':
+            conn = mysql.connector.connect(host=host, user=username, password=password, database=database)
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            conn.close()
+        elif db_type == 'clickhouse':
+            client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            rows = client.execute(query)
+            columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+            columns = [row[0] for row in client.execute(columns_query)]
+        elif db_type == 'google_big_query':
+            bigquery_presets = config.get('google_big_query_presets', [])
+            preset = next((preset for preset in bigquery_presets if preset['name'] == db_preset_name), None)
+            if not preset:
+                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
+
+            json_file_path = preset['json_file_path']
+            project_id = preset['project_id']
+
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = json_file_path
+            client = bigquery.Client(project=project_id)
+
+            query_job = client.query(query)
+            result = query_job.result()
+            rows = [dict(row) for row in result]
+            columns = rows[0].keys() if rows else []
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        # Convert to DataFrame
+        df = pd.DataFrame(rows, columns=columns)
+        self.df = df
+        self.pr()
+        gc.collect()
+        return self
 
     def fp(self, file_path):
         """INSTANTIATE::[d.fp('/absolute/path')] From path."""
@@ -191,6 +260,20 @@ class p:
         gc.collect()
         return self
 
+    def prc(self, column_pairs):
+        """INSPECT::[d.prc([('column1','column2'), ('column3','column4')])] Print correlation for multiple pairs."""
+        if self.df is not None:
+            for col1, col2 in column_pairs:
+                if col1 in self.df.columns and col2 in self.df.columns:
+                    correlation = self.df[col1].corr(self.df[col2])
+                    print(f"The correlation between '{col1}' and '{col2}' is {correlation}.")
+                else:
+                    print(f"One or both of the specified columns ('{col1}', '{col2}') do not exist in the DataFrame.")
+        else:
+            print("The DataFrame is empty.")
+
+        gc.collect()
+        return self
 
     def mem(self):
         """INSPECT::[d.mem()] Memory usage print."""
@@ -222,7 +305,10 @@ class p:
     def fim(self, mobile_col):
         """TINKER::[d.fim('mobile')] Filter Indian mobiles."""
         if self.df is not None:
-            self.df = self.df[self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
+            self.df = self.df[self.df[mobile_col].apply(
+                lambda x: str(x).isdigit() and 
+                          str(x).startswith(('6', '7', '8', '9')) and 
+                          len(set(str(x))) >= 4)]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
@@ -232,7 +318,10 @@ class p:
     def fimc(self, mobile_col):
         """TINKER::[d.fimc('mobile')] Filter Indian mobiles (complement)."""
         if self.df is not None:
-            self.df = self.df[~self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
+            self.df = self.df[~self.df[mobile_col].apply(
+                lambda x: str(x).isdigit() and 
+                          str(x).startswith(('6', '7', '8', '9')) and 
+                          len(set(str(x))) >= 4)]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
@@ -344,6 +433,7 @@ class p:
             self.pr()
         else:
             raise ValueError("No DataFrame to append a boolean column. Please load a file first using the frm or frml method.")
+        gc.collect()
         return self
 
 
@@ -357,5 +447,35 @@ class p:
             self.pr()
         else:
             raise ValueError("No DataFrame to append a ranged classification column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+
+    def lj(self, other, left_on, right_on):
+        """JOINS::[d.lj(d2,'table_a_id','table_b_id')] Left join."""
+        if not isinstance(other, p):
+            raise TypeError("The 'other' parameter must be an instance of the p class")
+        
+        if self.df is None or other.df is None:
+            raise ValueError("Both instances must contain a DataFrame")
+
+        joined_df = pd.merge(self.df, other.df, how='left', left_on=left_on, right_on=right_on)
+        self = joined_df
+        self.pr()
+        gc.collect()
+        return self
+
+    def rj(self, other, left_on, right_on):
+        """JOINS::[d.rj(d2,'table_a_id','table_b_id')] Right join."""
+        if not isinstance(other, p):
+            raise TypeError("The 'other' parameter must be an instance of the p class")
+
+        if self.df is None or other.df is None:
+            raise ValueError("Both instances must contain a DataFrame")
+
+        joined_df = pd.merge(self.df, other.df, how='right', left_on=left_on, right_on=right_on)
+        self.df = joined_df
+        self.pr()
+        gc.collect()
         return self
 
