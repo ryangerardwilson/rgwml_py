@@ -38,12 +38,13 @@ class p:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
         db_type = db_preset['db_type']
-        host = db_preset['host']
-        username = db_preset['username']
-        password = db_preset['password']
-        database = db_preset.get('database', '')
 
         if db_type == 'mssql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
             conn = pymssql.connect(server=host, user=username, password=password, database=database)
             cursor = conn.cursor()
             cursor.execute(query)
@@ -51,6 +52,11 @@ class p:
             columns = [desc[0] for desc in cursor.description]
             conn.close()
         elif db_type == 'mysql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
             conn = mysql.connector.connect(host=host, user=username, password=password, database=database)
             cursor = conn.cursor()
             cursor.execute(query)
@@ -58,18 +64,22 @@ class p:
             columns = [desc[0] for desc in cursor.description]
             conn.close()
         elif db_type == 'clickhouse':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
             client = ClickHouseClient(host=host, user=username, password=password, database=database)
             rows = client.execute(query)
             columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
             columns = [row[0] for row in client.execute(columns_query)]
         elif db_type == 'google_big_query':
-            bigquery_presets = config.get('google_big_query_presets', [])
-            preset = next((preset for preset in bigquery_presets if preset['name'] == db_preset_name), None)
-            if not preset:
-                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
+            json_file_path = db_preset['json_file_path']
+            project_id = db_preset['project_id']
 
-            json_file_path = preset['json_file_path']
-            project_id = preset['project_id']
+            bigquery_presets = config.get('google_big_query_presets', [])
+            if not db_preset:
+                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
 
             os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = json_file_path
             client = bigquery.Client(project=project_id)
@@ -291,13 +301,17 @@ class p:
 
 
     def f(self, filter_expr):
-        """TINKER::[d.f('column1 > 100')] Filter."""
+        """TINKER::[d.f('column1 > 100 and Column1 == Column3')] Filter."""
         if self.df is not None:
-            self.df = self.df.query(filter_expr)
+            try:
+                # Attempt to use query method for simple expressions
+                self.df = self.df.query(filter_expr)
+            except:
+                # Fallback to eval for more complex expressions
+                self.df = self.df[self.df.eval(filter_expr)]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
-
         gc.collect()
         return self
 
@@ -328,29 +342,26 @@ class p:
         gc.collect()
         return self
 
-
     def g(self, groupby_cols, agg_func):
         """TRANSFORM::[d.g(['group_by_cols'], {'col7': 'sum'})] Group. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
         if self.df is not None:
-            self.df = self.df.groupby(groupby_cols).agg(agg_func)
+            self.df = self.df.groupby(groupby_cols).agg(agg_func).reset_index()
             self.pr()
         else:
             raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
 
-
     def p(self, index, values, aggfunc='sum', seg_columns=None):
         """TRANSFORM::[d.p(['group_by_cols'], 'values_to_agg_col', 'sum', ['seg_columns'])] Pivot. Optional param: seg_columns. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
         if self.df is not None:
             if seg_columns is not None:
-                self.df = self.df.pivot_table(index=index, columns=seg_columns, values=values, aggfunc=aggfunc)
+                self.df = self.df.pivot_table(index=index, columns=seg_columns, values=values, aggfunc=aggfunc).reset_index()
             else:
-                self.df = self.df.pivot_table(index=index, values=values, aggfunc=aggfunc)
+                self.df = self.df.pivot_table(index=index, values=values, aggfunc=aggfunc).reset_index()
             self.pr()
         else:
             raise ValueError("No DataFrame to pivot. Please load a file first using the frm or frml method.")
-
         gc.collect()
         return self
 
@@ -397,12 +408,12 @@ class p:
 
 
     def s(self, name_or_path):
-        """TINKER::[d.s('/filename/or/path')] Save the DataFrame as a CSV file on the desktop."""
+        """TINKER::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
         if self.df is None:
             raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
 
-        # Ensure the file has a .csv extension
-        if not name_or_path.lower().endswith('.csv'):
+        # Ensure the file has the correct extension
+        if not name_or_path.lower().endswith(('.csv', '.h5')):
             name_or_path += '.csv'
 
         # Determine the desktop path
@@ -417,12 +428,16 @@ class p:
         # Ensure the directory exists
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
-        # Save the DataFrame as a CSV file
-        self.df.to_csv(full_path, index=False)
-        print(f"DataFrame saved to {full_path}")
+        # Save the DataFrame as a CSV or HDF5 file
+        if full_path.lower().endswith('.csv'):
+            self.df.to_csv(full_path, index=False)
+            print(f"DataFrame saved to {full_path}")
+        elif full_path.lower().endswith('.h5'):
+            self.df.to_hdf(full_path, key='df', mode='w')
+            print(f"DataFrame saved to {full_path}")
+
         gc.collect()
         return self
-
 
     def abc(self, condition, new_col_name):
         """APPEND::[d.abc('column1 > 30 and column2 < 50', 'age_above_30_and_below_50')] Append boolean classification column."""
@@ -450,6 +465,30 @@ class p:
         gc.collect()
         return self
 
+    def uj(self, other):
+        """JOINS::[d.uj(d2)] Union join."""
+        if not isinstance(other, p):
+            raise TypeError("The 'other' parameter must be an instance of the p class")
+
+        if self.df is None and other.df is None:
+            raise ValueError("Both instances must contain a DataFrame or be empty")
+        
+        if self.df is None or self.df.empty:
+            self.df = other.df
+        elif other.df is None or other.df.empty:
+            pass  # self.df remains unchanged
+        else:
+            # Ensure both DataFrames have the same columns
+            if set(self.df.columns) != set(other.df.columns):
+                raise ValueError("Both DataFrames must have the same columns for a union join")
+
+            # Perform the union join
+            joined_df = pd.concat([self.df, other.df], ignore_index=True).drop_duplicates().reset_index(drop=True)
+            self.df = joined_df
+
+        self.pr()
+        gc.collect()
+        return self
 
     def lj(self, other, left_on, right_on):
         """JOINS::[d.lj(d2,'table_a_id','table_b_id')] Left join."""
@@ -479,3 +518,21 @@ class p:
         gc.collect()
         return self
 
+    def rnc(self, rename_pairs):
+        """TRANSFORM::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
+        if self.df is not None:
+            self.df = self.df.rename(columns=rename_pairs, inplace=True)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to rename columns. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+
+    def ie(self):
+        """INSPECT::[d.ie()] Is empty. Returns boolean, not chainable."""
+        if self.df is not None:
+            return self.df.empty
+        else:
+            raise ValueError("No DataFrame to check. Please load a file first using the frm or frml method.")
+        gc.collect()
