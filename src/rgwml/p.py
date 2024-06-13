@@ -7,18 +7,20 @@ import collections
 import time
 import argparse
 import copy
+import gc
 
 class p:
     def __init__(self, df=None):
         """Initialize the EP class with an empty DataFrame."""
         self.df = df
 
-    def clo(self):
-        """Create a deep copy of the current EP instance."""
+    def cl(self):
+        """[d.clo()] Clone."""
+        gc.collect()
         return p(df=copy.deepcopy(self.df))
 
-    def frm(self, file_path):
-        """INSTANTIATE::Load a DataFrame from a file."""
+    def fp(self, file_path):
+        """INSTANTIATE::[d.fp('/absolute/path')] From path."""
         file_extension = file_path.split('.')[-1]
         
         if file_extension == 'csv':
@@ -30,19 +32,23 @@ class p:
         elif file_extension == 'parquet':
             self.df = pd.read_parquet(file_path)
         elif file_extension in ['h5', 'hdf5']:
-            while True:
-                key = input("Enter the key for the HDF5 dataset (or leave blank to list available keys): ")
-                try:
-                    if key:
-                        self.df = pd.read_hdf(file_path, key=key)
-                    else:
-                        # List available keys if no key is provided
-                        with pd.HDFStore(file_path) as store:
-                            print("Available keys:", store.keys())
-                            continue
-                    break
-                except KeyError as e:
-                    print(f"KeyError: {e}. Please try again.")
+            with pd.HDFStore(file_path, mode='r') as store:
+                available_keys = store.keys()
+                if len(available_keys) == 1:
+                    # If there is only one key, load it directly
+                    self.df = pd.read_hdf(file_path, key=available_keys[0])
+                    print(f"Loaded key: {available_keys[0]}")
+                else:
+                    while True:
+                        # List available keys
+                        print("Available keys:", available_keys)
+
+                        key = input("Enter the key for the HDF5 dataset: ").strip()
+                        if key in available_keys:
+                            self.df = pd.read_hdf(file_path, key=key)
+                            break
+                        else:
+                            print(f"Key '{key}' is not in the available keys. Please try again.")
         elif file_extension == 'feather':
             self.df = pd.read_feather(file_path)
         elif file_extension == 'pkl':
@@ -51,10 +57,11 @@ class p:
             raise ValueError(f"Unsupported file extension: {file_extension}")
         
         self.pr()
+        gc.collect()
         return self
 
-    def frml(self):
-        """INSTANTIATE::List and select files to load a DataFrame from the Desktop, Downloads, and Documents directories."""
+    def fd(self):
+        """INSTANTIATE::[d.fd()] From directory."""
         directories = [os.path.expanduser(f"~/{folder}") for folder in ["Desktop", "Downloads", "Documents"]]
         parseable_extensions = ['csv', 'xls', 'xlsx', 'json', 'parquet', 'h5', 'hdf5', 'feather', 'pkl']
 
@@ -65,6 +72,7 @@ class p:
 
         if not files:
             print("No parseable files found in the specified directories.")
+            gc.collect()
             return self
 
         files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
@@ -79,7 +87,9 @@ class p:
 
         while True:
             try:
-                choice = int(input("Choose a number corresponding to the file you want to load: "))
+                choice = input("Choose a number corresponding to the file you want to load: ").strip()
+                choice = int(choice)
+
                 if 1 <= choice <= len(recent_files):
                     file_path = recent_files[choice - 1]  # Correct the index
                     file_extension = file_path.split('.')[-1]
@@ -93,37 +103,47 @@ class p:
                     elif file_extension == 'parquet':
                         self.df = pd.read_parquet(file_path)
                     elif file_extension in ['h5', 'hdf5']:
-                        while True:
-                            key = input("Enter the key for the HDF5 dataset (or leave blank to list available keys): ")
-                            try:
-                                if key:
-                                    self.df = pd.read_hdf(file_path, key=key)
+                        try:
+                            with pd.HDFStore(file_path, mode='r') as store:
+                                available_keys = store.keys()
+                                if len(available_keys) == 1:
+                                    # If there is only one key, load it directly
+                                    self.df = pd.read_hdf(file_path, key=available_keys[0])
+                                    print(f"Loaded key: {available_keys[0]}")
                                 else:
-                                    # List available keys if no key is provided
-                                    with pd.HDFStore(file_path) as store:
-                                        print("Available keys:", store.keys())
-                                        continue
-                                break
-                            except KeyError as e:
-                                print(f"KeyError: {e}. Please try again.")
+                                    while True:
+                                        # List available keys
+                                        print("Available keys:", available_keys)
+
+                                        key = input("Enter the key for the HDF5 dataset: ").strip()
+                                        if key in available_keys:
+                                            self.df = pd.read_hdf(file_path, key=key)
+                                            break
+                                        else:
+                                            print(f"Key '{key}' is not in the available keys. Please try again.")
+                        except Exception as e:
+                            print(f"Error opening HDF5 file: {e}")
+                            gc.collect()
+                            return self
                     elif file_extension == 'feather':
                         self.df = pd.read_feather(file_path)
                     elif file_extension == 'pkl':
                         self.df = pd.read_pickle(file_path)
                     else:
                         raise ValueError(f"Unsupported file extension: {file_extension}")
-                    
+
                     self.pr()
                     break
                 else:
                     print("Invalid choice. Please choose a valid number between 1 and 7.")
-            except ValueError:
-                print("Invalid input. Please enter a number.")
+            except ValueError as e:
+                print(f"ValueError: {e}. Invalid input. Please enter a number.")
 
+        gc.collect()
         return self
 
-    def d(self):
-        """INSPECT::Print the descriptive statistics of the DataFrame."""
+    def des(self):
+        """INSPECT::[d.d()]Describe."""
         if self.df is not None:
             description = self.df.describe()
             print(description)
@@ -131,44 +151,49 @@ class p:
         else:
             raise ValueError("No DataFrame to describe. Please load a file first using the frm or frml method.")
         
+        gc.collect()
         return self
 
     def fnr(self, n):
-        """INSPECT::Print the first n rows of the DataFrame in pretty JSON format."""
+        """INSPECT::[d.fnr('n')] First n rows."""
         if self.df is not None:
             first_n_rows = self.df.head(n).to_json(orient="records", indent=4)
             print(first_n_rows)
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
         
+        gc.collect()
         return self
 
     def lnr(self, n):
-        """INSPECT::Print the last n rows of the DataFrame in pretty JSON format."""
+        """INSPECT::[d.lnr('n')] Last n rows."""
         if self.df is not None:
             last_n_rows = self.df.tail(n).to_json(orient="records", indent=4)
             print(last_n_rows)
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
         
+        gc.collect()
         return self
 
     def pr(self):
-        """INSPECT::Print the DataFrame, its memory usage, and its column names."""
+        """INSPECT::[d.pr()] Print."""
         if self.df is not None:
             # Print the DataFrame
             print(self.df)
-            
-            # Print all the column names
-            print("Columns:", self.df.columns.tolist())
+        
+            # Print all the column names with their data types in brackets
+            columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
+            print("Columns:", columns_with_types)
         else:
             raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
 
+        gc.collect()
         return self
 
 
     def mem(self):
-        """INSPECT::Print the DataFrame's memory usage."""
+        """INSPECT::[d.mem()] Memory usage print."""
         if self.df is not None:
 
             # Print the size of the DataFrame in memory
@@ -178,107 +203,70 @@ class p:
         else:
             raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
 
+        gc.collect()
         return self
 
 
-    def ft(self, filter_expr):
-        """TINKER::Filter the DataFrame using a pandas-like query expression and print the result."""
+    def f(self, filter_expr):
+        """TINKER::[d.f('column1 > 100')] Filter."""
         if self.df is not None:
             self.df = self.df.query(filter_expr)
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
 
+        gc.collect()
         return self
 
-    def fi(self, filter_expr):
-        """INSPECT::Filter the DataFrame using a pandas-like query expression, print the result, and return the original object."""
-        if self.df is not None:
-            # Create a copy of the original DataFrame
-            original_df = self.df.copy()
-            
-            # Filter the DataFrame
-            self.df = self.df.query(filter_expr)
-            
-            # Print the filtered DataFrame
-            self.pr()
-            
-            # Restore the original DataFrame
-            self.df = original_df
-        else:
-            raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
-
-        return self
 
     def fim(self, mobile_col):
-        """
-        Filter in rows where the mobile column contains a numerically parseable value starting with 6, 7, 8, or 9.
-        """
+        """TINKER::[d.fim('mobile')] Filter Indian mobiles."""
         if self.df is not None:
             self.df = self.df[self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+        gc.collect()
         return self
 
     def fimc(self, mobile_col):
-        """
-        Filter out rows where the mobile column contains a numerically parseable value starting with 6, 7, 8, or 9.
-        """
+        """TINKER::[d.fimc('mobile')] Filter Indian mobiles (complement)."""
         if self.df is not None:
             self.df = self.df[~self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')))]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+        gc.collect()
         return self
 
-    def gi(self, groupby_cols, agg_func):
-        """INSPECT::Group the DataFrame by the specified columns and aggregate using the given function, print the result, and return the original object."""
-        if self.df is not None:
-            original_df = self.df.copy()
-            self.df = self.df.groupby(groupby_cols).agg(agg_func)
-            self.pr()
-            self.df = original_df
-        else:
-            raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
 
-        return self
-
-    def gt(self, groupby_cols, agg_func):
-        """TINKER::Group the DataFrame by the specified columns and aggregate using the given function, print the result, and modify the original object."""
+    def g(self, groupby_cols, agg_func):
+        """TRANSFORM::[d.g(['group_by_cols'], {'col7': 'sum'})] Group. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
         if self.df is not None:
             self.df = self.df.groupby(groupby_cols).agg(agg_func)
             self.pr()
         else:
             raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
-
+        gc.collect()
         return self
 
-    def pi(self, index, columns, values, aggfunc='sum'):
-        """INSPECT::Pivot the DataFrame using the specified index, columns, and values, print the result, and return the original object."""
-        if self.df is not None:
-            original_df = self.df.copy()
-            self.df = self.df.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
-            self.pr()
-            self.df = original_df
-        else:
-            raise ValueError("No DataFrame to pivot. Please load a file first using the frm or frml method.")
 
-        return self
-
-    def pt(self, index, columns, values, aggfunc='sum'):
-        """TINKER::Pivot the DataFrame using the specified index, columns, and values, print the result, and modify the original object."""
+    def p(self, index, values, aggfunc='sum', seg_columns=None):
+        """TRANSFORM::[d.p(['group_by_cols'], 'values_to_agg_col', 'sum', ['seg_columns'])] Pivot. Optional param: seg_columns. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
         if self.df is not None:
-            self.df = self.df.pivot_table(index=index, columns=columns, values=values, aggfunc=aggfunc)
+            if seg_columns is not None:
+                self.df = self.df.pivot_table(index=index, columns=seg_columns, values=values, aggfunc=aggfunc)
+            else:
+                self.df = self.df.pivot_table(index=index, values=values, aggfunc=aggfunc)
             self.pr()
         else:
             raise ValueError("No DataFrame to pivot. Please load a file first using the frm or frml method.")
 
+        gc.collect()
         return self
-
 
     def doc(self):
-        """Print the names and docstrings of all methods in the EP class."""
+        """INSPECT::[d.doc()] Print the names and docstrings of all methods in the EP class."""
 
         # Dictionary to hold methods grouped by their type
         method_types = collections.defaultdict(list)
@@ -314,12 +302,13 @@ class p:
                 else:
                     sub_branch_end = "├──"
                 print(f"{sub_branch}{sub_branch_end} {method}: {description}")
-
+        
+        gc.collect()
         return self
 
 
     def s(self, name_or_path):
-        """Save the DataFrame as a CSV file on the desktop."""
+        """TINKER::[d.s('/filename/or/path')] Save the DataFrame as a CSV file on the desktop."""
         if self.df is None:
             raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
 
@@ -342,4 +331,31 @@ class p:
         # Save the DataFrame as a CSV file
         self.df.to_csv(full_path, index=False)
         print(f"DataFrame saved to {full_path}")
+        gc.collect()
         return self
+
+
+    def abc(self, condition, new_col_name):
+        """APPEND::[d.abc('column1 > 30 and column2 < 50', 'age_above_30_and_below_50')] Append boolean classification column."""
+        if self.df is not None:
+            # Replace column names in the condition with DataFrame access syntax
+            condition = condition.replace(' and ', ' & ').replace(' or ', ' | ')
+            self.df[new_col_name] = self.df.eval(condition)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a boolean column. Please load a file first using the frm or frml method.")
+        return self
+
+
+    def arc(self, ranges, target_col, new_col_name):
+        """APPEND::[d.arc('0,500,1000,2000,5000,10000,100000,1000000', 'data_used', 'data_range')] Append ranged classification column."""
+        if self.df is not None:
+            range_list = [int(r) for r in ranges.split(',')]
+            max_length = len(str(max(range_list)))
+            labels = [f"{str(range_list[i]).zfill(max_length)} to {str(range_list[i+1]).zfill(max_length)}" for i in range(len(range_list) - 1)]
+            self.df[new_col_name] = pd.cut(self.df[target_col], bins=range_list, labels=labels, right=False)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a ranged classification column. Please load a file first using the frm or frml method.")
+        return self
+
