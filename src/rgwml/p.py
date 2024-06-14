@@ -10,6 +10,7 @@ import argparse
 import copy
 import gc
 import mysql.connector
+import tempfile
 from clickhouse_driver import Client as ClickHouseClient
 from google.cloud import bigquery
 
@@ -26,11 +27,28 @@ class p:
 
     def fq(self, db_preset_name, query):
         """INSTANTIATE::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+
         # Read the rgwml.config file from the Desktop
-        config_path = os.path.expanduser("~/Desktop/rgwml.config")
+        config_path = locate_config_file()
+        #config_path = os.path.expanduser("~/Desktop/rgwml.config")
         with open(config_path, 'r') as f:
             config = json.load(f)
-        
+
         # Find the matching db_preset
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
@@ -45,24 +63,24 @@ class p:
             password = db_preset['password']
             database = db_preset.get('database', '')
 
-            conn = pymssql.connect(server=host, user=username, password=password, database=database)
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-            conn.close()
+            with pymssql.connect(server=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+
         elif db_type == 'mysql':
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
             database = db_preset.get('database', '')
 
-            conn = mysql.connector.connect(host=host, user=username, password=password, database=database)
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-            conn.close()
+            with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+
         elif db_type == 'clickhouse':
             host = db_preset['host']
             username = db_preset['username']
@@ -73,6 +91,7 @@ class p:
             rows = client.execute(query)
             columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
             columns = [row[0] for row in client.execute(columns_query)]
+
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
@@ -88,6 +107,7 @@ class p:
             result = query_job.result()
             rows = [dict(row) for row in result]
             columns = rows[0].keys() if rows else []
+
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
 
@@ -97,6 +117,159 @@ class p:
         self.pr()
         gc.collect()
         return self
+
+
+    def fcq(self, db_preset_name, query, chunk_size):
+        """INSTANTIATE::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+                    
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        total_rows = 0
+        temp_files = []
+
+        if db_type == 'mssql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with pymssql.connect(server=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"SELECT COUNT(*) FROM ({query}) AS total_query")
+                    total_rows = cursor.fetchone()[0]
+
+                    offset = 0
+                    while offset < total_rows:
+                        chunk_query = f"{query} ORDER BY (SELECT NULL) OFFSET {offset} ROWS FETCH NEXT {chunk_size} ROWS ONLY"
+                        cursor.execute(chunk_query)
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+
+                        df_chunk = pd.DataFrame(rows, columns=columns)
+                        print(df_chunk)
+                        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                        df_chunk.to_csv(temp_file.name, index=False)
+                        temp_files.append(temp_file.name)
+
+                        offset += chunk_size
+
+        elif db_type == 'mysql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"SELECT COUNT(*) FROM ({query}) AS total_query")
+                    total_rows = cursor.fetchone()[0]
+
+                    offset = 0
+                    while offset < total_rows:
+                        chunk_query = f"{query} LIMIT {chunk_size} OFFSET {offset}"
+                        cursor.execute(chunk_query)
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+
+                        df_chunk = pd.DataFrame(rows, columns=columns)
+                        print(df_chunk)
+                        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                        df_chunk.to_csv(temp_file.name, index=False)
+                        temp_files.append(temp_file.name)
+
+                        offset += chunk_size
+
+        elif db_type == 'clickhouse':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            total_rows = client.execute(f"SELECT COUNT(*) FROM ({query}) AS total_query")[0][0]
+
+            offset = 0
+            while offset < total_rows:
+                chunk_query = f"{query} LIMIT {chunk_size} OFFSET {offset}"
+                rows = client.execute(chunk_query)
+                columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+                columns = [row[0] for row in client.execute(columns_query)]
+
+                df_chunk = pd.DataFrame(rows, columns=columns)
+                print(df_chunk)
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                df_chunk.to_csv(temp_file.name, index=False)
+                temp_files.append(temp_file.name)
+
+                offset += chunk_size
+
+        elif db_type == 'google_big_query':
+            json_file_path = db_preset['json_file_path']
+            project_id = db_preset['project_id']
+
+            bigquery_presets = config.get('google_big_query_presets', [])
+            if not db_preset:
+                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
+
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = json_file_path
+            client = bigquery.Client(project=project_id)
+
+            query_job = client.query(f"SELECT COUNT(*) FROM ({query}) AS total_query")
+            total_rows = [dict(row) for row in query_job.result()][0]['f0_']
+
+            offset = 0
+            while offset < total_rows:
+                chunk_query = f"{query} LIMIT {chunk_size} OFFSET {offset}"
+                query_job = client.query(chunk_query)
+                rows = [dict(row) for row in query_job.result()]
+                columns = rows[0].keys() if rows else []
+
+                df_chunk = pd.DataFrame(rows, columns=columns)
+                print(df_chunk)
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                df_chunk.to_csv(temp_file.name, index=False)
+                temp_files.append(temp_file.name)
+
+                offset += chunk_size
+
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        # Combine all chunks into a single DataFrame
+        all_chunks = [pd.read_csv(temp_file) for temp_file in temp_files]
+        df = pd.concat(all_chunks, ignore_index=True)
+        self.df = df
+
+        # Clean up temporary files
+        for temp_file in temp_files:
+            os.remove(temp_file)
+
+        self.pr()
+        gc.collect()
+        return self
+
 
     def fp(self, file_path):
         """INSTANTIATE::[d.fp('/absolute/path')] From path."""
@@ -257,6 +430,36 @@ class p:
         if self.df is not None:
             last_n_rows = self.df.tail(n).to_json(orient="records", indent=4)
             print(last_n_rows)
+        else:
+            raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
+        
+        gc.collect()
+        return self
+
+    def tnuv(self, n, columns):
+        """INSPECT::[d.tnuv(n, ['col1', 'col2'])] Top n unique values for specified columns."""
+        if self.df is not None:
+            for column in columns:
+                if column in self.df.columns:
+                    top_n = self.df[column].value_counts().nlargest(n)
+                    print(f"Top {n} unique values for column '{column}':\n{top_n}\n")
+                else:
+                    print(f"Column '{column}' does not exist in the DataFrame.")
+        else:
+            raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
+        
+        gc.collect()
+        return self
+
+    def bnuv(self, n, columns):
+        """INSPECT::[d.bnuv(n, ['col1', 'col2'])] Bottom n unique values for specified columns."""
+        if self.df is not None:
+            for column in columns:
+                if column in self.df.columns:
+                    bottom_n = self.df[column].value_counts().nsmallest(n)
+                    print(f"Bottom {n} unique values for column '{column}':\n{bottom_n}\n")
+                else:
+                    print(f"Column '{column}' does not exist in the DataFrame.")
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
         
@@ -460,7 +663,7 @@ class p:
         return self
 
     def abc(self, condition, new_col_name):
-        """APPEND::[d.abc('column1 > 30 and column2 < 50', 'age_above_30_and_below_50')] Append boolean classification column."""
+        """APPEND::[d.abc('column1 > 30 and column2 < 50', 'new_column_name')] Append boolean classification column."""
         if self.df is not None:
             # Replace column names in the condition with DataFrame access syntax
             condition = condition.replace(' and ', ' & ').replace(' or ', ' | ')
@@ -473,7 +676,7 @@ class p:
 
 
     def arc(self, ranges, target_col, new_col_name):
-        """APPEND::[d.arc('0,500,1000,2000,5000,10000,100000,1000000', 'data_used', 'data_range')] Append ranged classification column."""
+        """APPEND::[d.arc('0,500,1000,2000,5000,10000,100000,1000000', 'column_to_be_analyzed', 'new_column_name')] Append ranged classification column."""
         if self.df is not None:
             range_list = [int(r) for r in ranges.split(',')]
             max_length = len(str(max(range_list)))
@@ -485,8 +688,20 @@ class p:
         gc.collect()
         return self
 
+    def ardc(self, date_ranges, target_col, new_col_name):
+        """APPEND::[d.ardc('2024-01-01,2024-02-01,2024-03-01', 'date_column', 'new_date_classification')] Append ranged date classification column."""
+        if self.df is not None:
+            date_list = [pd.to_datetime(date) for date in date_ranges.split(',')]
+            labels = [f"{date_list[i].strftime('%Y-%m-%d')} to {date_list[i+1].strftime('%Y-%m-%d')}" for i in range(len(date_list) - 1)]
+            self.df[new_col_name] = pd.cut(pd.to_datetime(self.df[target_col]), bins=date_list, labels=labels, right=False)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a ranged date classification column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
     def atcar(self, timestamps_col, reference_col, new_col_name):
-        """APPEND::[d.atcar('timestamps', 'reference_time', 'count_after_reference')] Append count of timestamps after reference time."""
+        """APPEND::[d.atcar('comma_separated_timestamps_column', 'reference_date_or_timestamps_column', 'new_column_count_after_reference')] Append count of timestamps after reference time. Requires values in YYYY-MM-DD or YYYY-MM-DD HH:MM:SS format."""
         if self.df is not None:
             # Ensure the reference_col is in datetime format
             self.df[reference_col] = pd.to_datetime(self.df[reference_col])
@@ -520,7 +735,7 @@ class p:
         return self
 
     def atcbr(self, timestamps_col, reference_col, new_col_name):
-        """APPEND::[d.atcbr('timestamps', 'reference_time', 'count_before_reference')] Append count of timestamps before reference time."""
+        """APPEND::[d.atcbr('comma_separated_timestamps_column', 'reference_date_or_timestamp_column', 'new_column_count_before_reference')] Append count of timestamps before reference time. Requires values in YYYY-MM-DD or YYYY-MM-DD HH:MM:SS format."""
         if self.df is not None:
             # Ensure the reference_col is in datetime format
             self.df[reference_col] = pd.to_datetime(self.df[reference_col])
@@ -560,7 +775,7 @@ class p:
 
         if self.df is None and other.df is None:
             raise ValueError("Both instances must contain a DataFrame or be empty")
-        
+
         if self.df is None or self.df.empty:
             self.df = other.df
         elif other.df is None or other.df.empty:
@@ -570,26 +785,48 @@ class p:
             if set(self.df.columns) != set(other.df.columns):
                 raise ValueError("Both DataFrames must have the same columns for a union join")
 
-            # Perform the union join
-            joined_df = pd.concat([self.df, other.df], ignore_index=True).drop_duplicates().reset_index(drop=True)
-            self.df = joined_df
+            # Perform the union join using an in-place operation
+            self.df = pd.concat([self.df, other.df], ignore_index=True)
+            self.df.drop_duplicates(inplace=True)
 
         self.pr()
         gc.collect()
+        return self
+
+    def buj(self, other):
+        """JOINS::[d.buj(d2)] Bag union join (does not drop duplicates)."""
+        if not isinstance(other, p):
+            raise TypeError("The 'other' parameter must be an instance of the p class")
+
+        if self.df is None and other.df is None:
+            raise ValueError("Both instances must contain a DataFrame or be empty")
+
+        if self.df is None or self.df.empty:
+            self.df = other.df
+        elif other.df is None or other.df.empty:
+            pass  # self.df remains unchanged
+        else:
+            # Ensure both DataFrames have the same columns
+            if set(self.df.columns) != set(other.df.columns):
+                raise ValueError("Both DataFrames must have the same columns for a bag union join")
+
+            # Perform the bag union join without dropping duplicates
+            self.df = pd.concat([self.df, other.df], ignore_index=True)
+
+        self.pr()
         return self
 
     def lj(self, other, left_on, right_on):
         """JOINS::[d.lj(d2,'table_a_id','table_b_id')] Left join."""
         if not isinstance(other, p):
             raise TypeError("The 'other' parameter must be an instance of the p class")
-        
+
         if self.df is None or other.df is None:
             raise ValueError("Both instances must contain a DataFrame")
 
-        joined_df = pd.merge(self.df, other.df, how='left', left_on=left_on, right_on=right_on)
-        self.df = joined_df
+        # Perform the left join directly assigning to self.df
+        self.df = self.df.merge(other.df, how='left', left_on=left_on, right_on=right_on)
         self.pr()
-        gc.collect()
         return self
 
     def rj(self, other, left_on, right_on):
@@ -600,14 +837,13 @@ class p:
         if self.df is None or other.df is None:
             raise ValueError("Both instances must contain a DataFrame")
 
-        joined_df = pd.merge(self.df, other.df, how='right', left_on=left_on, right_on=right_on)
-        self.df = joined_df
+        # Perform the right join directly assigning to self.df
+        self.df = self.df.merge(other.df, how='right', left_on=left_on, right_on=right_on)
         self.pr()
-        gc.collect()
         return self
 
     def rnc(self, rename_pairs):
-        """TRANSFORM::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
+        """TINKER::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
         if self.df is not None:
             self.df = self.df.rename(columns=rename_pairs, inplace=True)
             self.pr()
