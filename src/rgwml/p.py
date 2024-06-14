@@ -13,6 +13,8 @@ import mysql.connector
 import tempfile
 from clickhouse_driver import Client as ClickHouseClient
 from google.cloud import bigquery
+from google.oauth2 import service_account
+import pandas_gbq
 
 class p:
     def __init__(self, df=None):
@@ -92,7 +94,7 @@ class p:
             columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
             columns = [row[0] for row in client.execute(columns_query)]
 
-        elif db_type == 'google_big_query':
+        if db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
 
@@ -100,13 +102,20 @@ class p:
             if not db_preset:
                 raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
 
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = json_file_path
-            client = bigquery.Client(project=project_id)
+            credentials = service_account.Credentials.from_service_account_file(json_file_path)
+            client = bigquery.Client(credentials=credentials, project=project_id)
 
+            # Run the query and get the results as a DataFrame
             query_job = client.query(query)
             result = query_job.result()
-            rows = [dict(row) for row in result]
-            columns = rows[0].keys() if rows else []
+
+            # Convert the result to a pandas DataFrame
+            df = result.to_dataframe()
+            #columns = df.columns
+            self.df = df
+            self.pr()
+            gc.collect()
+            return self
 
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
@@ -233,24 +242,19 @@ class p:
             if not db_preset:
                 raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
 
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = json_file_path
-            client = bigquery.Client(project=project_id)
-
-            query_job = client.query(f"SELECT COUNT(*) FROM ({query}) AS total_query")
+            credentials = service_account.Credentials.from_service_account_file(json_file_path)
+            query_job = client.query(f"SELECT COUNT(*) FROM ({query}) AS total_query", project=project_id, credentials=credentials)
             total_rows = [dict(row) for row in query_job.result()][0]['f0_']
 
             offset = 0
             while offset < total_rows:
                 chunk_query = f"{query} LIMIT {chunk_size} OFFSET {offset}"
-                query_job = client.query(chunk_query)
-                rows = [dict(row) for row in query_job.result()]
-                columns = rows[0].keys() if rows else []
+                query_job = pandas_gbq.read_gbq(chunk_query, project_id=project_id, credentials=credentials, chunksize=chunk_size)
 
-                df_chunk = pd.DataFrame(rows, columns=columns)
-                print(df_chunk)
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
-                df_chunk.to_csv(temp_file.name, index=False)
-                temp_files.append(temp_file.name)
+                for chunk in query_job:
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+                    chunk.to_csv(temp_file.name, index=False)
+                    temp_files.append(temp_file.name)
 
                 offset += chunk_size
 
@@ -469,12 +473,7 @@ class p:
     def pr(self):
         """INSPECT::[d.pr()] Print."""
         if self.df is not None:
-            print("aaa")
-            # Print the DataFrame
             print(self.df)
-            print(self.df.columns.tolist())
-        
-            # Print all the column names with their data types in brackets
             columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
             print("Columns:", columns_with_types)
         else:
@@ -629,7 +628,6 @@ class p:
         gc.collect()
         return self
 
-
     def s(self, name_or_path):
         """TINKER::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
         if self.df is None:
@@ -637,7 +635,7 @@ class p:
 
         # Ensure the file has the correct extension
         if not name_or_path.lower().endswith(('.csv', '.h5')):
-            name_or_path += '.csv'
+            name_or_path += '.csv' 
 
         # Determine the desktop path
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -650,6 +648,19 @@ class p:
 
         # Ensure the directory exists
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        # Convert nullable integer columns to regular integers
+        for col in self.df.select_dtypes(include=["integer"]).columns:
+            self.df[col] = self.df[col].astype('int64')
+
+        # Convert datetime columns to datetime64[ns] without timezone
+        for col in self.df.select_dtypes(include=["datetimetz", "datetime64"]).columns:
+            self.df[col] = self.df[col].dt.tz_localize(None)
+
+        # Convert other extension arrays to NumPy arrays
+        for col in self.df.columns:
+            if pd.api.types.is_extension_array_dtype(self.df[col]):
+                self.df[col] = self.df[col].astype(object).astype(str)
 
         # Save the DataFrame as a CSV or HDF5 file
         if full_path.lower().endswith('.csv'):
