@@ -15,6 +15,9 @@ from clickhouse_driver import Client as ClickHouseClient
 from google.cloud import bigquery
 from google.oauth2 import service_account
 import pandas_gbq
+import xgboost as xgb
+import matplotlib.pyplot as plt
+from PIL import Image
 
 class p:
     def __init__(self, df=None):
@@ -26,6 +29,13 @@ class p:
         gc.collect()
         return p(df=copy.deepcopy(self.df))
 
+    def frd(self, headers, data):
+        """INSTANTIATE::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
+        if isinstance(data, list) and all(isinstance(col, list) for col in data):
+            self.df = pd.DataFrame(data={header: col for header, col in zip(headers, data)})
+        else:
+            raise ValueError("Data should be an array of arrays.")
+        return self
 
     def fq(self, db_preset_name, query):
         """INSTANTIATE::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
@@ -509,7 +519,7 @@ class p:
 
 
     def f(self, filter_expr):
-        """TINKER::[d.f('column1 > 100 and Column1 == Column3')] Filter."""
+        """TINKER::[d.f("col1 > 100 and Col1 == Col3 and Col5 == 'XYZ'")] Filter."""
         if self.df is not None:
             try:
                 # Attempt to use query method for simple expressions
@@ -943,4 +953,86 @@ class p:
             print("DataFrame is not initialized.")
         return self
 
+
+    def axr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
+        """PREDICT::[d.axr('target_column','feature1, feature2, feature3','prediction_column_name')] Append XGB regression predictions. Assumes labelling by the .axl() method. Optional params: boosting_rounds (int), model_path (str)"""
+        if self.df is not None and 'XGB_TYPE' in self.df.columns:
+            # Convert feature_cols from string to list
+            features = feature_cols.replace(' ', '').split(',')
+
+            # Convert categorical columns to 'category' dtype
+            for col in features:
+                if self.df[col].dtype == 'object':
+                    self.df[col] = self.df[col].astype('category')
+
+            # Separate data into TRAIN, VALIDATE, and TEST sets
+            train_data = self.df[self.df['XGB_TYPE'] == 'TRAIN']
+            validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE']
+            test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
+
+            # Prepare DMatrix for XGBoost with enable_categorical parameter
+            dtrain = xgb.DMatrix(train_data[features], label=train_data[target_col], enable_categorical=True)
+            dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
+            dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
+
+            # Train the XGBoost model
+            params = {
+                'objective': 'reg:squarederror',
+                'eval_metric': 'rmse'
+            }
+            evals = [(dtrain, 'train'), (dvalidate, 'validate')]
+            model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals, early_stopping_rounds=10)
+
+            # Make predictions
+            self.df.loc[self.df['XGB_TYPE'] == 'TRAIN', pred_col] = model.predict(dtrain)
+            self.df.loc[self.df['XGB_TYPE'] == 'VALIDATE', pred_col] = model.predict(dvalidate)
+            self.df.loc[self.df['XGB_TYPE'] == 'TEST', pred_col] = model.predict(dtest)
+
+            # Save the model if a path is provided
+            if model_path:
+                model.save_model(model_path)
+
+            # Reorder columns
+            columns_order = [col for col in self.df.columns if col not in ['XGB_TYPE', target_col, pred_col]] + ['XGB_TYPE', target_col, pred_col]
+            self.df = self.df[columns_order]
+
+            self.pr()
+        else:
+            print("DataFrame is not initialized or 'XGB_TYPE' column is missing.")
+        return self
+
+
+    def plc(self, y_axis_columns, x_axis_column=None, save_path=None):
+        """INSPECT::[d.('Column1, Column2, Column3')] Plot line chart. Optional param: x_axis_column_name (str), image_save_path (str)"""
+        y_axis_columns = y_axis_columns.replace(' ', '').split(',')
+        plt.figure(figsize=(10, 6))
+
+        if x_axis_column is None:
+            x_data = self.df.index
+            x_label = 'index'
+        else:
+            x_data = self.df[x_axis_column]
+            x_label = x_axis_column
+
+        for y_column in y_axis_columns:
+            plt.plot(x_data, self.df[y_column], label=y_column)
+
+        plt.xlabel(x_label)
+        plt.ylabel('y_axis_columns')
+        plt.title('Line Chart')
+        plt.legend()
+
+        if save_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            save_path = temp_file.name
+            plt.savefig(save_path)
+            print(f"Plot saved to temporary file: {save_path}")
+        else:
+            plt.savefig(save_path)
+            print(f"Plot saved to {save_path}")
+
+        # Open the saved image
+        img = Image.open(save_path)
+        img.show()
+        return self
 
