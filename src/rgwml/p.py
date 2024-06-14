@@ -551,7 +551,11 @@ class p:
         return self
 
     def g(self, target_cols, agg_funcs):
-        """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column"""
+        """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc."""
+
+        def css(series):
+            """Comma-separated strings aggregation function."""
+            return ','.join(series.astype(str))
 
         if self.df is not None:
             # Create a copy of the DataFrame to avoid modifying the original
@@ -565,24 +569,26 @@ class p:
                 df_copy[new_col_name] = self.df[col]
                 new_cols.append(new_col_name)
 
-            # Step 2: Drop the original id column
-            df_copy.drop(columns=['id'], inplace=True)
+            # Step 2: Perform group-by and aggregations
+            agg_dict = {}
+            for agg_func in agg_funcs:
+                col, func = agg_func.split('::')
+                new_col_name = f'{col}_{func}'
+                if func == 'css':
+                    agg_dict[new_col_name] = css
+                else:
+                    agg_dict[new_col_name] = func
 
-            # Step 3: Perform group-by and aggregations
-            agg_dict = {new_col: func for new_col in new_cols}
-            for col, func in zip(new_cols, [func.split('::')[1] for func in agg_funcs]):
-                agg_dict[col] = func
-
-            print(target_cols, agg_dict)
             grouped_df = df_copy.groupby(target_cols).agg(agg_dict).reset_index()
 
             self.df = grouped_df
             self.pr()
         else:
             raise ValueError("No DataFrame to transform. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
+
 
     def p(self, index, values, aggfunc='sum', seg_columns=None):
         """TRANSFORM::[d.p(['group_by_cols'], 'values_to_agg_col', 'sum', ['seg_columns'])] Pivot. Optional param: seg_columns. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""

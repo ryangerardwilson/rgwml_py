@@ -1,6 +1,6 @@
 [project]
 name = "rgwml"
-version = "0.0.61"
+version = "0.0.66"
 authors = [
   { name="Ryan Gerard Wilson", email="ryangerardwilson@gmail.com" },
 ]
