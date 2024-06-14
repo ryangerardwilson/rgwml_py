@@ -70,7 +70,6 @@ class p:
                     cursor.execute(query)
                     rows = cursor.fetchall()
                     columns = [desc[0] for desc in cursor.description]
-
         elif db_type == 'mysql':
             host = db_preset['host']
             username = db_preset['username']
@@ -82,7 +81,6 @@ class p:
                     cursor.execute(query)
                     rows = cursor.fetchall()
                     columns = [desc[0] for desc in cursor.description]
-
         elif db_type == 'clickhouse':
             host = db_preset['host']
             username = db_preset['username']
@@ -93,8 +91,7 @@ class p:
             rows = client.execute(query)
             columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
             columns = [row[0] for row in client.execute(columns_query)]
-
-        if db_type == 'google_big_query':
+        elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
 
@@ -116,7 +113,6 @@ class p:
             self.pr()
             gc.collect()
             return self
-
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
 
@@ -554,23 +550,37 @@ class p:
         gc.collect()
         return self
 
-    def g(self, groupby_cols, agg_func):
-        """TRANSFORM::[d.g(['group_by_cols'], {'col7': 'sum'})] Group. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc."""
-        
-        def css(series):
-            """Comma-separated strings aggregation function."""
-            return ','.join(series.astype(str))
+    def g(self, target_cols, agg_funcs):
+        """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column"""
 
         if self.df is not None:
-            # Check for the 'css' function in agg_func and replace it with the custom css function
-            for col, func in agg_func.items():
-                if func == 'css':
-                    agg_func[col] = css
-            
-            self.df = self.df.groupby(groupby_cols).agg(agg_func).reset_index()
+            # Create a copy of the DataFrame to avoid modifying the original
+            df_copy = self.df.copy()
+
+            # Step 1: Create new columns by duplicating the specified columns
+            new_cols = []
+            for agg_func in agg_funcs:
+                col, func = agg_func.split('::')
+                new_col_name = f'{col}_{func}'
+                df_copy[new_col_name] = self.df[col]
+                new_cols.append(new_col_name)
+
+            # Step 2: Drop the original id column
+            df_copy.drop(columns=['id'], inplace=True)
+
+            # Step 3: Perform group-by and aggregations
+            agg_dict = {new_col: func for new_col in new_cols}
+            for col, func in zip(new_cols, [func.split('::')[1] for func in agg_funcs]):
+                agg_dict[col] = func
+
+            print(target_cols, agg_dict)
+            grouped_df = df_copy.groupby(target_cols).agg(agg_dict).reset_index()
+
+            self.df = grouped_df
             self.pr()
         else:
-            raise ValueError("No DataFrame to group. Please load a file first using the frm or frml method.")
+            raise ValueError("No DataFrame to transform. Please load a file first using the frm or frml method.")
+        
         gc.collect()
         return self
 
@@ -696,6 +706,19 @@ class p:
             self.pr()
         else:
             raise ValueError("No DataFrame to append a ranged classification column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+    def apc(self, percentiles, target_col, new_col_name):
+        """APPEND::[d.apc('0,25,50,75,100', 'column_to_be_analyzed', 'new_column_name')] Append percentile classification column."""
+        if self.df is not None:
+            percentiles_list = [int(p) for p in percentiles.split(',')]
+            labels = [f"{percentiles_list[i]} to {percentiles_list[i+1]}" for i in range(len(percentiles_list) - 1)]
+            quantiles = [self.df[target_col].quantile(p / 100) for p in percentiles_list]
+            self.df[new_col_name] = pd.cut(self.df[target_col], bins=quantiles, labels=labels, include_lowest=True)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a percentile classification column. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
 
@@ -871,3 +894,47 @@ class p:
         else:
             raise ValueError("No DataFrame to check. Please load a file first using the frm or frml method.")
         gc.collect()
+
+    def mnpdz(self, columns):
+        """TINKER::[d.mnpdz(['Column1', Column2])] Make numerically parseable by defaulting to zero for specified columns."""
+        if self.df is not None:
+            for column in columns:
+                self.df[column] = pd.to_numeric(self.df[column], errors='coerce').fillna(0)
+            self.pr()
+        else:
+            print("DataFrame is not initialized.")
+        return self
+
+    def cs(self, columns):
+        """TINKER::[d.cs(['Column1', 'Column2'])]Cascade sort by specified columns."""
+        if self.df is not None:
+            self.df = self.df.sort_values(by=columns)
+            self.pr()
+        else:
+            print("DataFrame is not initialized.")
+        return self
+
+    def axl(self, ratio_str):
+        """PREDICT::[d.axl('70:20:10')] Append XGB training labels based on a ratio string."""
+        if self.df is not None:
+            # Parse the ratio string
+            ratios = list(map(int, ratio_str.split(':')))
+            total_ratio = sum(ratios)
+            
+            # Calculate the number of rows for each label
+            total_rows = len(self.df)
+            train_rows = (ratios[0] * total_rows) // total_ratio
+            validate_rows = (ratios[1] * total_rows) // total_ratio
+            test_rows = total_rows - train_rows - validate_rows
+            
+            # Assign labels
+            labels = ['TRAIN'] * train_rows + ['VALIDATE'] * validate_rows + ['TEST'] * test_rows
+            
+            # Append the labels to the DataFrame
+            self.df['XGB_TYPE'] = labels
+            self.pr()
+        else:
+            print("DataFrame is not initialized.")
+        return self
+
+
