@@ -936,16 +936,30 @@ class p:
             # Parse the ratio string
             ratios = list(map(int, ratio_str.split(':')))
             total_ratio = sum(ratios)
-            
+
             # Calculate the number of rows for each label
             total_rows = len(self.df)
-            train_rows = (ratios[0] * total_rows) // total_ratio
-            validate_rows = (ratios[1] * total_rows) // total_ratio
-            test_rows = total_rows - train_rows - validate_rows
             
-            # Assign labels
-            labels = ['TRAIN'] * train_rows + ['VALIDATE'] * validate_rows + ['TEST'] * test_rows
-            
+            if len(ratios) == 2:
+                # TRAIN:TEST scenario
+                train_rows = (ratios[0] * total_rows) // total_ratio
+                test_rows = total_rows - train_rows
+                
+                # Assign labels
+                labels = ['TRAIN'] * train_rows + ['TEST'] * test_rows
+                
+            elif len(ratios) == 3:
+                # TRAIN:VALIDATE:TEST scenario
+                train_rows = (ratios[0] * total_rows) // total_ratio
+                validate_rows = (ratios[1] * total_rows) // total_ratio
+                test_rows = total_rows - train_rows - validate_rows
+                
+                # Assign labels
+                labels = ['TRAIN'] * train_rows + ['VALIDATE'] * validate_rows + ['TEST'] * test_rows
+                
+            else:
+                raise ValueError("Invalid ratio string format. Use 'TRAIN:TEST' or 'TRAIN:VALIDATE:TEST'.")
+
             # Append the labels to the DataFrame
             self.df['XGB_TYPE'] = labels
             self.pr()
@@ -953,9 +967,10 @@ class p:
             print("DataFrame is not initialized.")
         return self
 
-
-    def axr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
-        """PREDICT::[d.axr('target_column','feature1, feature2, feature3','prediction_column_name')] Append XGB regression predictions. Assumes labelling by the .axl() method. Optional params: boosting_rounds (int), model_path (str)"""
+    def axlinr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
+        """PREDICT::[d.axlinr('target_column','feature1, feature2, feature3','prediction_column_name')] 
+        Append XGB regression predictions. Assumes labelling by the .axl() method. 
+        Optional params: boosting_rounds (int), model_path (str)"""
         if self.df is not None and 'XGB_TYPE' in self.df.columns:
             # Convert feature_cols from string to list
             features = feature_cols.replace(' ', '').split(',')
@@ -965,14 +980,19 @@ class p:
                 if self.df[col].dtype == 'object':
                     self.df[col] = self.df[col].astype('category')
 
-            # Separate data into TRAIN, VALIDATE, and TEST sets
+            # Separate data into TRAIN, VALIDATE (if present), and TEST sets
             train_data = self.df[self.df['XGB_TYPE'] == 'TRAIN']
-            validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE']
+            validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE'] if 'VALIDATE' in self.df['XGB_TYPE'].values else None
             test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
 
             # Prepare DMatrix for XGBoost with enable_categorical parameter
             dtrain = xgb.DMatrix(train_data[features], label=train_data[target_col], enable_categorical=True)
-            dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
+            evals = [(dtrain, 'train')]
+
+            if validate_data is not None:
+                dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
+                evals.append((dvalidate, 'validate'))
+            
             dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
 
             # Train the XGBoost model
@@ -980,13 +1000,16 @@ class p:
                 'objective': 'reg:squarederror',
                 'eval_metric': 'rmse'
             }
-            evals = [(dtrain, 'train'), (dvalidate, 'validate')]
-            model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals, early_stopping_rounds=10)
+            
+            if validate_data is not None:
+                model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals, early_stopping_rounds=10)
+            else:
+                model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals)
 
-            # Make predictions
-            self.df.loc[self.df['XGB_TYPE'] == 'TRAIN', pred_col] = model.predict(dtrain)
-            self.df.loc[self.df['XGB_TYPE'] == 'VALIDATE', pred_col] = model.predict(dvalidate)
-            self.df.loc[self.df['XGB_TYPE'] == 'TEST', pred_col] = model.predict(dtest)
+            # Make predictions for all data
+            all_data = self.df[features]
+            dall = xgb.DMatrix(all_data, enable_categorical=True)
+            self.df[pred_col] = model.predict(dall)
 
             # Save the model if a path is provided
             if model_path:
@@ -995,26 +1018,82 @@ class p:
             # Reorder columns
             columns_order = [col for col in self.df.columns if col not in ['XGB_TYPE', target_col, pred_col]] + ['XGB_TYPE', target_col, pred_col]
             self.df = self.df[columns_order]
-
+            print("RMSE to accuracy: 50% (around 1.0); 60% (around 0.8); 70% (around 0.6); 80% (around 0.4); 90% (around 0.2)")
             self.pr()
         else:
             print("DataFrame is not initialized or 'XGB_TYPE' column is missing.")
         return self
 
+    def axlogr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
+        """PREDICT::[d.axlogr('target_column','feature1, feature2, feature3','prediction_column_name')] 
+        Append XGB logistic regression predictions. Assumes labeling by the .axl() method. 
+        Optional params: boosting_rounds (int), model_path (str)"""
+        if self.df is not None and 'XGB_TYPE' in self.df.columns:
+            # Convert feature_cols from string to list
+            features = feature_cols.replace(' ', '').split(',')
 
-    def plc(self, y_axis_columns, x_axis_column=None, save_path=None):
-        """INSPECT::[d.('Column1, Column2, Column3')] Plot line chart. Optional param: x_axis_column_name (str), image_save_path (str)"""
-        y_axis_columns = y_axis_columns.replace(' ', '').split(',')
+            # Convert categorical columns to 'category' dtype
+            for col in features:
+                if self.df[col].dtype == 'object':
+                    self.df[col] = self.df[col].astype('category')
+
+            # Separate data into TRAIN, VALIDATE (if present), and TEST sets
+            train_data = self.df[self.df['XGB_TYPE'] == 'TRAIN']
+            validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE'] if 'VALIDATE' in self.df['XGB_TYPE'].values else None
+            test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
+
+            # Prepare DMatrix for XGBoost with enable_categorical parameter
+            dtrain = xgb.DMatrix(train_data[features], label=train_data[target_col], enable_categorical=True)
+            evals = [(dtrain, 'train')]
+
+            if validate_data is not None:
+                dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
+                evals.append((dvalidate, 'validate'))
+
+            dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
+
+            # Train the XGBoost model
+            params = {
+                'objective': 'binary:logistic',
+                'eval_metric': 'logloss'
+            }
+
+            if validate_data is not None:
+                model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals, early_stopping_rounds=10)
+            else:
+                model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals)
+
+            # Make predictions for all data
+            all_data = self.df[features]
+            dall = xgb.DMatrix(all_data, enable_categorical=True)
+            self.df[pred_col] = model.predict(dall)
+
+            # Save the model if a path is provided
+            if model_path:
+                model.save_model(model_path)
+
+            # Reorder columns
+            columns_order = [col for col in self.df.columns if col not in ['XGB_TYPE', target_col, pred_col]] + ['XGB_TYPE', target_col, pred_col]
+            self.df = self.df[columns_order]
+            print("Logloss to accuracy: 50% (around 0.69); 60% (around 0.65); 70% (around 0.60); 80% (around 0.50); 90% (around 0.30)")
+            self.pr()
+        else:
+            print("DataFrame is not initialized or 'XGB_TYPE' column is missing.")
+        return self
+
+    def plc(self, y, x=None, save_path=None):
+        """INSPECT::[d.(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name eg. 'Column5', image_save_path (str)"""
+        y = y.replace(' ', '').split(',')
         plt.figure(figsize=(10, 6))
 
-        if x_axis_column is None:
+        if x is None:
             x_data = self.df.index
             x_label = 'index'
         else:
-            x_data = self.df[x_axis_column]
-            x_label = x_axis_column
+            x_data = self.df[x]
+            x_label = x
 
-        for y_column in y_axis_columns:
+        for y_column in y:
             plt.plot(x_data, self.df[y_column], label=y_column)
 
         plt.xlabel(x_label)
@@ -1031,8 +1110,11 @@ class p:
             plt.savefig(save_path)
             print(f"Plot saved to {save_path}")
 
-        # Open the saved image
-        img = Image.open(save_path)
-        img.show()
+        # Attempt to open and display the saved image
+        try:
+            img = Image.open(save_path)
+            img.show()
+        except Exception as e:
+            print(f"Failed to open image: {e}")
+        
         return self
-
