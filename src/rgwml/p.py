@@ -1268,8 +1268,8 @@ class p:
 
         return self
 
-    def acc(self, features, operation, cluster_column_name, visualize=False, n_clusters_finding_method=None, dbscan_eps=0.5, dbscan_min_samples=5):
-        """APPEND::[d.acc('Column1,Column2', 'KMEANS', 'new_cluster_column_name', visualize=True, n_clusters_finding_method='FIXED:5')] Append cluster analysis column. Available operations: KMEANS/ DBSCAN/ AGGLOMERATIVE/ MEAN_SHIFT/ GMM/ SPECTRAL/ BIRCH.Optional: visualize (boolean), n_cluster_finding_method (str) i.e. ELBOW/ SILHOUETTE/ FIXED:n (specify a number of n clusters); dbscan_eps (float), dbscan_min_samples (int)."""
+    def ancc(self, features, operation, cluster_column_name, n_clusters_finding_method=None, visualize=True):
+        """APPEND::[d.ancc('Column1,Column2', 'KMEANS', 'new_cluster_column_name', n_clusters_finding_method='FIXED:5', visualize=True)] Append n-cluster column. Available operations: KMEANS/ AGGLOMERATIVE/ MEAN_SHIFT/ GMM/ SPECTRAL/ BIRCH. Optional: visualize (boolean), n_cluster_finding_method (str) i.e. ELBOW/ SILHOUETTE/ FIXED:n (specify a number of n clusters)."""
         def perform_kmeans(X, n_clusters):
             kmeans = KMeans(n_clusters=n_clusters, random_state=0)
             return kmeans.fit_predict(X)
@@ -1407,24 +1407,19 @@ class p:
 
             # Determine the optimal number of clusters if required
             n_clusters = None
-            if operation != 'DBSCAN':
-                if n_clusters_finding_method == None:
-                    n_clusters_finding_method = 'ELBOW'
-                optimal_method = parse_optimal_clustering_method(n_clusters_finding_method)
-                if isinstance(optimal_method, int):
-                    n_clusters = optimal_method
-                elif optimal_method == 'ELBOW':
-                    n_clusters = find_optimal_clusters_elbow(X)
-                elif optimal_method == 'SILHOUETTE':
-                    n_clusters = find_optimal_clusters_silhouette(X)
-            elif operation != 'DBSCAN' and not optimal_n_cluster_finding_method:
-                raise ValueError("Optimal clustering method must be specified for algorithms that require n_clusters")
+            if n_clusters_finding_method == None:
+                n_clusters_finding_method = 'ELBOW'
+            optimal_method = parse_optimal_clustering_method(n_clusters_finding_method)
+            if isinstance(optimal_method, int):
+                n_clusters = optimal_method
+            elif optimal_method == 'ELBOW':
+                n_clusters = find_optimal_clusters_elbow(X)
+            elif optimal_method == 'SILHOUETTE':
+                n_clusters = find_optimal_clusters_silhouette(X)
 
             # Perform the chosen clustering operation
             if operation == 'KMEANS':
                 self.df[cluster_column_name] = perform_kmeans(X, n_clusters)
-            elif operation == 'DBSCAN':
-                self.df[cluster_column_name] = perform_dbscan(X, dbscan_eps, dbscan_min_samples)
             elif operation == 'AGGLOMERATIVE':
                 self.df[cluster_column_name] = perform_agglomerative(X, n_clusters)
             elif operation == 'MEAN_SHIFT':
@@ -1436,10 +1431,86 @@ class p:
             elif operation == 'BIRCH':
                 self.df[cluster_column_name] = perform_birch(X, n_clusters)
             else:
-                raise ValueError("Operation must be one of 'KMEANS', 'DBSCAN', 'AGGLOMERATIVE', 'MEAN_SHIFT', 'GMM', 'SPECTRAL', or 'BIRCH'")
+                raise ValueError("Operation must be one of 'KMEANS', 'AGGLOMERATIVE', 'MEAN_SHIFT', 'GMM', 'SPECTRAL', or 'BIRCH'")
             
             if visualize:
                 plot_cluster_analysis(X, feature_list, cluster_column_name, operation)
+
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a cluster analysis column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+
+
+    def adbscancc(self, features, cluster_column_name, eps, min_samples, visualize=True):
+        """APPEND::[d.adbscancc('Column1,Column2', 'new_cluster_column_name', eps=0.5, min_samples=5, visualize=True)] Append DBSCAN cluster column. Optional: visualize (boolean)."""
+        def perform_dbscan(X, eps, min_samples):
+            dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+            return dbscan.fit_predict(X)
+
+        def save_and_show_plot(filename, plots):
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            plt.savefig(temp_file.name)
+            plt.close()
+            plots.append(temp_file.name)
+
+        def combine_and_show_plots(plot_files):
+            images = [Image.open(file) for file in plot_files]
+            widths, heights = zip(*(img.size for img in images))
+
+            total_width = max(widths)
+            total_height = sum(heights)
+
+            combined_image = Image.new('RGB', (total_width, total_height))
+
+            y_offset = 0
+            for img in images:
+                combined_image.paste(img, (0, y_offset))
+                y_offset += img.height
+
+            combined_image.show()
+
+        def plot_clusters_3d(x_col, y_col, z_col, cluster_col, plots):
+            fig = plt.figure(figsize=(10, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            for cluster in self.df[cluster_col].unique():
+                cluster_data = self.df[self.df[cluster_col] == cluster]
+                ax.scatter(cluster_data[x_col], cluster_data[y_col], cluster_data[z_col], label=f'Cluster {cluster}')
+            ax.set_xlabel(x_col)
+            ax.set_ylabel(y_col)
+            ax.set_zlabel(z_col)
+            ax.legend()
+            plt.title('3D Cluster Plot')
+            save_and_show_plot('3d_cluster_plot.png', plots)
+
+        def plot_cluster_analysis(X, feature_list, cluster_column_name):
+            """Visualize cluster analysis results."""
+            # Pair plot
+            pair_plot = sns.pairplot(self.df[feature_list + [cluster_column_name]], hue=cluster_column_name)
+            pair_plot.fig.set_size_inches(10.31, 6)
+            pair_plot.fig.suptitle('Pair Plot',y=1.02)
+            pair_plot.savefig('pair_plot.png')
+            plots.append('pair_plot.png')
+
+            # 3D scatter plot if there are at least 3 features
+            if len(feature_list) == 3:
+                plot_clusters_3d(feature_list[0], feature_list[1], feature_list[2], cluster_column_name, plots)
+
+            combine_and_show_plots(plots)
+
+        plots = []
+
+        if self.df is not None:
+            # Select the features for clustering
+            feature_list = [feature.strip() for feature in features.split(',')]
+            X = self.df[feature_list]
+
+            self.df[cluster_column_name] = perform_dbscan(X, eps, min_samples)
+           
+            if visualize:
+                plot_cluster_analysis(X, feature_list, cluster_column_name)
 
             self.pr()
         else:

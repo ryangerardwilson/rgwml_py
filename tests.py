@@ -179,6 +179,55 @@ def test_acc():
     d.acc('Column1,Column2,Column3', 'KMEANS', 'cluster_column', visualize=True, n_clusters_finding_method='FIXED:5')
 
 
+def test_ancc():
+    np.random.seed(0)
+
+    # Create a DataFrame with sample data
+    data = {
+        'Column1': np.random.normal(0, 1, 100),
+        'Column2': np.random.normal(0, 1, 100),
+        'Column3': np.random.normal(0, 1, 100)
+    }
+
+    # Introduce some correlation
+    data['Column2'] = data['Column1'] * 0.5 + np.random.normal(0, 0.5, 100)
+    data['Column3'] = data['Column1'] * -0.7 + np.random.normal(0, 0.5, 100)
+
+
+    headers = ['Column1', 'Column2', 'Column3']
+    data_list = [data[col].tolist() for col in headers]
+
+    d = r.p()
+    d.frd(headers,data_list)
+
+    # Perform clustering using the acc method
+    d.ancc('Column1,Column2,Column3', 'KMEANS', 'cluster_column', n_clusters_finding_method='FIXED:5',visualize=True)
+
+def test_adbscancc():
+    np.random.seed(0)
+
+    # Create a DataFrame with sample data
+    data = {
+        'Column1': np.random.normal(0, 1, 100),
+        'Column2': np.random.normal(0, 1, 100),
+        'Column3': np.random.normal(0, 1, 100)
+    }
+
+    # Introduce some correlation
+    data['Column2'] = data['Column1'] * 0.5 + np.random.normal(0, 0.5, 100)
+    data['Column3'] = data['Column1'] * -0.7 + np.random.normal(0, 0.5, 100)
+
+
+    headers = ['Column1', 'Column2', 'Column3']
+    data_list = [data[col].tolist() for col in headers]
+
+    d = r.p()
+    d.frd(headers,data_list)
+
+    # Perform clustering using the acc method
+    d.adbscancc('Column1,Column2,Column3', 'cluster_column', eps=0.5, min_samples=5, visualize=True)
+
+
 # Call the test method
 #test_axlinr()
 #test_axlinr_2()
@@ -189,5 +238,6 @@ def test_acc():
 #test_pdist()
 #test_pqq()
 #test_pcr()
-test_acc()
+test_ancc()
+test_adbscancc()
 
