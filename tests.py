@@ -154,7 +154,29 @@ def test_pcr():
     d.frd(headers,data_list)
     d.pcr(y='Column1,Column2,Column3')
 
+def test_acc():
+    np.random.seed(0)
 
+    # Create a DataFrame with sample data
+    data = {
+        'Column1': np.random.normal(0, 1, 100),
+        'Column2': np.random.normal(0, 1, 100),
+        'Column3': np.random.normal(0, 1, 100)
+    }
+
+    # Introduce some correlation
+    data['Column2'] = data['Column1'] * 0.5 + np.random.normal(0, 0.5, 100)
+    data['Column3'] = data['Column1'] * -0.7 + np.random.normal(0, 0.5, 100)
+
+
+    headers = ['Column1', 'Column2', 'Column3']
+    data_list = [data[col].tolist() for col in headers]
+
+    d = r.p()
+    d.frd(headers,data_list)
+
+    # Perform clustering using the acc method
+    d.acc('Column1,Column2,Column3', 'KMEANS', 'cluster_column', visualize=True, n_clusters_finding_method='FIXED:5')
 
 
 # Call the test method
@@ -166,5 +188,6 @@ def test_pcr():
 #test_axlogr_2()
 #test_pdist()
 #test_pqq()
-test_pcr()
+#test_pcr()
+test_acc()
 
