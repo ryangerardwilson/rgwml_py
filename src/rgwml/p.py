@@ -1071,7 +1071,7 @@ class p:
             # Train the XGBoost model
             params = {
                 'objective': 'binary:logistic',
-                'eval_metric': 'logloss'
+                'eval_metric': 'auc'
             }
 
             if validate_data is not None:
@@ -1091,7 +1091,7 @@ class p:
             # Reorder columns
             columns_order = [col for col in self.df.columns if col not in ['XGB_TYPE', target_col, pred_col]] + ['XGB_TYPE', target_col, pred_col]
             self.df = self.df[columns_order]
-            print("Logloss to accuracy: 50% (around 0.69); 60% (around 0.65); 70% (around 0.60); 80% (around 0.50); 90% (around 0.30)")
+            print("AUC to accuracy: 50% (around 0.50); 60% (around 0.65); 70% (around 0.75); 80% (around 0.95); 90% (around 0.95)")
             self.pr()
         else:
             print("DataFrame is not initialized or 'XGB_TYPE' column is missing.")
