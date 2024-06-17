@@ -18,6 +18,8 @@ import pandas_gbq
 import xgboost as xgb
 import matplotlib.pyplot as plt
 from PIL import Image
+import scipy.stats as stats
+import seaborn as sns
 
 class p:
     def __init__(self, df=None):
@@ -613,8 +615,8 @@ class p:
         gc.collect()
         return self
 
-    def doc(self):
-        """INSPECT::[d.doc()] Print the names and docstrings of all methods in the EP class."""
+    def doc(self, method_type_filter=None):
+        """INSPECT::[d.doc()] Prints docs. Optional parameter: method_type_filter (str) egs. 'APPEND, PLOT'"""
 
         # Dictionary to hold methods grouped by their type
         method_types = collections.defaultdict(list)
@@ -634,8 +636,15 @@ class p:
                     method_description = first_line.split("::")[1].strip()
                     method_types[method_type].append((method, method_description))
 
-        # Print the methods grouped by type in a tree-like format
-        method_types_list = list(method_types.items())
+        # Convert the filter to a list of method types if provided
+        method_type_list = []
+        if method_type_filter:
+            method_type_list = [mt.strip() for mt in method_type_filter.split(',')]
+
+        # Sort the method types alphabetically
+        method_types_list = sorted(method_types.items())
+
+        # Print the methods grouped by type with counts
         for i, (method_type, method_list) in enumerate(method_types_list):
             if i == len(method_types_list) - 1:
                 branch = "└──"
@@ -643,19 +652,22 @@ class p:
             else:
                 branch = "├──"
                 sub_branch = "│   "
-            print(f"{branch} {method_type}")
-            for j, (method, description) in enumerate(method_list):
-                if j == len(method_list) - 1:
-                    sub_branch_end = "└──"
-                else:
-                    sub_branch_end = "├──"
-                print(f"{sub_branch}{sub_branch_end} {method}: {description}")
-        
+            print(f"{branch} {method_type} [{len(method_list)}]")
+
+            if method_type_filter and method_type in method_type_list:
+                for j, (method, description) in enumerate(method_list):
+                    if j == len(method_list) - 1:
+                        sub_branch_end = "└──"
+                    else:
+                        sub_branch_end = "├──"
+                    print(f"{sub_branch}{sub_branch_end} {method}: {description}")
+
         gc.collect()
         return self
 
+
     def s(self, name_or_path):
-        """TINKER::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
+        """PERSIST::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
         if self.df is None:
             raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
 
@@ -1082,7 +1094,7 @@ class p:
         return self
 
     def plc(self, y, x=None, save_path=None):
-        """INSPECT::[d.(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name eg. 'Column5', image_save_path (str)"""
+        """PLOT::[d.(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name eg. 'Column5', image_save_path (str)"""
         y = y.replace(' ', '').split(',')
         plt.figure(figsize=(10, 6))
 
@@ -1117,4 +1129,137 @@ class p:
         except Exception as e:
             print(f"Failed to open image: {e}")
         
+        return self
+
+    def pdist(self, y, save_path=None):
+        """PLOT::[d.pdist(y='Column1, Column2, Column3')] Plot histograms for the specified columns. Optional param: image_save_path (str)"""
+        if isinstance(y, str):
+            y = y.replace(' ', '').split(',')
+        elif isinstance(y, list):
+            y = [str(col).replace(' ', '') for col in y]
+        else:
+            raise ValueError("Parameter 'y' must be a string or a list of strings.")
+
+        if self.df is None:
+            raise ValueError("Data frame is not set. Use set_data() to initialize the data frame.")
+
+        num_columns = len(y)
+        plt.figure(figsize=(10, 6 * num_columns))
+
+        for i, y_column in enumerate(y, 1):
+            if y_column not in self.df.columns:
+                raise ValueError(f"Column '{y_column}' not found in data frame.")
+            
+            plt.subplot(num_columns, 1, i)
+            self.df[y_column].hist(bins=30, alpha=0.7)
+            plt.xlabel(y_column)
+            plt.ylabel('Frequency')
+            plt.title(f'Distribution of {y_column}')
+
+        plt.tight_layout()
+
+        if save_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            save_path = temp_file.name
+            plt.savefig(save_path)
+            print(f"Plot saved to temporary file: {save_path}")
+        else:
+            plt.savefig(save_path)
+            print(f"Plot saved to {save_path}")
+
+        # Attempt to open and display the saved image
+        try:
+            img = Image.open(save_path)
+            img.show()
+        except Exception as e:
+            print(f"Failed to open image: {e}")
+
+        return self
+
+
+    def pqq(self, y, save_path=None):
+        """PLOT::[d.pqq(y='Column1, Column2, Column3')] Plot Q-Q plots for the specified columns. Optional param: image_save_path (str)"""
+        if isinstance(y, str):
+            y = y.replace(' ', '').split(',')
+        elif isinstance(y, list):
+            y = [str(col).replace(' ', '') for col in y]
+        else:
+            raise ValueError("Parameter 'y' must be a string or a list of strings.")
+
+        if self.df is None:
+            raise ValueError("Data frame is not set. Use set_data() to initialize the data frame.")
+
+        num_columns = len(y)
+        plt.figure(figsize=(10, 6 * num_columns))
+
+        for i, y_column in enumerate(y, 1):
+            if y_column not in self.df.columns:
+                raise ValueError(f"Column '{y_column}' not found in data frame.")
+            
+            plt.subplot(num_columns, 1, i)
+            stats.probplot(self.df[y_column], dist="norm", plot=plt)
+            plt.title(f'Q-Q Plot of {y_column}')
+
+        plt.tight_layout()
+
+        if save_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            save_path = temp_file.name
+            plt.savefig(save_path)
+            print(f"Plot saved to temporary file: {save_path}")
+        else:
+            plt.savefig(save_path)
+            print(f"Plot saved to {save_path}")
+
+        # Attempt to open and display the saved image
+        try:
+            img = Image.open(save_path)
+            img.show()
+        except Exception as e:
+            print(f"Failed to open image: {e}")
+
+        return self
+
+    def pcr(self, y, save_path=None):
+        """PLOT::[d.pcr(y='Column1, Column2, Column3')] Plot correlation heatmap for the specified columns. Optional param: image_save_path (str)"""
+        if isinstance(y, str):
+            y = y.replace(' ', '').split(',')
+        elif isinstance(y, list):
+            y = [str(col).replace(' ', '') for col in y]
+        else:
+            raise ValueError("Parameter 'y' must be a string or a list of strings.")
+
+        if self.df is None:
+            raise ValueError("Data frame is not set. Use set_data() to initialize the data frame.")
+
+        selected_columns = [col for col in y if col in self.df.columns]
+        if len(selected_columns) == 0:
+            raise ValueError("None of the specified columns are found in the data frame.")
+
+        correlation_matrix = self.df[selected_columns].corr()
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5)
+        plt.title('Correlation Matrix')
+
+        if save_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            save_path = temp_file.name
+            plt.savefig(save_path)
+            print(f"Plot saved to temporary file: {save_path}")
+        else:
+            plt.savefig(save_path)
+            print(f"Plot saved to {save_path}")
+
+        plt.close()
+
+        
+        # Attempt to open and display the saved image
+        
+        try:
+            img = Image.open(save_path)
+            img.show()
+        except Exception as e:
+            print(f"Failed to open image: {e}")
+        
+
         return self

@@ -105,12 +105,66 @@ def test_axlogr_2():
     d.axl('70:30').axlogr('target_column', 'feature1, feature2, feature3', 'PREDICTION').plc('target_column, PREDICTION')
 
 
+def test_pdist():
+
+    headers = ["Column1","Column2","Column3"]
+    data = [
+        [1, 2, 2, 3, 3, 3, 4, 4, 4, 4],
+        [5, 6, 6, 7, 7, 7, 8, 8, 8, 8],
+        [9, 10, 10, 11, 11, 11, 12, 12, 12, 12]
+    ]
+
+    d = r.p()
+    d.frd(headers,data)
+    d.pdist(y='Column1,Column2,Column3')
+
+
+def test_pqq():
+
+    headers = ["Column1","Column2","Column3"]
+    data = [
+        [1, 2, 2, 3, 3, 3, 4, 4, 4, 4],
+        [5, 6, 6, 7, 7, 7, 8, 8, 8, 8],
+        [9, 10, 10, 11, 11, 11, 12, 12, 12, 12]
+    ]
+    
+    d = r.p()
+    d.frd(headers,data)
+    d.pqq(y='Column1,Column2,Column3')
+
+def test_pcr():
+
+    np.random.seed(0)
+
+    data = {
+        'Column1': np.random.normal(0, 1, 100),
+        'Column2': np.random.normal(0, 1, 100),
+        'Column3': np.random.normal(0, 1, 100)
+    }
+    
+    # Introduce some correlation
+    data['Column2'] = data['Column1'] * 0.5 + np.random.normal(0, 0.5, 100)
+    data['Column3'] = data['Column1'] * -0.7 + np.random.normal(0, 0.5, 100)
+
+    # Convert to list format
+    headers = ['Column1', 'Column2', 'Column3']
+    data_list = [data[col].tolist() for col in headers]
+
+    d = r.p()
+    d.frd(headers,data_list)
+    d.pcr(y='Column1,Column2,Column3')
+
+
+
 
 # Call the test method
 #test_axlinr()
 #test_axlinr_2()
 #test_axlinr_3()
-test_axlinr_4()
+#test_axlinr_4()
 #test_axlogr_1()
-test_axlogr_2()
+#test_axlogr_2()
+#test_pdist()
+#test_pqq()
+test_pcr()
 
