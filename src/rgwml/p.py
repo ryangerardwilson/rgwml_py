@@ -1529,67 +1529,128 @@ class p:
         gc.collect()
         return self
 
-    def ptnfq(self, n, column_names):
-        """INSPECT::[d.ptnfq(10, 'Column1, Column2, Column3')] Print the top n frequency values in the specified columns with their frequencies and percentages in a cascading tree structure."""
-        columns = [col.strip() for col in column_names.split(',')]
+    def pnfc(self, n, columns, order_by="FREQ_DESC"):
+        """INSPECT::[d.pnfc(5,'Column1,Columns')] Print n frequency cascading. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)"""
+        
+        # Split columns string into a list
+        columns = [col.strip() for col in columns.split(",")]
 
-        for column_name in columns:
-            if column_name not in self.df.columns:
-                raise ValueError(f"Column {column_name} does not exist in the DataFrame.")
+        # Generate cascading frequency report
+        def generate_cascade_report(df, columns, limit, order_by):
+            if not columns:
+                return None
 
-        def print_sub_frequencies(df, cols, depth):
-            if not cols:
-                return
+            current_col = columns[0]
+            if current_col not in df.columns:
+                return None
 
-            column_name = cols[0]
-            value_counts = df[column_name].value_counts(dropna=False).head(n)
-            total_count = len(df)
-            indent = '  ' * depth
+            # Handle NaN, NaT, and None values correctly based on the column type
+            df = df.copy()
 
-            for i, (value, count) in enumerate(value_counts.items()):
-                percentage = (count / total_count) * 100
-                display_value = 'NaN' if pd.isna(value) else value
-                sub_tree_symbol = '└──' if i == len(value_counts) - 1 else '├──'
-                print(f"  {indent}{sub_tree_symbol} {display_value} ({count}, {percentage:.2f}%)")
+            if pd.api.types.is_numeric_dtype(df[current_col]):
+                missing_value_str = 'NaN'
+            elif pd.api.types.is_datetime64_any_dtype(df[current_col]):
+                missing_value_str = 'NaT'
+            else:
+                missing_value_str = 'None'
 
-                if len(cols) > 1:
-                    next_column = cols[1]
-                    sub_df = df[df[column_name] == value]
-                    if not sub_df.empty:
-                        sub_indent = '  ' * (depth + 1)
-                        print(f"{sub_indent}  └── {next_column} top {n} freq when {column_name} == '{display_value}':")
-                        print_sub_frequencies(sub_df, cols[1:], depth + 2)
+            frequency = df[current_col].value_counts(dropna=False)
+            frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
 
-        def print_main_frequencies():
-            current_df = self.df
-            depth = 0
+            if limit is not None:
+                frequency = frequency.nlargest(limit)
+            sorted_frequency = sort_frequency(frequency, order_by)
 
-            for i, column_name in enumerate(columns):
-                if i == len(columns) - 1:
-                    break
+            report = {}
+            for value, count in sorted_frequency.items():
+                if pd.isna(value) or value in ['NaN', 'NaT', 'None']:
+                    filtered_df = df[df[current_col].isna()]
+                    value_str = missing_value_str
+                else:
+                    filtered_df = df[df[current_col] == value]
+                    value_str = str(value)
 
-                value_counts = current_df[column_name].value_counts(dropna=False).head(n)
-                total_count = len(current_df)
-                indent = '  ' * depth
-                tree_symbol = '' if depth == 0 else '├──'
-                print(f"{indent}{tree_symbol}Top {n} frequency values for {column_name}:")
+                if len(columns) > 1:
+                    sub_report = generate_cascade_report(filtered_df, columns[1:], limit, order_by)
+                    report[value_str] = {
+                        "count": str(count),
+                        f"sub_distribution({columns[1]})": sub_report if sub_report else {}
+                    }
+                else:
+                    report[value_str] = {
+                        "count": str(count)
+                    }
 
-                for j, (value, count) in enumerate(value_counts.items()):
-                    percentage = (count / total_count) * 100
-                    display_value = 'NaN' if pd.isna(value) else value
-                    sub_tree_symbol = '└──' if j == len(value_counts) - 1 else '├──'
-                    print(f"{indent}  {sub_tree_symbol} {display_value} ({count}, {percentage:.2f}%)")
+            return report
 
-                    if i < len(columns) - 1:
-                        next_column = columns[i + 1]
-                        sub_df = current_df[current_df[column_name] == value]
-                        if not sub_df.empty:
-                            sub_indent = '  ' * (depth + 2)
-                            print(f"{sub_indent}  └── {next_column} top {n} freq when {column_name} == '{display_value}':")
-                            print_sub_frequencies(sub_df, columns[i + 1:], depth + 3)
 
-                current_df = current_df[current_df[column_name].isin(value_counts.index)]
-                depth += 2
 
-        print_main_frequencies()
+        def sort_frequency(frequency, order_by):
+            if order_by == "ASC":
+                return dict(sorted(frequency.items(), key=lambda item: item[0]))
+            elif order_by == "DESC":
+                return dict(sorted(frequency.items(), key=lambda item: item[0], reverse=True))
+            elif order_by == "FREQ_ASC":
+                return dict(sorted(frequency.items(), key=lambda item: item[1]))
+            else:  # Default to "FREQ_DESC"
+                return dict(sorted(frequency.items(), key=lambda item: item[1], reverse=True))
+
+        # Generate report
+        report = generate_cascade_report(self.df, columns, n, order_by)
+        print(json.dumps(report, indent=2))
+
         return self
+
+    def pnfl(self, n, columns, order_by="FREQ_DESC"):
+        """INSPECT::[d.pnfl(5,'Column1,Columns')] Print n frequency linear. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)"""
+
+        # Split columns string into a list
+        columns = [col.strip() for col in columns.split(",")]
+
+        def generate_linear_report(df, columns, limit, order_by):
+            report = {}
+
+            for current_col in columns:
+                if current_col not in df.columns:
+                    continue
+
+                # Handle NaN, NaT, and None values correctly based on the column type
+                if pd.api.types.is_numeric_dtype(df[current_col]):
+                    missing_value_str = 'NaN'
+                elif pd.api.types.is_datetime64_any_dtype(df[current_col]):
+                    missing_value_str = 'NaT'
+                else:
+                    missing_value_str = 'None'
+
+                frequency = df[current_col].value_counts(dropna=False)
+                frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+
+                if limit is not None:
+                    frequency = frequency.nlargest(limit)
+                sorted_frequency = sort_frequency(frequency, order_by)
+
+                col_report = {}
+                for value, count in sorted_frequency.items():
+                    value_str = str(value) if not pd.isna(value) else missing_value_str
+                    col_report[value_str] = str(count)
+
+                report[current_col] = col_report
+
+            return report
+
+        def sort_frequency(frequency, order_by):
+            if order_by == "ASC":
+                return dict(sorted(frequency.items(), key=lambda item: item[0]))
+            elif order_by == "DESC":
+                return dict(sorted(frequency.items(), key=lambda item: item[0], reverse=True))
+            elif order_by == "FREQ_ASC":
+                return dict(sorted(frequency.items(), key=lambda item: item[1]))
+            else:  # Default to "FREQ_DESC"
+                return dict(sorted(frequency.items(), key=lambda item: item[1], reverse=True))
+
+        # Generate report
+        report = generate_linear_report(self.df, columns, n, order_by)
+        print(json.dumps(report, indent=2))
+
+        return self
+

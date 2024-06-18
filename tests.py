@@ -227,10 +227,16 @@ def test_adbscancc():
     # Perform clustering using the acc method
     d.adbscancc('Column1,Column2,Column3', 'cluster_column', eps=0.5, min_samples=5, visualize=True)
 
-def test_ptnfq():
+def test_pnfc():
     d = r.p()
     d.fq('i2e1','SELECT TOP 10000 * FROM t_customer_ticket')
-    d.ptnfq(10,'title, resolution_type, tags')
+    d.pnfc(10,'title, resolution_type, tags')
+
+def test_pnfl():
+    d = r.p()
+    d.fq('i2e1','SELECT TOP 10000 * FROM t_customer_ticket')
+    d.pnfl(10,'title, resolution_type, tags')
+
 
 # Call the test method
 #test_axlinr()
@@ -244,4 +250,5 @@ def test_ptnfq():
 #test_pcr()
 #test_ancc()
 #test_adbscancc()
-test_ptnfq()
+#test_pnfc()
+test_pnfl()

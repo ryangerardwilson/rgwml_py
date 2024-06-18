@@ -120,6 +120,12 @@ Instantiate this class by `d = r.p()`
     # Print correlation
     d.prc([('column1','column2'), ('column3','column4')])
 
+    # Print n frequency linear. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)
+    d.pnfl(5,'Column1,Columns')
+
+    # Print n frequency cascading. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)
+    d.pnfc(5,'Column1,Columns')
+
 ### 4.3. APPEND
 
     # Append boolean classification column
