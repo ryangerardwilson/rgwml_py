@@ -1529,3 +1529,67 @@ class p:
         gc.collect()
         return self
 
+    def ptnfq(self, n, column_names):
+        """INSPECT::[d.ptnfq(10, 'Column1, Column2, Column3')] Print the top n frequency values in the specified columns with their frequencies and percentages in a cascading tree structure."""
+        columns = [col.strip() for col in column_names.split(',')]
+
+        for column_name in columns:
+            if column_name not in self.df.columns:
+                raise ValueError(f"Column {column_name} does not exist in the DataFrame.")
+
+        def print_sub_frequencies(df, cols, depth):
+            if not cols:
+                return
+
+            column_name = cols[0]
+            value_counts = df[column_name].value_counts(dropna=False).head(n)
+            total_count = len(df)
+            indent = '  ' * depth
+
+            for i, (value, count) in enumerate(value_counts.items()):
+                percentage = (count / total_count) * 100
+                display_value = 'NaN' if pd.isna(value) else value
+                sub_tree_symbol = '└──' if i == len(value_counts) - 1 else '├──'
+                print(f"  {indent}{sub_tree_symbol} {display_value} ({count}, {percentage:.2f}%)")
+
+                if len(cols) > 1:
+                    next_column = cols[1]
+                    sub_df = df[df[column_name] == value]
+                    if not sub_df.empty:
+                        sub_indent = '  ' * (depth + 1)
+                        print(f"{sub_indent}  └── {next_column} top {n} freq when {column_name} == '{display_value}':")
+                        print_sub_frequencies(sub_df, cols[1:], depth + 2)
+
+        def print_main_frequencies():
+            current_df = self.df
+            depth = 0
+
+            for i, column_name in enumerate(columns):
+                if i == len(columns) - 1:
+                    break
+
+                value_counts = current_df[column_name].value_counts(dropna=False).head(n)
+                total_count = len(current_df)
+                indent = '  ' * depth
+                tree_symbol = '' if depth == 0 else '├──'
+                print(f"{indent}{tree_symbol}Top {n} frequency values for {column_name}:")
+
+                for j, (value, count) in enumerate(value_counts.items()):
+                    percentage = (count / total_count) * 100
+                    display_value = 'NaN' if pd.isna(value) else value
+                    sub_tree_symbol = '└──' if j == len(value_counts) - 1 else '├──'
+                    print(f"{indent}  {sub_tree_symbol} {display_value} ({count}, {percentage:.2f}%)")
+
+                    if i < len(columns) - 1:
+                        next_column = columns[i + 1]
+                        sub_df = current_df[current_df[column_name] == value]
+                        if not sub_df.empty:
+                            sub_indent = '  ' * (depth + 2)
+                            print(f"{sub_indent}  └── {next_column} top {n} freq when {column_name} == '{display_value}':")
+                            print_sub_frequencies(sub_df, columns[i + 1:], depth + 3)
+
+                current_df = current_df[current_df[column_name].isin(value_counts.index)]
+                depth += 2
+
+        print_main_frequencies()
+        return self
