@@ -36,7 +36,7 @@ class p:
         return p(df=copy.deepcopy(self.df))
 
     def frd(self, headers, data):
-        """INSTANTIATE::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
+        """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
         if isinstance(data, list) and all(isinstance(col, list) for col in data):
             self.df = pd.DataFrame(data={header: col for header, col in zip(headers, data)})
         else:
@@ -44,7 +44,7 @@ class p:
         return self
 
     def fq(self, db_preset_name, query):
-        """INSTANTIATE::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
+        """LOAD::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -141,7 +141,7 @@ class p:
 
 
     def fcq(self, db_preset_name, query, chunk_size):
-        """INSTANTIATE::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
+        """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -620,8 +620,8 @@ class p:
         return self
 
     def doc(self, method_type_filter=None):
-        """INSPECT::[d.doc()] Prints docs. Optional parameter: method_type_filter (str) egs. 'APPEND, PLOT'"""
-
+        """DOCUMENTATION::[d.doc()] Prints docs. Optional parameter: method_type_filter (str) egs. 'APPEND, PLOT'"""
+            
         # Dictionary to hold methods grouped by their type
         method_types = collections.defaultdict(list)
 
@@ -631,16 +631,17 @@ class p:
         for method in methods:
             method_func = getattr(self, method)
             docstring = method_func.__doc__
-            if docstring:
+            if docstring: 
                 # Extract only the first line of the docstring
                 first_line = docstring.split('\n')[0]
                 if "::" in first_line:
-                    # Extract the method type from the first line
-                    method_type = first_line.split("::")[0].strip()
-                    method_description = first_line.split("::")[1].strip()
+                    # Find the first occurrence of "::" and split there
+                    split_index = first_line.find("::")
+                    method_type = first_line[:split_index].strip()
+                    method_description = first_line[split_index + 2:].strip()
                     method_types[method_type].append((method, method_description))
 
-        # Convert the filter to a list of method types if provided
+            # Convert the filter to a list of method types if provided
         method_type_list = []
         if method_type_filter:
             method_type_list = [mt.strip() for mt in method_type_filter.split(',')]
@@ -669,7 +670,6 @@ class p:
         gc.collect()
         return self
 
-
     def s(self, name_or_path):
         """PERSIST::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
         if self.df is None:
@@ -677,7 +677,7 @@ class p:
 
         # Ensure the file has the correct extension
         if not name_or_path.lower().endswith(('.csv', '.h5')):
-            name_or_path += '.csv' 
+            name_or_path += '.csv'
 
         # Determine the desktop path
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -695,9 +695,22 @@ class p:
         for col in self.df.select_dtypes(include=["integer"]).columns:
             self.df[col] = self.df[col].astype('int64')
 
-        # Convert datetime columns to datetime64[ns] without timezone
-        for col in self.df.select_dtypes(include=["datetimetz", "datetime64"]).columns:
-            self.df[col] = self.df[col].dt.tz_localize(None)
+        # Convert datetime columns to strings for HDF5 serialization
+        for col in self.df.columns:
+            if pd.api.types.is_datetime64_any_dtype(self.df[col]) or pd.api.types.is_timedelta64_dtype(self.df[col]):
+                print(f"Converting datetime column {col} to string")
+                self.df[col] = self.df[col].astype(str)
+
+        # Convert date object columns to strings for HDF5 serialization
+        for col in self.df.columns:
+            if pd.api.types.is_object_dtype(self.df[col]):
+                try:
+                    # Attempt to convert the entire column to string
+                    self.df[col] = self.df[col].astype(str)
+                except Exception as e:
+                    # Fallback: Convert each element to string individually
+                    self.df[col] = self.df[col].apply(lambda x: str(x) if isinstance(x, (pd.Timestamp, pd.Period, pd.NaTType)) else x)
+                print(f"Converting object column {col} to string")
 
         # Convert other extension arrays to NumPy arrays
         for col in self.df.columns:
@@ -709,11 +722,13 @@ class p:
             self.df.to_csv(full_path, index=False)
             print(f"DataFrame saved to {full_path}")
         elif full_path.lower().endswith('.h5'):
-            self.df.to_hdf(full_path, key='df', mode='w')
+            self.df.to_hdf(full_path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {full_path}")
 
         gc.collect()
         return self
+
+
 
     def abc(self, condition, new_col_name):
         """APPEND::[d.abc('column1 > 30 and column2 < 50', 'new_column_name')] Append boolean classification column."""
@@ -938,7 +953,7 @@ class p:
         return self
 
     def cs(self, columns):
-        """TINKER::[d.cs(['Column1', 'Column2'])]Cascade sort by specified columns."""
+        """TINKER::[d.cs(['Column1', 'Column2'])] Cascade sort by specified columns."""
         if self.df is not None:
             self.df = self.df.sort_values(by=columns)
             self.pr()
@@ -984,9 +999,7 @@ class p:
         return self
 
     def axlinr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
-        """PREDICT::[d.axlinr('target_column','feature1, feature2, feature3','prediction_column_name')] 
-        Append XGB regression predictions. Assumes labelling by the .axl() method. 
-        Optional params: boosting_rounds (int), model_path (str)"""
+        """PREDICT::[d.axlinr('target_column','feature1, feature2, feature3','prediction_column_name')] Append XGB regression predictions. Assumes labelling by the .axl() method. Optional params: boosting_rounds (int), model_path (str)"""
         if self.df is not None and 'XGB_TYPE' in self.df.columns:
             # Convert feature_cols from string to list
             features = feature_cols.replace(' ', '').split(',')
@@ -1041,9 +1054,7 @@ class p:
         return self
 
     def axlogr(self, target_col, feature_cols, pred_col, boosting_rounds=100, model_path=None):
-        """PREDICT::[d.axlogr('target_column','feature1, feature2, feature3','prediction_column_name')] 
-        Append XGB logistic regression predictions. Assumes labeling by the .axl() method. 
-        Optional params: boosting_rounds (int), model_path (str)"""
+        """PREDICT::[d.axlogr('target_column','feature1, feature2, feature3','prediction_column_name')] Append XGB logistic regression predictions. Assumes labeling by the .axl() method. Optional params: boosting_rounds (int), model_path (str)"""
         if self.df is not None and 'XGB_TYPE' in self.df.columns:
             # Convert feature_cols from string to list
             features = feature_cols.replace(' ', '').split(',')
@@ -1098,7 +1109,7 @@ class p:
         return self
 
     def plc(self, y, x=None, save_path=None):
-        """PLOT::[d.(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name eg. 'Column5', image_save_path (str)"""
+        """PLOT::[d.plc(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name for the x axis eg. 'Column5', image_save_path (str)"""
         y = y.replace(' ', '').split(',')
         plt.figure(figsize=(10, 6))
 
@@ -1136,7 +1147,7 @@ class p:
         return self
 
     def pdist(self, y, save_path=None):
-        """PLOT::[d.pdist(y='Column1, Column2, Column3')] Plot histograms for the specified columns. Optional param: image_save_path (str)"""
+        """PLOT::[d.pdist(y='Column1, Column2, Column3')] Plot distribution histograms for the specified columns. Optional param: image_save_path (str)"""
         if isinstance(y, str):
             y = y.replace(' ', '').split(',')
         elif isinstance(y, list):
