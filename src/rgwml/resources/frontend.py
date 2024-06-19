@@ -3,7 +3,7 @@ import os
 import shutil
 
 # Import the generated frontend assets
-from resources.frontend_assets import *
+from .frontend_assets import *
 
 def create_nextjs_project(project_path, use_src):
     src_flag = '--src-dir' if use_src else ''
