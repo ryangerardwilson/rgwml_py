@@ -238,6 +238,19 @@ def test_pnfl():
     d.pnfl(10,'title, resolution_type, tags')
 
 
+def test_ser():
+    crm = r.f()
+    crm.ser(
+        db_preset_name='happy_sudo',
+        new_db_name='labsforge',
+        vm_preset_name='labs_main_server',
+        modal_map={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'},
+        backend_deploy_at='/home/rgw/Apps/labsforgeAPI',
+        backend_deploy_port='8080',
+        frontend_deploy_path='/home/rgw/Apps/forge_frontend'
+    )
+
+
 # Call the test method
 #test_axlinr()
 #test_axlinr_2()
@@ -252,3 +265,4 @@ def test_pnfl():
 #test_adbscancc()
 #test_pnfc()
 #test_pnfl()
+test_ser()

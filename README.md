@@ -66,8 +66,16 @@ Set out below is the format of a rgwml.config file. Place it anywhere in your De
           "project_id": ""
         }
       ],
-      "open_ai_key": ""
-    }
+    "vm_presets": [
+        {
+          "name": "main_server",
+          "host": "",
+          "gcs_instance": "",
+          "ssh_key_path": ""
+        }
+      ],
+    "open_ai_key": ""
+  }
 
 4. `r.p()` Class Methods
 ------------------------
@@ -278,4 +286,21 @@ Instantiate this class by `d = r.d()`
     # Pivot. Optional param: seg_columns. Available agg options: sum, mean, min, max, count, size, std, var, median, etc.
     d.p(['group_by_cols'], 'values_to_agg_col', 'sum', ['seg_columns'])
 
+6. `r.f()` Methods
+------------------
+
+Instantiate this class by crm = r.f()
+
+### 6.1. Serve a CRM
+
+    # Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e. a Bottle App on your GCS VM), and NextJS Frontend on your local machine 
+    crm.ser(
+        db_preset_name='your_rgwml_config_mysql_preset_name', 
+        new_db_name='name_of_db_to_br_created',
+        vm_preset_name='your_rgwml_config_gcs_vm_preset_name', 
+        modal_map={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, 
+        backend_deploy_at='path/on/your/vm/to/deploy/your/backend', 
+        backend_deploy_port='8080', 
+        frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend'
+    )
 
