@@ -14,29 +14,19 @@ const ModalPage: React.FC = () => {
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {
-    //console.log("ModalPage useEffect called");
-    //console.log("modal:", modal);
-    //console.log("apiHost:", apiHost);
-
     if (modal && apiHost) {
       const fetchData = async () => {
         try {
-          //console.log(`Fetching data from ${apiHost}read/${modal}`);
           const response = await fetch(`${apiHost}read/${modal}`);
-          //console.log("Response received:", response);
-
           if (response.ok) {
             const fetchedData = await response.json();
-            //console.log("Fetched data:", fetchedData);
             setColumns(fetchedData.columns);
             setData(fetchedData.data);
           } else {
-            //console.error("Error response:", response.statusText);
             setData([]);
             setColumns([]);
           }
         } catch (error) {
-          //console.error(`Error fetching data for ${modal}:`, error);
           setData([]);
           setColumns([]);
         }
@@ -46,7 +36,7 @@ const ModalPage: React.FC = () => {
     }
   }, [modal, apiHost]);
 
-  if (!modal) {
+  if (!modal || !apiHost) {
     return <div>Loading...</div>;
   }
 
@@ -55,8 +45,17 @@ const ModalPage: React.FC = () => {
       <Sidebar />
       <div className="bg-black min-h-screen flex-1 p-8">
         <div className="container mx-auto">
-          <h1 className="text-4xl text-white font-bold mb-4">{(modal as string)?.charAt(0).toUpperCase() + (modal as string)?.slice(1)} Management</h1>
-          <DynamicTable apiHost={apiHost} modal={modal as string} columns={columns} data={data} />
+          <h1 className="text-4xl text-white font-bold mb-4">
+            {(modal as string).charAt(0).toUpperCase() + (modal as string).slice(1)} Management
+          </h1>
+          {apiHost && (
+            <DynamicTable
+              apiHost={apiHost}
+              modal={modal as string}
+              columns={columns}
+              data={data}
+            />
+          )}
         </div>
       </div>
     </div>

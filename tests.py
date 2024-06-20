@@ -240,7 +240,20 @@ def test_pnfl():
 
 def test_ser():
 
-    modal_backend_config = {'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}
+
+    modal_backend_config = {
+        "sudo": {
+            "username": "sudo",
+            "password": "sudo"
+            },
+        "modals": {
+            "customers": "mobile,issue,status",
+            "partners": "mobile,issue,status"
+            }
+        }
+
+
+
     modal_frontend_config = {
         "customers": {
             "options": {

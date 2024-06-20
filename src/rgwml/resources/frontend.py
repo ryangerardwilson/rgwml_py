@@ -70,7 +70,28 @@ def to_camel_case(snake_str):
     components = snake_str.split('_')
     return components[0].lower() + ''.join(x.title() for x in components[1:])
 
-def main(frontend_deploy_path, host, api_port, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model):
+def main(frontend_deploy_path, host, api_port, modals, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model):
+
+    modal_frontend_config = {
+        "users": {
+            "options": {
+                "type": ["admin", "normal"]
+            },
+            "conditional_options": {},
+            "scopes": {
+                "create": True,
+                "read": ["id","username","password","type", "created_at","updated_at"],
+                "update": ["username","password","type"],
+                "delete": True
+            },
+            "validation_rules": {
+                "username": ["REQUIRED"],
+                "password": ["REQUIRED"]
+            }
+        }
+    }
+
+    modal_frontend_config.update(non_user_modal_frontend_config)
 
     use_src = True
 
@@ -103,10 +124,9 @@ def main(frontend_deploy_path, host, api_port, modals, modal_frontend_config, op
         "DIR__COMPONENTS__FILE__FILTER_INPUT__TSX": os.path.join(src_dir, "components/FilterInput.tsx"),
         "DIR__COMPONENTS__FILE__FILTER_UTILS__TSX": os.path.join(src_dir, "components/filterUtils.tsx"),
         "DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX": os.path.join(src_dir, "components/modalConfig.tsx"),
-        "DIR__PAGES__FILE__PAGE__TSX": os.path.join(src_dir, "pages/page.tsx"),
         "DIR__PAGES__FILE____MODAL____TSX": os.path.join(src_dir, "pages/[modal].tsx"),
         "DIR__PAGES__FILE__LOGIN__TSX": os.path.join(src_dir, "pages/login.tsx"),
-        "ROOT__FILE__MIDDLEWARE__TSX": os.path.join(src_dir, "pages/middleware.tsx"),
+        "ROOT__FILE__MIDDLEWARE__TSX": os.path.join(src_dir, "middleware.tsx"),
         # Add other mappings as needed
     }
 
@@ -121,16 +141,41 @@ def main(frontend_deploy_path, host, api_port, modals, modal_frontend_config, op
             with open(file_path, 'w') as f:
                 f.write(content)
 
+    search_phrase = "const modalConfig: ModalConfigMap"
+    value = globals()["DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX"]
+    index = value.find(search_phrase)
+    value = value[:index]
     # Convert the Python dictionary to a JSON string
     modal_config_json = json.dumps(modal_frontend_config, indent=2)
-
     # Format the JSON string to match the TSX syntax
-    tsx_content = f"const modalConfig = {modal_config_json};\n\nexport default modalConfig;"
-    modal_config_file_path = os.path.join(src_dir, "modalConfig.tsx")
-
+    tsx_content = f"{value}\n\nconst modalConfig: ModalConfigMap = {modal_config_json};\n\nexport default modalConfig;"
+    modal_config_file_path = os.path.join(src_dir, "components/modalConfig.tsx")
     # Write the formatted content to modalConfig.tsx
     with open(modal_config_file_path, 'w') as f:
         f.write(tsx_content)
+
+
+
+    search_phrase_2 = "export const config"
+    value_2 = globals()["ROOT__FILE__MIDDLEWARE__TSX"]
+    index_2 = value_2.find(search_phrase)
+    value_2 = value_2[:index]
+    keys = non_user_modal_frontend_config.keys()
+    formatted_keys = [f"/{key}" for key in keys]
+    existing_routes = ['/', '/login', '/users']
+    all_routes = existing_routes + formatted_keys
+    tsx_content_2 = f"{value_2}\n\nexport const config = {{ matcher: {all_routes},}};"
+
+    middleware_file_path = os.path.join(src_dir, "middleware.tsx")
+    # Write the formatted content to modalConfig.tsx
+    with open(middleware_file_path, 'w') as f:
+        f.write(tsx_content_2)
+
+
+
+
+
+
 
     subprocess.run(['npm', 'run', 'dev'], check=True)
 

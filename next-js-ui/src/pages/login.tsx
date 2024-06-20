@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import '../app/globals.css';
 
+
 const isAuthenticated = () => {
-  const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+  const cookies = document.cookie.split(';').reduce((acc: { [key: string]: string }, cookie) => {
     const [key, value] = cookie.trim().split('=');
     acc[key] = value;
     return acc;
-  }, {});
+  }, {} as { [key: string]: string });
 
   return cookies.user_id !== undefined;
 };
+
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -42,6 +44,8 @@ const LoginPage: React.FC = () => {
         // Set cookie for authentication
         const user = result.user;
         document.cookie = `user_id=${user.id}; path=/`;
+	document.cookie = `username=${user.username}; path=/`;
+	document.cookie = `type=${user.type}; path=/`;
         document.cookie = `auth=true; path=/`;
         console.log("Authentication successful, redirecting..."); // Debugging: Log before redirect
         router.push('/');

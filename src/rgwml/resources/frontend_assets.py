@@ -9,7 +9,7 @@ const HomePage: React.FC = () => {{
   const modals = Object.keys(modalConfig);
 
   // Perform server-side redirection
-  redirect(`/${{modals[0]}}`);
+  redirect(`/${{modals[1]}}`);
 
   return null; // No need to return any JSX as the redirection happens immediately
 }};
@@ -43,7 +43,7 @@ DIR__APP__FILE__GLOBALS__CSS = '''@tailwind base;
 @tailwind components;
 @tailwind utilities;'''
 
-DIR__COMPONENTS__FILE__CREATE_MODAL__TSX = '''import React, {{ useState, useEffect }} from 'react';
+DIR__COMPONENTS__FILE__CREATE_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
 import modalConfig from './modalConfig';
 import {{ validateField, open_ai_quality_checks }} from './validationUtils';
 
@@ -68,10 +68,12 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
     setFormData(initialData);
   }}, [columns]);
 
+  /*
   useEffect(() => {{
     updateDynamicOptions();
   }}, [formData]);
 
+  
   const updateDynamicOptions = () => {{
     const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
     if (config.conditional_options) {{
@@ -84,9 +86,30 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
         }}
       }}
     }}
-    console.log("Dynamic Options Updated:", newDynamicOptions);
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
     setDynamicOptions(newDynamicOptions);
   }};
+ 
+  const updateDynamicOptions = useCallback(() => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}             
+    }}               
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
+  }}, [config, formData]); // Include config and formData in dependencies
+
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [updateDynamicOptions]);
+
 
   const evalCondition = (condition: string) => {{
     const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
@@ -96,15 +119,56 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
       return `'${{match}}'`;
     }});
     try {{
-      console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
       const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
-      console.log(`Condition result: ${{result}}`);
+      //console.log(`Condition result: ${{result}}`);
       return result;
     }} catch (e) {{
       console.error('Error evaluating condition:', condition, e);
       return false;
     }}
   }};
+*/
+
+  const evalCondition = useCallback((condition: string) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+      if (formData.hasOwnProperty(match)) {{
+        return `formData['${{match}}']`;
+      }}
+      return `'${{match}}'`;
+    }});
+    try {{
+      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
+      //console.log(`Condition result: ${{result}}`);
+      return result;
+    }} catch (e) {{
+      console.error('Error evaluating condition:', condition, e);
+      return false;
+    }}
+  }}, [formData]); // Include formData in dependencies
+
+  const updateDynamicOptions = useCallback(() => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}
+    }}
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
+  }}, [config, evalCondition]); // Include evalCondition in dependencies
+
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [updateDynamicOptions]);
+
+
 
 const getCookie = (name: string): string | undefined => {{
 const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
@@ -241,7 +305,7 @@ return cookies[name];
                     <option value="" disabled>
                       Select {{col}}
                     </option>
-                    {{config.options[col].map((option: string) => (
+                    {{config.options[col]?.map((option: string) => (
                       <option key={{option}} value={{option}}>
                         {{option}}
                       </option>
@@ -287,15 +351,43 @@ export default CreateModal;'''
 DIR__COMPONENTS__FILE__SIDEBAR__TSX = '''import React from 'react';
 import Link from 'next/link';
 import {{ useRouter }} from 'next/router';
+import modalConfig from './modalConfig';
+
+const parseCookies = () => {{
+  return document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
+    const [key, value] = cookie.trim().split('=');
+    acc[key] = value;
+    return acc;
+  }}, {{}} as {{ [key: string]: string }});
+}};
+
 
 const Sidebar: React.FC = () => {{
-  const modals = ['customers', 'partners'];
+  const cookies = parseCookies();
+  const userType = cookies.type;
+  const userName = cookies.username;
+  const userId = cookies.user_id;
+  
+
+  // Get the modals from the configuration
+  const modals = Object.keys(modalConfig);
+
+  // Create the modals_array and conditionally remove "users" if the user type is not "admin" or "sudo"
+  const modals_array = modals.filter(modal => {{
+    if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {{
+      return false;
+    }}
+    return true;
+  }});
+
   const router = useRouter();
   const {{ modal }} = router.query;
 
   const handleLogout = () => {{
     document.cookie = 'user_id=; Max-Age=0; path=/';
     document.cookie = 'auth=; Max-Age=0; path=/';
+    document.cookie = 'username=; Max-Age=0; path=/';
+    document.cookie = 'type=; Max-Age=0; path=/'
     router.push('/login');
   }};
 
@@ -304,7 +396,7 @@ const Sidebar: React.FC = () => {{
       <div>
         <h2 className="text-2xl font-semibold mb-6">Menu</h2>
         <ul>
-          {{modals.map((item) => (
+          {{modals_array.map((item) => (
             <li key={{item}} className={{`mb-4 p-2 rounded ${{modal === item ? 'bg-gray-700' : 'hover:bg-gray-700 transition duration-300'}}`}}>
               <Link href={{`/${{item}}`}}>
                 <span className="text-white cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
@@ -312,6 +404,9 @@ const Sidebar: React.FC = () => {{
             </li>
           ))}}
         </ul>
+      </div>
+      <div className="mt-auto mb-4">
+        <p className="text-sm">Logged in: {{userName}} [id: {{userId}}, type: {{userType}}]</p>
       </div>
       <button
         onClick={{handleLogout}}
@@ -421,7 +516,11 @@ export const open_ai_quality_checks = async (field: string, value: string, check
       }}
     }} catch (error) {{
       console.error('Error during OpenAI API call:', error);
-      failedChecks.push(`Error evaluating ${{check}}: ${{error.message}}`);
+      if (error instanceof Error) {{
+        failedChecks.push(`Error evaluating ${{check}}: ${{error.message}}`);
+      }} else {{
+        failedChecks.push(`Error evaluating ${{check}}: ${{String(error)}}`);
+      }}
     }}
   }}
 
@@ -465,27 +564,34 @@ export const handleDelete = async (apiHost: string, modal: string, id: number, u
   }}
 }};
 
-export const handleEdit = (row: {{ [key: string]: any }}, setEditRowData: React.Dispatch<React.SetStateAction<{{ [key: string]: any }} | null>>, setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>) => {{
-  setEditRowData(row);
+export const handleEdit = (
+  row: {{ [key: string]: any }},
+  setEditRowData: React.Dispatch<React.SetStateAction<any[]>>, // Expect an array
+  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+) => {{
+  setEditRowData([row]); // Wrap the row in an array
   setEditModalOpen(true);
 }};
 
+
 export const closeEditModal = (
-  updatedData: {{ [key: string]: any }} | null,
+  updatedData: any[] | null,
   columns: string[],
   setData: React.Dispatch<React.SetStateAction<any[]>>,
   setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
 ) => {{
-  if (updatedData) {{
-    const updatedId = updatedData.id; // Assuming the first column is the unique identifier
+  if (updatedData && updatedData.length > 0) {{
+    const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
+
+    const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
 
     setData(prevData => {{
       const newData = prevData.map(row => {{
-        if (row[0] === updatedId) {{
-          const updatedRow = columns.map(column => {{
-            return updatedData[column] !== undefined ? updatedData[column] : null;
-          }});
-          return updatedRow;
+        if (row.id === updatedId) {{
+          return columns.reduce((acc, column) => {{
+            acc[column] = updatedRow[column] !== undefined ? updatedRow[column] : row[column];
+            return acc;
+          }}, {{}} as {{ [key: string]: any }});
         }}
         return row;
       }});
@@ -495,16 +601,29 @@ export const closeEditModal = (
   setEditModalOpen(false);
 }};'''
 
-DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dateTime: string) => {{
+DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dateTime: string): string => {{
+  // Check if the input is a simple number
+  if (!isNaN(Number(dateTime))) {{
+    return dateTime;
+  }}
+
   const date = new Date(dateTime);
+  if (isNaN(date.getTime())) {{
+    // Return the original value if the input is not a valid date string
+    return dateTime;
+  }}
+  
   const year = date.getFullYear();
   const month = ('0' + (date.getMonth() + 1)).slice(-2);
   const day = ('0' + date.getDate()).slice(-2);
   const hours = ('0' + date.getHours()).slice(-2);
   const minutes = ('0' + date.getMinutes()).slice(-2);
   const seconds = ('0' + date.getSeconds()).slice(-2);
+  
   return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
 }};
+
+
 
   export const isValidUrl = (url: string) => {{
     try {{
@@ -556,7 +675,8 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const [data, setData] = useState<any[]>(initialData);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [editRowData, setEditRowData] = useState<{{ [key: string]: any }} | null>(null);
+  const [editRowData, setEditRowData] = useState<any[]>([]); 
+  //const [editRowData, setEditRowData] = useState<{{ [key: string]: any }} | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
 
   useEffect(() => {{
@@ -794,7 +914,7 @@ export const filterAndSortRows = (rows: any[], query: string, columns: string[])
   return filteredRows;
 }};'''
 
-DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useEffect }} from 'react';
+DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
 import modalConfig from './modalConfig';
 import {{ validateField, open_ai_quality_checks }} from './validationUtils';
 
@@ -820,6 +940,7 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
     setFormData(initialData);
   }}, [rowData, columns]);
 
+  /*
   useEffect(() => {{
     updateDynamicOptions();
   }}, [formData]);
@@ -836,7 +957,7 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
         }}
       }}
     }}
-    console.log("Dynamic Options Updated:", newDynamicOptions);
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
     setDynamicOptions(newDynamicOptions);
   }};
 
@@ -848,15 +969,55 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
       return `'${{match}}'`;
     }});
     try {{
-      console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
       const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
-      console.log(`Condition result: ${{result}}`);
+      //console.log(`Condition result: ${{result}}`);
       return result;
     }} catch (e) {{
       console.error('Error evaluating condition:', condition, e);
       return false;
     }}
   }};
+*/
+
+  const evalCondition = useCallback((condition: string) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+      if (formData.hasOwnProperty(match)) {{
+        return `formData['${{match}}']`;
+      }}
+      return `'${{match}}'`;
+    }});
+    try {{
+      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
+      //console.log(`Condition result: ${{result}}`);
+      return result;
+    }} catch (e) {{
+      console.error('Error evaluating condition:', condition, e);
+      return false;
+    }}
+  }}, [formData]); // Include formData in dependencies
+
+  const updateDynamicOptions = useCallback(() => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}
+    }}
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
+  }}, [config, evalCondition]); // Include config and evalCondition in dependencies
+
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [updateDynamicOptions]);
+
 
 const getCookie = (name: string): string | undefined => {{
 const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
@@ -938,7 +1099,7 @@ return cookies[name];
       const result = await response.json();
       if (result.status === 'success') {{
         alert('Record updated successfully');
-        onClose(formData); // Pass updated data back to parent
+        onClose([formData]); // Pass updated data back to parent
       }} else {{
         console.error('Failed to update data:', result);
         onClose(null);
@@ -994,7 +1155,7 @@ return cookies[name];
                       <option value="" disabled>
                         Select {{col}}
                       </option>
-                      {{config.options[col].map((option: string) => (
+                      {{config.options[col]?.map((option: string) => (
                         <option key={{option}} value={{option}}>
                           {{option}}
                         </option>
@@ -1053,7 +1214,61 @@ export default EditModal;'''
 
 DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX = '''// src/components/modalConfig.tsx
 
-const modalConfig = {{
+interface Options {{
+  [key: string]: string[] | undefined; // Allows any string key with string array or undefined value
+}}
+
+interface ConditionalOption {{
+  condition: string;
+  options: string[];
+}}
+
+interface Scopes {{
+  create: boolean;
+  read: string[];
+  update: string[];
+  delete: boolean;
+}}
+
+interface ValidationRules {{
+  [key: string]: string[];
+}}
+
+interface AIQualityChecks {{
+  [key: string]: string[];
+}}
+
+interface ModalConfig {{
+  options: Options;
+  conditional_options?: {{
+    [key: string]: ConditionalOption[];
+  }};
+  scopes: Scopes;
+  validation_rules?: ValidationRules;
+  ai_quality_checks?: AIQualityChecks;
+}}
+
+interface ModalConfigMap {{
+  [key: string]: ModalConfig;
+}}
+
+const modalConfig: ModalConfigMap = {{
+  users: {{
+    options: {{
+      type: ["admin", "normal"]
+    }},
+    conditional_options: {{}},
+    scopes: {{
+      create: true,
+      read: ["id","username","password","type", "created_at","updated_at"],
+      update: ["username","password","type"],
+      delete: true
+    }},
+    validation_rules: {{
+      "username": ["REQUIRED"],
+      "password": ["REQUIRED"] 
+    }}
+  }},
   customers: {{
     options: {{
       issue: ["A", "B", "C"]
@@ -1107,15 +1322,17 @@ DIR__PAGES__FILE__LOGIN__TSX = '''import React, {{ useState }} from 'react';
 import {{ useRouter }} from 'next/navigation';
 import '../app/globals.css';
 
+
 const isAuthenticated = () => {{
-  const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
+  const cookies = document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
     const [key, value] = cookie.trim().split('=');
     acc[key] = value;
     return acc;
-  }}, {{}});
+  }}, {{}} as {{ [key: string]: string }});
 
   return cookies.user_id !== undefined;
 }};
+
 
 const LoginPage: React.FC = () => {{
   const [username, setUsername] = useState('');
@@ -1147,6 +1364,8 @@ const LoginPage: React.FC = () => {{
         // Set cookie for authentication
         const user = result.user;
         document.cookie = `user_id=${{user.id}}; path=/`;
+	document.cookie = `username=${{user.username}}; path=/`;
+	document.cookie = `type=${{user.type}}; path=/`;
         document.cookie = `auth=true; path=/`;
         console.log("Authentication successful, redirecting..."); // Debugging: Log before redirect
         router.push('/');
@@ -1203,8 +1422,6 @@ const LoginPage: React.FC = () => {{
 
 export default LoginPage;'''
 
-DIR__PAGES__FILE__PAGE__TSX = ''''''
-
 DIR__PAGES__FILE____MODAL____TSX = '''import React, {{ useEffect, useState }} from 'react';
 import {{ useRouter }} from 'next/router';
 import DynamicTable from '../components/DynamicTable';
@@ -1221,29 +1438,19 @@ const ModalPage: React.FC = () => {{
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {{
-    //console.log("ModalPage useEffect called");
-    //console.log("modal:", modal);
-    //console.log("apiHost:", apiHost);
-
     if (modal && apiHost) {{
       const fetchData = async () => {{
         try {{
-          //console.log(`Fetching data from ${{apiHost}}read/${{modal}}`);
           const response = await fetch(`${{apiHost}}read/${{modal}}`);
-          //console.log("Response received:", response);
-
           if (response.ok) {{
             const fetchedData = await response.json();
-            //console.log("Fetched data:", fetchedData);
             setColumns(fetchedData.columns);
             setData(fetchedData.data);
           }} else {{
-            //console.error("Error response:", response.statusText);
             setData([]);
             setColumns([]);
           }}
         }} catch (error) {{
-          //console.error(`Error fetching data for ${{modal}}:`, error);
           setData([]);
           setColumns([]);
         }}
@@ -1253,7 +1460,7 @@ const ModalPage: React.FC = () => {{
     }}
   }}, [modal, apiHost]);
 
-  if (!modal) {{
+  if (!modal || !apiHost) {{
     return <div>Loading...</div>;
   }}
 
@@ -1262,8 +1469,17 @@ const ModalPage: React.FC = () => {{
       <Sidebar />
       <div className="bg-black min-h-screen flex-1 p-8">
         <div className="container mx-auto">
-          <h1 className="text-4xl text-white font-bold mb-4">{{(modal as string)?.charAt(0).toUpperCase() + (modal as string)?.slice(1)}} Management</h1>
-          <DynamicTable apiHost={{apiHost}} modal={{modal as string}} columns={{columns}} data={{data}} />
+          <h1 className="text-4xl text-white font-bold mb-4">
+            {{(modal as string).charAt(0).toUpperCase() + (modal as string).slice(1)}} Management
+          </h1>
+          {{apiHost && (
+            <DynamicTable
+              apiHost={{apiHost}}
+              modal={{modal as string}}
+              columns={{columns}}
+              data={{data}}
+            />
+          )}}
         </div>
       </div>
     </div>
@@ -1289,11 +1505,7 @@ export function middleware(request: NextRequest) {{
   return NextResponse.next();
 }}
 
-const modals = process.env.MODALS.split(',')
-
 export const config = {{
-
-
-  matcher: ['/', '/customers', '/partners', '/login'],
+  matcher: ['/', '/login','/users','/customers','/partners'],
 }};'''
 

@@ -94,7 +94,11 @@ export const open_ai_quality_checks = async (field: string, value: string, check
       }
     } catch (error) {
       console.error('Error during OpenAI API call:', error);
-      failedChecks.push(`Error evaluating ${check}: ${error.message}`);
+      if (error instanceof Error) {
+        failedChecks.push(`Error evaluating ${check}: ${error.message}`);
+      } else {
+        failedChecks.push(`Error evaluating ${check}: ${String(error)}`);
+      }
     }
   }
 

@@ -89,8 +89,9 @@ class f:
         open_ai_key = load_open_ai_config()
 
         # Infer modals from modal_map keys
-        modals = ','.join(modal_backend_config.keys())
-
+        #modals = ','.join(modal_backend_config.keys())
+        modals = ','.join(modal_backend_config['modals'].keys())
+    
         # Deploy backend
         backend_main(db_config, modal_backend_config, ssh_key_path, instance, backend_deploy_at, backend_deploy_port)
 

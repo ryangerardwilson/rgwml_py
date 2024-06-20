@@ -18,7 +18,8 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
   const [data, setData] = useState<any[]>(initialData);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [editRowData, setEditRowData] = useState<{ [key: string]: any } | null>(null);
+  const [editRowData, setEditRowData] = useState<any[]>([]); 
+  //const [editRowData, setEditRowData] = useState<{ [key: string]: any } | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
 
   useEffect(() => {

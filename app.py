@@ -6,7 +6,7 @@ from datetime import datetime
 
 config = {'host': '34.131.124.18', 'user': 'wiomsudo', 'password': 'wiomsudo', 'database': 'labsforge'}
 
-modal_map = {'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}
+modal_map = {'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status', 'users': 'username,password,type'}
 
 app = Bottle()
 
@@ -43,7 +43,7 @@ def authenticate():
     try:
         conn = pymysql.connect(**config)
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
+        cursor.execute("SELECT id, username, password, type FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         cursor.close()
         conn.close()

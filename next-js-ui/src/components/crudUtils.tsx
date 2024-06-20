@@ -35,27 +35,34 @@ export const handleDelete = async (apiHost: string, modal: string, id: number, u
   }
 };
 
-export const handleEdit = (row: { [key: string]: any }, setEditRowData: React.Dispatch<React.SetStateAction<{ [key: string]: any } | null>>, setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>) => {
-  setEditRowData(row);
+export const handleEdit = (
+  row: { [key: string]: any },
+  setEditRowData: React.Dispatch<React.SetStateAction<any[]>>, // Expect an array
+  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+) => {
+  setEditRowData([row]); // Wrap the row in an array
   setEditModalOpen(true);
 };
 
+
 export const closeEditModal = (
-  updatedData: { [key: string]: any } | null,
+  updatedData: any[] | null,
   columns: string[],
   setData: React.Dispatch<React.SetStateAction<any[]>>,
   setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
 ) => {
-  if (updatedData) {
-    const updatedId = updatedData.id; // Assuming the first column is the unique identifier
+  if (updatedData && updatedData.length > 0) {
+    const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
+
+    const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
 
     setData(prevData => {
       const newData = prevData.map(row => {
-        if (row[0] === updatedId) {
-          const updatedRow = columns.map(column => {
-            return updatedData[column] !== undefined ? updatedData[column] : null;
-          });
-          return updatedRow;
+        if (row.id === updatedId) {
+          return columns.reduce((acc, column) => {
+            acc[column] = updatedRow[column] !== undefined ? updatedRow[column] : row[column];
+            return acc;
+          }, {} as { [key: string]: any });
         }
         return row;
       });
@@ -64,3 +71,5 @@ export const closeEditModal = (
   }
   setEditModalOpen(false);
 };
+
+

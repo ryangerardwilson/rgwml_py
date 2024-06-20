@@ -14,18 +14,53 @@ def create_database(config):
     cursor.close()
     conn.close()
 
-def create_user_table(config):
+def create_user_table(config, modal_backend_config):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
+    
+    # Create the users table if it does not exist
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
         username TEXT,
         password TEXT,
+        type TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
     """)
+
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS users_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
+        operation_type ENUM('CREATE', 'UPDATE', 'DELETE'),
+        operation_details JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Check if a 'sudo' user already exists
+    cursor.execute("SELECT COUNT(*) FROM users WHERE type = 'sudo'")
+    result = cursor.fetchone()
+    sudo_user_exists = result[0] > 0
+    
+    # Seed the database with a 'sudo' user if one does not exist
+    if not sudo_user_exists:
+        sudo_user = modal_backend_config.get('sudo')
+        if sudo_user:
+            user_id = 1
+            username = sudo_user.get('username')
+            password = sudo_user.get('password')
+            cursor.execute("""
+            INSERT INTO users (user_id, username, password, type)
+            VALUES (%s, %s, %s, 'sudo')
+            """, (user_id, username, password))
+    
+    # Commit changes and close the connection
+    conn.commit()
     cursor.close()
     conn.close()
 
@@ -101,7 +136,7 @@ def authenticate():
     try:
         conn = pymysql.connect(**config)
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
+        cursor.execute("SELECT id, username, password, type FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -256,66 +291,72 @@ def run_tests(base_url, modal_map):
         test_data = {col: "xxxxx" for col in columns_list}
         test_data['user_id'] = 1
 
-        print(f"\nTesting {modal} modal:\n")
+        if modal != 'users':
+            print(f"\nTesting {modal} modal:\n")
 
-        # Create entry
-        create_response = subprocess.run([
-            'curl', '-X', 'POST', f"{base_url}/create/{modal}",
-            '-H', "Content-Type: application/json",
-            '-d', json.dumps(test_data)
-        ], capture_output=True, text=True)
-        print("Create Entry Response:", create_response.stdout)
+            # Create entry
+            create_response = subprocess.run([
+                'curl', '-X', 'POST', f"{base_url}/create/{modal}",
+                '-H', "Content-Type: application/json",
+                '-d', json.dumps(test_data)
+            ], capture_output=True, text=True)
+            print("Create Entry Response:", create_response.stdout)
 
-        # Read entries
-        read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}"], capture_output=True, text=True)
-        print("Read Entries Response:", read_response.stdout)
+            # Read entries
+            read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}"], capture_output=True, text=True)
+            print("Read Entries Response:", read_response.stdout)
 
-        # Update entry
-        updated_data = {col: "xxxxx_updated" for col in columns_list}
-        updated_data['user_id'] = 1
-        update_response = subprocess.run([
-            'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
-            '-H', "Content-Type: application/json",
-            '-d', json.dumps(updated_data)
-        ], capture_output=True, text=True)
-        print("Update Entry Response:", update_response.stdout)
+            # Update entry
+            updated_data = {col: "xxxxx_updated" for col in columns_list}
+            updated_data['user_id'] = 1
+            update_response = subprocess.run([
+                'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
+                '-H', "Content-Type: application/json",
+                '-d', json.dumps(updated_data)
+            ], capture_output=True, text=True)
+            print("Update Entry Response:", update_response.stdout)
 
-        # Delete entry
-        delete_response = subprocess.run([
-            'curl', '-X', 'DELETE', f"{base_url}/delete/{modal}/1",
-            '-H', "Content-Type: application/json",
-            '-d', json.dumps({'user_id': 1})
-        ], capture_output=True, text=True)
-        print("Delete Entry Response:", delete_response.stdout)
+            # Delete entry
+            delete_response = subprocess.run([
+                'curl', '-X', 'DELETE', f"{base_url}/delete/{modal}/1",
+                '-H', "Content-Type: application/json",
+                '-d', json.dumps({'user_id': 1})
+            ], capture_output=True, text=True)
+            print("Delete Entry Response:", delete_response.stdout)
 
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
     for modal_name, columns in modal_map.items():
-        columns_list = columns.split(',')
-        conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list])
-        
-        # Delete from modal table
-        query = f"DELETE FROM {modal_name} WHERE {conditions}"
-        cursor.execute(query)
-        
-        # Delete from modal logs table
-        log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
-        log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
-        cursor.execute(log_query)
-        
-        conn.commit()
+        if modal_name != 'users':
+            columns_list = columns.split(',')
+            conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list])
+            
+            # Delete from modal table
+            query = f"DELETE FROM {modal_name} WHERE {conditions}"
+            cursor.execute(query)
+            
+            # Delete from modal logs table
+            log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
+            log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
+            cursor.execute(log_query)
+            
+            conn.commit()
     cursor.close()
     conn.close()
 
 
-def main(config, modal_map, ssh_key_path, instance, deploy_at, deploy_port):
+def main(config, modal_backend_config, ssh_key_path, instance, deploy_at, deploy_port):
     create_database(config)
-    create_user_table(config)
+    create_user_table(config, modal_backend_config)
 
+    modal_map = modal_backend_config["modals"]
+
+    
     for modal_name, columns in modal_map.items():
         create_modal_table(config, modal_name, columns.split(','))
 
+    modal_map["users"] = "username,password,type"
     create_bottle_app(modal_map, config, deploy_port)
 
     # Ensure the port is cleared on the remote server

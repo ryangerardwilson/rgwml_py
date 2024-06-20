@@ -7,7 +7,7 @@ const HomePage: React.FC = () => {
   const modals = Object.keys(modalConfig);
 
   // Perform server-side redirection
-  redirect(`/${modals[0]}`);
+  redirect(`/${modals[1]}`);
 
   return null; // No need to return any JSX as the redirection happens immediately
 };

@@ -15,11 +15,6 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-const modals = process.env.MODALS.split(',')
-
 export const config = {
-
-
-  matcher: ['/', '/customers', '/partners', '/login'],
+  matcher: ['/', '/login','/users','/customers','/partners'],
 };
-
