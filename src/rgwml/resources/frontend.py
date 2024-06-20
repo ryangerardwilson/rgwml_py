@@ -143,6 +143,7 @@ def main(frontend_deploy_path, host, api_port, modals, non_user_modal_frontend_c
 
     search_phrase = "const modalConfig: ModalConfigMap"
     value = globals()["DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX"]
+    value = value.replace('{{', '{').replace('}}', '}')
     index = value.find(search_phrase)
     value = value[:index]
     # Convert the Python dictionary to a JSON string
@@ -158,6 +159,7 @@ def main(frontend_deploy_path, host, api_port, modals, non_user_modal_frontend_c
 
     search_phrase_2 = "export const config"
     value_2 = globals()["ROOT__FILE__MIDDLEWARE__TSX"]
+    value_2 = value_2.replace('{{', '{').replace('}}', '}')
     index_2 = value_2.find(search_phrase)
     value_2 = value_2[:index]
     keys = non_user_modal_frontend_config.keys()
