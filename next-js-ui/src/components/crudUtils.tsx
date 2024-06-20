@@ -44,7 +44,6 @@ export const handleEdit = (
   setEditModalOpen(true);
 };
 
-
 export const closeEditModal = (
   updatedData: any[] | null,
   columns: string[],
@@ -52,20 +51,21 @@ export const closeEditModal = (
   setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
 ) => {
   if (updatedData && updatedData.length > 0) {
+    //console.log('56', updatedData);
     const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
 
     const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
+    //console.log('60', updatedId);
 
     setData(prevData => {
       const newData = prevData.map(row => {
-        if (row.id === updatedId) {
-          return columns.reduce((acc, column) => {
-            acc[column] = updatedRow[column] !== undefined ? updatedRow[column] : row[column];
-            return acc;
-          }, {} as { [key: string]: any });
+        // Assuming `row` is an array and the first element is the id
+        if (row[0] === updatedId) {
+          return columns.map(column => updatedRow[column] !== undefined ? updatedRow[column] : row[columns.indexOf(column)]);
         }
         return row;
       });
+      //console.log('72', newData);
       return newData;
     });
   }

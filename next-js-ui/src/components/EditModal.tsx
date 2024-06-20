@@ -16,53 +16,17 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
   const [dynamicOptions, setDynamicOptions] = useState<{ [key: string]: string[] }>({});
   const config = modalConfig[modalName];
 
+
+
+
   useEffect(() => {
     const initialData = columns.reduce((acc, col, index) => {
-      acc[col] = rowData[index];
+      acc[col] = rowData[0][index]; // Assuming rowData is an array of arrays and we are interested in the first row
       return acc;
     }, {} as { [key: string]: any });
     setFormData(initialData);
   }, [rowData, columns]);
 
-  /*
-  useEffect(() => {
-    updateDynamicOptions();
-  }, [formData]);
-
-  const updateDynamicOptions = () => {
-    const newDynamicOptions: { [key: string]: string[] } = {};
-    if (config.conditional_options) {
-      for (const [field, conditions] of Object.entries(config.conditional_options)) {
-        for (const conditionObj of conditions) {
-          if (evalCondition(conditionObj.condition)) {
-            newDynamicOptions[field] = conditionObj.options;
-            break; // Stop checking other conditions if one matches
-          }
-        }
-      }
-    }
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
-    setDynamicOptions(newDynamicOptions);
-  };
-
-  const evalCondition = (condition: string) => {
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {
-      if (formData.hasOwnProperty(match)) {
-        return `formData['${match}']`;
-      }
-      return `'${match}'`;
-    });
-    try {
-      //console.log(`Evaluating condition: ${conditionToEvaluate}`);
-      const result = new Function('formData', `return ${conditionToEvaluate};`)(formData);
-      //console.log(`Condition result: ${result}`);
-      return result;
-    } catch (e) {
-      console.error('Error evaluating condition:', condition, e);
-      return false;
-    }
-  };
-*/
 
   const evalCondition = useCallback((condition: string) => {
     const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {
@@ -173,7 +137,8 @@ return cookies[name];
     }
 
     try {
-      const response = await fetch(`${apiHost}update/${modalName}/${rowData[0]}`, {
+	    //console.log('151', rowData[0][0], updateData);
+      const response = await fetch(`${apiHost}update/${modalName}/${rowData[0][0]}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -181,6 +146,7 @@ return cookies[name];
         body: JSON.stringify(updateData),
       });
       const result = await response.json();
+      //console.log('160',result);
       if (result.status === 'success') {
         alert('Record updated successfully');
         onClose([formData]); // Pass updated data back to parent
