@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
 import FilterInput from './FilterInput';
+import QueryInput from './QueryInput';
 import modalConfig from './modalConfig';
 import { evaluateFilter, filterAndSortRows } from './filterUtils';
 import { handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal } from './crudUtils';
+import { handleQuerySubmit } from './queryUtils';
 import { isValidUrl, formatDateTime } from './formatUtils';
 
 interface DynamicTableProps {
@@ -18,9 +20,11 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
   const [data, setData] = useState<any[]>(initialData);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [editRowData, setEditRowData] = useState<any[]>([]); 
-  //const [editRowData, setEditRowData] = useState<{ [key: string]: any } | null>(null);
+  const [editRowData, setEditRowData] = useState<any[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
+  const [queryInput, setQueryInput] = useState('');
+  const [useQueryInput, setUseQueryInput] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   useEffect(() => {
     setData(initialData);
@@ -36,6 +40,19 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
     setFilterQuery(event.target.value);
   }, []);
 
+  const handleQueryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setQueryInput(event.target.value);
+  }, []);
+
+  const handleQueryKeyPress = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        handleQuerySubmit(apiHost, modal, queryInput, setData, setQueryError);
+      }
+    },
+    [apiHost, modal, queryInput]
+  );
+
   const filteredData = useMemo(() => {
     return filterAndSortRows(data, filterQuery, columns);
   }, [data, filterQuery, columns]);
@@ -49,49 +66,75 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
   const columnIndices = modalConfiguration.scopes.read.map((col: string) => columns.indexOf(col));
 
   return (
-    <div className="bg-gray-900 text-white p-4">
+    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4">
       <div className="flex justify-between mb-4">
-        <FilterInput filterQuery={filterQuery} handleFilterChange={handleFilterChange} />
-
+        <div className="flex items-center w-full">
+          <label className="flex items-center cursor-pointer">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={useQueryInput}
+                onChange={() => setUseQueryInput(!useQueryInput)}
+                className="sr-only"
+              />
+              <div className="block bg-black w-14 h-10 rounded-lg border border-yellow-100/30"></div>
+              <div
+                className={`absolute left-1 top-1 bg-black border border-yellow-100/50 w-6 h-6 rounded-full transition-transform transform ${
+                  useQueryInput ? 'translate-x-6 translate-y-2' : ''
+                }`}
+              ></div>
+            </div>
+            </label>
+          {useQueryInput ? (
+            <QueryInput
+              queryInput={queryInput}
+              handleQueryInputChange={handleQueryInputChange}
+              handleQueryKeyPress={handleQueryKeyPress}
+              queryError={queryError}
+            />
+          ) : (
+            <FilterInput filterQuery={filterQuery} handleFilterChange={handleFilterChange} />
+          )}
+        </div>
         {modalConfiguration.scopes.create && (
           <button
             onClick={() => handleCreate(setCreateModalOpen)}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
           >
             Create
           </button>
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-700">
+        <table className="min-w-full divide-y divide-yellow-100/30">
           <thead>
             <tr>
               {modalConfiguration.scopes.read.map((col: string, colIndex: number) => (
                 <th
                   key={`col-${colIndex}`}
-                  className="px-3 py-3 text-left text-xs font-medium text-gray-300 tracking-wider"
+                  className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
                 >
                   {col}
                 </th>
               ))}
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map((row, rowIndex) => {
               return (
-                <tr key={`row-${rowIndex}`} className="bg-gray-800">
+                <tr key={`row-${rowIndex}`} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
                   {columnIndices.map((colIndex, cellIndex) => {
                     const cellValue = row[colIndex];
                     return (
                       <td
                         key={`cell-${rowIndex}-${cellIndex}`}
-                        className="px-3 py-4 whitespace-nowrap text-sm text-gray-300"
+                        className="px-3 py-2 whitespace-nowrap text-sm"
                       >
                         {typeof cellValue === 'string' && isValidUrl(cellValue) ? (
                           <button
                             onClick={() => window.open(cellValue, '_blank')}
-                            className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
+                            className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
                           >
                             Open URL
                           </button>
@@ -101,17 +144,17 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
                       </td>
                     );
                   })}
-                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
                     <button
                       onClick={() => handleEdit(row, setEditRowData, setEditModalOpen)}
-                      className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded mr-2"
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
                     >
                       Edit
                     </button>
                     {modalConfiguration.scopes.delete && (
                       <button
                         onClick={() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}
-                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
                       >
                         Delete
                       </button>
@@ -131,7 +174,6 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
           onClose={() => closeCreateModal(setCreateModalOpen)}
         />
       )}
-
       {isEditModalOpen && editRowData && (
         <EditModal
           modalName={modal}

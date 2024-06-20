@@ -177,8 +177,7 @@ def read_entries(modal_name):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
     if modal_name != 'favicon':
-        print(f"SELECT * FROM {{modal_name}}")
-        cursor.execute(f"SELECT * FROM {{modal_name}}")
+        cursor.execute(f"SELECT * FROM {{modal_name}} ORDER BY id DESC LIMIT 1000")
         result = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
         cursor.close()
@@ -196,6 +195,46 @@ def read_entries(modal_name):
             serialized_result.append(serialized_row)
 
         return {{"columns": column_names, "data": serialized_result}}
+
+@app.route('/query/<modal_name>', method=['OPTIONS', 'POST'])
+def query_entries(modal_name):
+    if request.method == 'OPTIONS':
+        response.headers['Allow'] = 'OPTIONS, POST'
+        return {{}}
+
+    if request.method == 'POST':
+        data = request.json
+        if not data or 'query_string' not in data:
+            response.status = 400
+            return {{"error": "query_string is required in the request body"}}
+
+        query_string = data['query_string']
+        query = f"SELECT * FROM {{modal_name}} WHERE {{query_string}} LIMIT 1000"
+
+        try:
+            conn = pymysql.connect(**config)
+            cursor = conn.cursor()
+            cursor.execute(query)
+            result = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            cursor.close()
+            conn.close()
+
+            # Serialize datetime objects
+            serialized_result = []
+            for row in result:
+                serialized_row = []
+                for item in row:
+                    if isinstance(item, datetime):
+                        serialized_row.append(item.isoformat())
+                    else:
+                        serialized_row.append(item)
+                serialized_result.append(serialized_row)
+
+            return {{"columns": column_names, "data": serialized_result}}
+        except Exception as e:
+            response.status = 500
+            return {{"error": str(e)}}
 
 @app.route('/update/<modal_name>/<entry_id>', method=['PUT','OPTIONS'])
 def update_entry(modal_name, entry_id):
@@ -305,6 +344,15 @@ def run_tests(base_url, modal_map):
             # Read entries
             read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}"], capture_output=True, text=True)
             print("Read Entries Response:", read_response.stdout)
+
+            # Query entries
+            query_data = {"query_string": "user_id = 1 ORDER BY id DESC"}
+            query_response = subprocess.run([
+                'curl', '-X', 'POST', f"{base_url}/query/{modal}",
+                '-H', "Content-Type: application/json",
+                '-d', json.dumps(query_data)
+            ], capture_output=True, text=True)
+            print("Query Entries Response:", query_response.stdout)
 
             # Update entry
             updated_data = {col: "xxxxx_updated" for col in columns_list}

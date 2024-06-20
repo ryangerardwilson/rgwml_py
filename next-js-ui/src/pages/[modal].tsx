@@ -45,8 +45,8 @@ const ModalPage: React.FC = () => {
       <Sidebar />
       <div className="bg-black min-h-screen flex-1 p-8">
         <div className="container mx-auto">
-          <h1 className="text-4xl text-white font-bold mb-4">
-            {(modal as string).charAt(0).toUpperCase() + (modal as string).slice(1)} Management
+          <h1 className="text-yellow-100/50 mr-2 text-right">
+            {(modal as string)} table
           </h1>
           {apiHost && (
             <DynamicTable

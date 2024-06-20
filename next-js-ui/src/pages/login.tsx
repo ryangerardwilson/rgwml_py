@@ -59,37 +59,37 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-96">
-        <h2 className="text-2xl mb-4 text-center font-semibold">Login</h2>
+    <div className="min-h-screen bg-black text-yellow-100/50 flex items-center justify-center">
+      <div className="border border-yellow-100/30 p-7 rounded-lg shadow-lg w-96">
+        <h2 className="mb-4 text-center font-bold animate-pulse">Chemical-X</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300">Username</label>
+            <label className="block text-sm text-yellow-100/50 ml-1">Username</label>
             <input
               type="text"
               name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="bg-gray-700 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black p-2 rounded-lg w-full border border-yellow-100/30 text-sm"
               required
             />
           </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300">Password</label>
+          <div className="mb-2">
+            <label className="block text-sm text-yellow-100/50 ml-1">Password</label>
             <input
               type="password"
               name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-gray-700 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black p-2 rounded-lg w-full border border-yellow-100/30 text-sm"
               required
             />
           </div>
-          {error && <p className="text-red-500 mb-4">{error}</p>}
-          <div className="flex justify-end">
+          {error && <p className="text-red-500 mb-2">{error}</p>}
+          <div className="flex justify-end mt-8">
             <button
               type="submit"
-              className="bg-green-500 hover:bg-green-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black hover:bg-yellow-100/50 text-yellow-100/50 hover:text-black py-2 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
             >
               Login
             </button>

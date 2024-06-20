@@ -123,6 +123,8 @@ def main(frontend_deploy_path, host, api_port, modals, non_user_modal_frontend_c
         "DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX": os.path.join(src_dir, "components/formatUtils.tsx"),
         "DIR__COMPONENTS__FILE__FILTER_INPUT__TSX": os.path.join(src_dir, "components/FilterInput.tsx"),
         "DIR__COMPONENTS__FILE__FILTER_UTILS__TSX": os.path.join(src_dir, "components/filterUtils.tsx"),
+        "DIR__COMPONENTS__FILE__QUERY_INPUT__TSX": os.path.join(src_dir, "components/QueryInput.tsx"),
+        "DIR__COMPONENTS__FILE__QUERY_UTILS__TSX": os.path.join(src_dir, "components/queryUtils.tsx"),
         "DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX": os.path.join(src_dir, "components/modalConfig.tsx"),
         "DIR__PAGES__FILE____MODAL____TSX": os.path.join(src_dir, "pages/[modal].tsx"),
         "DIR__PAGES__FILE__LOGIN__TSX": os.path.join(src_dir, "pages/login.tsx"),

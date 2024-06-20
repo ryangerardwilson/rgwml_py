@@ -171,20 +171,20 @@ return cookies[name];
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-gray-950 p-6 rounded w-3/4">
-        <h2 className="text-white text-lg mb-4">Edit {modalName}</h2>
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+        <h2 className="text-yellow-100/50 text-center mb-8">Edit {modalName}</h2>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-4">
             {columns.map((col) => (
               <div key={col} className="mb-2">
-                <label className="block text-white">{col}</label>
+                <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
                 {config.scopes.update.includes(col) ? (
                   dynamicOptions[col] ? (
                     <select
                       name={col}
                       value={formData[col] || ''}
                       onChange={handleChange}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     >
                       <option value="" disabled>
                         Select {col}
@@ -200,7 +200,7 @@ return cookies[name];
                       name={col}
                       value={formData[col] || ''}
                       onChange={handleChange}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     >
                       <option value="" disabled>
                         Select {col}
@@ -217,16 +217,16 @@ return cookies[name];
                       name={col}
                       value={formData[col] || ''}
                       onChange={handleChange}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     />
                   )
                 ) : (
-                  <div className="bg-gray-900 text-white px-3 py-2 rounded w-full">
+                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
                     {isUrl(formData[col]) ? (
                       <button
                         type="button"
                         onClick={() => window.open(formData[col], '_blank')}
-                        className="bg-green-500 hover:bg-green-700 text-white font-bold px-2 rounded"
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
                       >
                         Open URL
                       </button>
@@ -243,13 +243,13 @@ return cookies[name];
             <button
               type="button"
               onClick={() => onClose(null)}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mr-2"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
             >
               Save
             </button>

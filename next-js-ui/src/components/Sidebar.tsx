@@ -42,27 +42,24 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <div className="bg-gray-800 text-gray-100 w-64 min-h-screen p-4 flex flex-col justify-between">
+    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col justify-between">
       <div>
-        <h2 className="text-2xl font-semibold mb-6">Menu</h2>
+        <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
         <ul>
           {modals_array.map((item) => (
-            <li key={item} className={`mb-4 p-2 rounded ${modal === item ? 'bg-gray-700' : 'hover:bg-gray-700 transition duration-300'}`}>
+            <li key={item} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
               <Link href={`/${item}`}>
-                <span className="text-white cursor-pointer">{item.charAt(0).toUpperCase() + item.slice(1)}</span>
+                <span className="ps-1 cursor-pointer">{item.charAt(0).toUpperCase() + item.slice(1)}</span>
               </Link>
             </li>
           ))}
         </ul>
       </div>
-      <div className="mt-auto mb-4">
-        <p className="text-sm">Logged in: {userName} [id: {userId}, type: {userType}]</p>
-      </div>
       <button
         onClick={handleLogout}
-        className="bg-red-500 hover:bg-red-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
       >
-        Logout
+        Logout {userName} [{userId},{userType}]
       </button>
     </div>
   );

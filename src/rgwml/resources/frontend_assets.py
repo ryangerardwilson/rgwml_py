@@ -270,19 +270,19 @@ return cookies[name];
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-gray-950 p-6 rounded w-3/4">
-        <h2 className="text-white text-lg mb-4">Create New {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}}</h2>
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+        <h2 className="text-yellow-100/50 text-center mb-8">Create New {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}}</h2>
         <form onSubmit={{handleSubmit}}>
           <div className="grid grid-cols-2 gap-4">
             {{filteredColumns.map((col) => (
               <div key={{col}} className="mb-2">
-                <label className="block text-white">{{col}}</label>
+                <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
                 {{dynamicOptions[col] ? (
                   <select
                     name={{col}}
                     value={{formData[col] || ''}}
                     onChange={{handleChange}}
-                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     disabled={{!isFieldEnabled(col)}}
                   >
                     <option value="" disabled>
@@ -299,7 +299,7 @@ return cookies[name];
                     name={{col}}
                     value={{formData[col] || ''}}
                     onChange={{handleChange}}
-                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     disabled={{!isFieldEnabled(col)}}
                   >
                     <option value="" disabled>
@@ -317,7 +317,7 @@ return cookies[name];
                     name={{col}}
                     value={{formData[col] || ''}}
                     onChange={{handleChange}}
-                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     disabled={{!isFieldEnabled(col)}}
                   />
                 )}}
@@ -329,13 +329,13 @@ return cookies[name];
             <button
               type="button"
               onClick={{onClose}}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mr-2"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
             >
               Create
             </button>
@@ -392,27 +392,24 @@ const Sidebar: React.FC = () => {{
   }};
 
   return (
-    <div className="bg-gray-800 text-gray-100 w-64 min-h-screen p-4 flex flex-col justify-between">
+    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col justify-between">
       <div>
-        <h2 className="text-2xl font-semibold mb-6">Menu</h2>
+        <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
         <ul>
           {{modals_array.map((item) => (
-            <li key={{item}} className={{`mb-4 p-2 rounded ${{modal === item ? 'bg-gray-700' : 'hover:bg-gray-700 transition duration-300'}}`}}>
+            <li key={{item}} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
               <Link href={{`/${{item}}`}}>
-                <span className="text-white cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
+                <span className="ps-1 cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
               </Link>
             </li>
           ))}}
         </ul>
       </div>
-      <div className="mt-auto mb-4">
-        <p className="text-sm">Logged in: {{userName}} [id: {{userId}}, type: {{userType}}]</p>
-      </div>
       <button
         onClick={{handleLogout}}
-        className="bg-red-500 hover:bg-red-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
       >
-        Logout
+        Logout {{userName}} [{{userId}},{{userType}}]
       </button>
     </div>
   );
@@ -573,7 +570,6 @@ export const handleEdit = (
   setEditModalOpen(true);
 }};
 
-
 export const closeEditModal = (
   updatedData: any[] | null,
   columns: string[],
@@ -581,20 +577,21 @@ export const closeEditModal = (
   setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
 ) => {{
   if (updatedData && updatedData.length > 0) {{
+    //console.log('56', updatedData);
     const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
 
     const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
+    //console.log('60', updatedId);
 
     setData(prevData => {{
       const newData = prevData.map(row => {{
-        if (row.id === updatedId) {{
-          return columns.reduce((acc, column) => {{
-            acc[column] = updatedRow[column] !== undefined ? updatedRow[column] : row[column];
-            return acc;
-          }}, {{}} as {{ [key: string]: any }});
+        // Assuming `row` is an array and the first element is the id
+        if (row[0] === updatedId) {{
+          return columns.map(column => updatedRow[column] !== undefined ? updatedRow[column] : row[columns.indexOf(column)]);
         }}
         return row;
       }});
+      //console.log('72', newData);
       return newData;
     }});
   }}
@@ -634,6 +631,64 @@ DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dat
     }}
   }};'''
 
+DIR__COMPONENTS__FILE__QUERY_UTILS__TSX = '''export const handleQuerySubmit = async (
+  apiHost: string,
+  modal: string,
+  queryInput: string,
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
+  setQueryError: React.Dispatch<React.SetStateAction<string | null>>
+) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}/query/${{modal}}`, {{
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify({{ query_string: queryInput.trim() }}),
+    }});
+    const result = await response.json();
+    if (response.ok) {{
+      setData(result.data);
+      setQueryError(null);
+    }} else {{
+      console.error('Error fetching query results:', result);
+      setQueryError(result.error || 'Unknown error occurred');
+    }}
+  }} catch (error) {{
+    console.error('Error fetching query results:', error);
+    setQueryError(error.message || 'Unknown error occurred');
+  }}
+}};'''
+
+DIR__COMPONENTS__FILE__QUERY_INPUT__TSX = '''import React from 'react';
+
+interface QueryInputProps {{
+  queryInput: string;
+  handleQueryInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleQueryKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  queryError: string | null;
+}}
+
+const QueryInput: React.FC<QueryInputProps> = ({{
+  queryInput,
+  handleQueryInputChange,
+  handleQueryKeyPress,
+  queryError,
+}}) => {{
+  return (
+      <input
+        type="text"
+        value={{queryInput}}
+        onChange={{handleQueryInputChange}}
+        onKeyPress={{handleQueryKeyPress}}
+        placeholder="QUERY MODE (fetches fresh data) ..."
+        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
+      />
+  );
+}};
+
+export default QueryInput;'''
+
 DIR__COMPONENTS__FILE__FILTER_INPUT__TSX = '''import React from 'react';
 
 interface FilterInputProps {{
@@ -647,8 +702,8 @@ const FilterInput: React.FC<FilterInputProps> = ({{ filterQuery, handleFilterCha
       type="text"
       value={{filterQuery}}
       onChange={{handleFilterChange}}
-      placeholder="Query syntax: id > 70 AND Col7 == 'X' ORDER BY id DESC"
-      className="bg-gray-800 text-white px-4 py-2 rounded w-full mr-4"
+      placeholder="FILTER MODE (filters existing data) ..."
+      className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
     />
   );
 }};
@@ -659,9 +714,11 @@ DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEff
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
 import FilterInput from './FilterInput';
+import QueryInput from './QueryInput';
 import modalConfig from './modalConfig';
 import {{ evaluateFilter, filterAndSortRows }} from './filterUtils';
 import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
+import {{ handleQuerySubmit }} from './queryUtils';
 import {{ isValidUrl, formatDateTime }} from './formatUtils';
 
 interface DynamicTableProps {{
@@ -675,9 +732,11 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const [data, setData] = useState<any[]>(initialData);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [editRowData, setEditRowData] = useState<any[]>([]); 
-  //const [editRowData, setEditRowData] = useState<{{ [key: string]: any }} | null>(null);
+  const [editRowData, setEditRowData] = useState<any[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
+  const [queryInput, setQueryInput] = useState('');
+  const [useQueryInput, setUseQueryInput] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   useEffect(() => {{
     setData(initialData);
@@ -693,6 +752,19 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
     setFilterQuery(event.target.value);
   }}, []);
 
+  const handleQueryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
+    setQueryInput(event.target.value);
+  }}, []);
+
+  const handleQueryKeyPress = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {{
+      if (event.key === 'Enter') {{
+        handleQuerySubmit(apiHost, modal, queryInput, setData, setQueryError);
+      }}
+    }},
+    [apiHost, modal, queryInput]
+  );
+
   const filteredData = useMemo(() => {{
     return filterAndSortRows(data, filterQuery, columns);
   }}, [data, filterQuery, columns]);
@@ -706,49 +778,75 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const columnIndices = modalConfiguration.scopes.read.map((col: string) => columns.indexOf(col));
 
   return (
-    <div className="bg-gray-900 text-white p-4">
+    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4">
       <div className="flex justify-between mb-4">
-        <FilterInput filterQuery={{filterQuery}} handleFilterChange={{handleFilterChange}} />
-
+        <div className="flex items-center w-full">
+          <label className="flex items-center cursor-pointer">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={{useQueryInput}}
+                onChange={{() => setUseQueryInput(!useQueryInput)}}
+                className="sr-only"
+              />
+              <div className="block bg-black w-14 h-10 rounded-lg border border-yellow-100/30"></div>
+              <div
+                className={{`absolute left-1 top-1 bg-black border border-yellow-100/50 w-6 h-6 rounded-full transition-transform transform ${{
+                  useQueryInput ? 'translate-x-6 translate-y-2' : ''
+                }}`}}
+              ></div>
+            </div>
+            </label>
+          {{useQueryInput ? (
+            <QueryInput
+              queryInput={{queryInput}}
+              handleQueryInputChange={{handleQueryInputChange}}
+              handleQueryKeyPress={{handleQueryKeyPress}}
+              queryError={{queryError}}
+            />
+          ) : (
+            <FilterInput filterQuery={{filterQuery}} handleFilterChange={{handleFilterChange}} />
+          )}}
+        </div>
         {{modalConfiguration.scopes.create && (
           <button
             onClick={{() => handleCreate(setCreateModalOpen)}}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
           >
             Create
           </button>
         )}}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-700">
+        <table className="min-w-full divide-y divide-yellow-100/30">
           <thead>
             <tr>
               {{modalConfiguration.scopes.read.map((col: string, colIndex: number) => (
                 <th
                   key={{`col-${{colIndex}}`}}
-                  className="px-3 py-3 text-left text-xs font-medium text-gray-300 tracking-wider"
+                  className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
                 >
                   {{col}}
                 </th>
               ))}}
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
             {{filteredData.map((row, rowIndex) => {{
               return (
-                <tr key={{`row-${{rowIndex}}`}} className="bg-gray-800">
+                <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
                   {{columnIndices.map((colIndex, cellIndex) => {{
                     const cellValue = row[colIndex];
                     return (
                       <td
                         key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
-                        className="px-3 py-4 whitespace-nowrap text-sm text-gray-300"
+                        className="px-3 py-2 whitespace-nowrap text-sm"
                       >
                         {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
                           <button
                             onClick={{() => window.open(cellValue, '_blank')}}
-                            className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
+                            className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
                           >
                             Open URL
                           </button>
@@ -758,17 +856,17 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
                       </td>
                     );
                   }})}}
-                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300">
+                  <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
                     <button
                       onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
-                      className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded mr-2"
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
                     >
                       Edit
                     </button>
                     {{modalConfiguration.scopes.delete && (
                       <button
                         onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
-                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
                       >
                         Delete
                       </button>
@@ -788,7 +886,6 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
           onClose={{() => closeCreateModal(setCreateModalOpen)}}
         />
       )}}
-
       {{isEditModalOpen && editRowData && (
         <EditModal
           modalName={{modal}}
@@ -932,53 +1029,17 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
   const [dynamicOptions, setDynamicOptions] = useState<{{ [key: string]: string[] }}>({{}});
   const config = modalConfig[modalName];
 
+
+
+
   useEffect(() => {{
     const initialData = columns.reduce((acc, col, index) => {{
-      acc[col] = rowData[index];
+      acc[col] = rowData[0][index]; // Assuming rowData is an array of arrays and we are interested in the first row
       return acc;
     }}, {{}} as {{ [key: string]: any }});
     setFormData(initialData);
   }}, [rowData, columns]);
 
-  /*
-  useEffect(() => {{
-    updateDynamicOptions();
-  }}, [formData]);
-
-  const updateDynamicOptions = () => {{
-    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
-    if (config.conditional_options) {{
-      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
-        for (const conditionObj of conditions) {{
-          if (evalCondition(conditionObj.condition)) {{
-            newDynamicOptions[field] = conditionObj.options;
-            break; // Stop checking other conditions if one matches
-          }}
-        }}
-      }}
-    }}
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
-    setDynamicOptions(newDynamicOptions);
-  }};
-
-  const evalCondition = (condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
-      if (formData.hasOwnProperty(match)) {{
-        return `formData['${{match}}']`;
-      }}
-      return `'${{match}}'`;
-    }});
-    try {{
-      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
-      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
-      //console.log(`Condition result: ${{result}}`);
-      return result;
-    }} catch (e) {{
-      console.error('Error evaluating condition:', condition, e);
-      return false;
-    }}
-  }};
-*/
 
   const evalCondition = useCallback((condition: string) => {{
     const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
@@ -1089,7 +1150,8 @@ return cookies[name];
     }}
 
     try {{
-      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{rowData[0]}}`, {{
+	    //console.log('151', rowData[0][0], updateData);
+      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{rowData[0][0]}}`, {{
         method: 'PUT',
         headers: {{
           'Content-Type': 'application/json',
@@ -1097,6 +1159,7 @@ return cookies[name];
         body: JSON.stringify(updateData),
       }});
       const result = await response.json();
+      //console.log('160',result);
       if (result.status === 'success') {{
         alert('Record updated successfully');
         onClose([formData]); // Pass updated data back to parent
@@ -1121,20 +1184,20 @@ return cookies[name];
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-gray-950 p-6 rounded w-3/4">
-        <h2 className="text-white text-lg mb-4">Edit {{modalName}}</h2>
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+        <h2 className="text-yellow-100/50 text-center mb-8">Edit {{modalName}}</h2>
         <form onSubmit={{handleSubmit}}>
           <div className="grid grid-cols-2 gap-4">
             {{columns.map((col) => (
               <div key={{col}} className="mb-2">
-                <label className="block text-white">{{col}}</label>
+                <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
                 {{config.scopes.update.includes(col) ? (
                   dynamicOptions[col] ? (
                     <select
                       name={{col}}
                       value={{formData[col] || ''}}
                       onChange={{handleChange}}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     >
                       <option value="" disabled>
                         Select {{col}}
@@ -1150,7 +1213,7 @@ return cookies[name];
                       name={{col}}
                       value={{formData[col] || ''}}
                       onChange={{handleChange}}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     >
                       <option value="" disabled>
                         Select {{col}}
@@ -1167,16 +1230,16 @@ return cookies[name];
                       name={{col}}
                       value={{formData[col] || ''}}
                       onChange={{handleChange}}
-                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
                     />
                   )
                 ) : (
-                  <div className="bg-gray-900 text-white px-3 py-2 rounded w-full">
+                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
                     {{isUrl(formData[col]) ? (
                       <button
                         type="button"
                         onClick={{() => window.open(formData[col], '_blank')}}
-                        className="bg-green-500 hover:bg-green-700 text-white font-bold px-2 rounded"
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
                       >
                         Open URL
                       </button>
@@ -1193,13 +1256,13 @@ return cookies[name];
             <button
               type="button"
               onClick={{() => onClose(null)}}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mr-2"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
             >
               Save
             </button>
@@ -1379,37 +1442,37 @@ const LoginPage: React.FC = () => {{
   }};
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-96">
-        <h2 className="text-2xl mb-4 text-center font-semibold">Login</h2>
+    <div className="min-h-screen bg-black text-yellow-100/50 flex items-center justify-center">
+      <div className="border border-yellow-100/30 p-7 rounded-lg shadow-lg w-96">
+        <h2 className="mb-4 text-center font-bold animate-pulse">Chemical-X</h2>
         <form onSubmit={{handleSubmit}}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300">Username</label>
+            <label className="block text-sm text-yellow-100/50 ml-1">Username</label>
             <input
               type="text"
               name="username"
               value={{username}}
               onChange={{(e) => setUsername(e.target.value)}}
-              className="bg-gray-700 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black p-2 rounded-lg w-full border border-yellow-100/30 text-sm"
               required
             />
           </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300">Password</label>
+          <div className="mb-2">
+            <label className="block text-sm text-yellow-100/50 ml-1">Password</label>
             <input
               type="password"
               name="password"
               value={{password}}
               onChange={{(e) => setPassword(e.target.value)}}
-              className="bg-gray-700 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black p-2 rounded-lg w-full border border-yellow-100/30 text-sm"
               required
             />
           </div>
-          {{error && <p className="text-red-500 mb-4">{{error}}</p>}}
-          <div className="flex justify-end">
+          {{error && <p className="text-red-500 mb-2">{{error}}</p>}}
+          <div className="flex justify-end mt-8">
             <button
               type="submit"
-              className="bg-green-500 hover:bg-green-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="bg-black hover:bg-yellow-100/50 text-yellow-100/50 hover:text-black py-2 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
             >
               Login
             </button>
@@ -1469,8 +1532,8 @@ const ModalPage: React.FC = () => {{
       <Sidebar />
       <div className="bg-black min-h-screen flex-1 p-8">
         <div className="container mx-auto">
-          <h1 className="text-4xl text-white font-bold mb-4">
-            {{(modal as string).charAt(0).toUpperCase() + (modal as string).slice(1)}} Management
+          <h1 className="text-yellow-100/50 mr-2 text-right">
+            {{(modal as string)}} table
           </h1>
           {{apiHost && (
             <DynamicTable
