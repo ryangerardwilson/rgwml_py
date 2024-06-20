@@ -160,8 +160,8 @@ def main(frontend_deploy_path, host, api_port, modals, non_user_modal_frontend_c
     search_phrase_2 = "export const config"
     value_2 = globals()["ROOT__FILE__MIDDLEWARE__TSX"]
     value_2 = value_2.replace('{{', '{').replace('}}', '}')
-    index_2 = value_2.find(search_phrase)
-    value_2 = value_2[:index]
+    index_2 = value_2.find(search_phrase_2)
+    value_2 = value_2[:index_2]
     keys = non_user_modal_frontend_config.keys()
     formatted_keys = [f"/{key}" for key in keys]
     existing_routes = ['/', '/login', '/users']
