@@ -14,29 +14,29 @@ const ModalPage: React.FC = () => {
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {
-    console.log("ModalPage useEffect called");
-    console.log("modal:", modal);
-    console.log("apiHost:", apiHost);
+    //console.log("ModalPage useEffect called");
+    //console.log("modal:", modal);
+    //console.log("apiHost:", apiHost);
 
     if (modal && apiHost) {
       const fetchData = async () => {
         try {
-          console.log(`Fetching data from ${apiHost}read/${modal}`);
+          //console.log(`Fetching data from ${apiHost}read/${modal}`);
           const response = await fetch(`${apiHost}read/${modal}`);
-          console.log("Response received:", response);
+          //console.log("Response received:", response);
 
           if (response.ok) {
             const fetchedData = await response.json();
-            console.log("Fetched data:", fetchedData);
+            //console.log("Fetched data:", fetchedData);
             setColumns(fetchedData.columns);
             setData(fetchedData.data);
           } else {
-            console.error("Error response:", response.statusText);
+            //console.error("Error response:", response.statusText);
             setData([]);
             setColumns([]);
           }
         } catch (error) {
-          console.error(`Error fetching data for ${modal}:`, error);
+          //console.error(`Error fetching data for ${modal}:`, error);
           setData([]);
           setColumns([]);
         }

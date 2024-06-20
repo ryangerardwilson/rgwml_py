@@ -309,7 +309,7 @@ def cleanup_db(config, modal_map):
     conn.close()
 
 
-def main(config, modal_map, ssh_key_path, gcs_instance, deploy_at, deploy_port):
+def main(config, modal_map, ssh_key_path, instance, deploy_at, deploy_port):
     create_database(config)
     create_user_table(config)
 
@@ -319,9 +319,9 @@ def main(config, modal_map, ssh_key_path, gcs_instance, deploy_at, deploy_port):
     create_bottle_app(modal_map, config, deploy_port)
 
     # Ensure the port is cleared on the remote server
-    kill_process_on_port(ssh_key_path, gcs_instance, deploy_port)
+    kill_process_on_port(ssh_key_path, instance, deploy_port)
 
-    deploy_to_gcs(ssh_key_path, gcs_instance, deploy_at)
+    deploy_to_gcs(ssh_key_path, instance, deploy_at)
 
     # Run dynamic tests
     run_tests(f"http://{config['host']}:{deploy_port}", modal_map)

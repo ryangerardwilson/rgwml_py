@@ -7,8 +7,8 @@ class f:
     def __init__(self):
         pass
 
-    def ser(self, db_preset_name, new_db_name, vm_preset_name, modal_map, backend_deploy_at, backend_deploy_port, frontend_deploy_path):
-        """[f.ser(db_preset_name='your_rgwml_config_mysql_preset_name', new_db_name='name_of_db_to_br_created', vm_preset_name='your_rgwml_config_gcs_vm_preset_name',modal_map={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, backend_deploy_at='path/on/your/vm/to/deploy/your/backend', backend_deploy_port='8080', frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend')]"""
+    def ser(self, db_preset_name, new_db_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_deploy_at, backend_deploy_port, frontend_deploy_path, open_ai_json_mode_model):
+        """[f.ser(db_preset_name='your_rgwml_config_mysql_preset_name', new_db_name='name_of_db_to_br_created', vm_preset_name='your_rgwml_config_gcs_vm_preset_name',modal_backend_config={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, modal_frontend_config, modal_frontend_config, backend_deploy_at='path/on/your/vm/to/deploy/your/backend', backend_deploy_port='8080', frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend', 'gpt-3.5-turbo')]"""
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -47,6 +47,16 @@ class f:
 
             return vm_preset
 
+        def load_open_ai_config():
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            open_ai_key = config.get('open_ai_key')
+            return open_ai_key
+
+
+
         # Load DB config
         db_preset = load_db_config(db_preset_name)
         db_type = db_preset['db_type']
@@ -68,18 +78,23 @@ class f:
         if vm_preset_name:
             vm_preset = load_vm_config(vm_preset_name)
             ssh_key_path = vm_preset['ssh_key_path']
-            gcs_instance = vm_preset['gcs_instance']
+        
             vm_host = vm_preset['host']
+            ssh_user = vm_preset['ssh_user']
+            instance = f"{ssh_user}@{vm_host}"
         else:
             raise ValueError("vm_preset_name is required")
 
+
+        open_ai_key = load_open_ai_config()
+
         # Infer modals from modal_map keys
-        modals = ','.join(modal_map.keys())
+        modals = ','.join(modal_backend_config.keys())
 
         # Deploy backend
-        backend_main(db_config, modal_map, ssh_key_path, gcs_instance, backend_deploy_at, backend_deploy_port)
+        backend_main(db_config, modal_backend_config, ssh_key_path, instance, backend_deploy_at, backend_deploy_port)
 
         # Deploy frontend
-        frontend_main(frontend_deploy_path, vm_host, backend_deploy_port, modals)
+        frontend_main(frontend_deploy_path, vm_host, backend_deploy_port, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model)
 
 

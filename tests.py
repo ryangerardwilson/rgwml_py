@@ -239,15 +239,69 @@ def test_pnfl():
 
 
 def test_ser():
+
+    modal_backend_config = {'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}
+    modal_frontend_config = {
+        "customers": {
+            "options": {
+                "issue": ["A", "B", "C"]
+            },
+            "conditional_options": {
+                "status": [
+                    {
+                        "condition": "issue == A",
+                        "options": ["X1", "X2", "X3"]
+                    },
+                    {
+                        "condition": "issue == B",
+                        "options": ["Y1", "Y2", "Y3"]
+                    },
+                    {
+                        "condition": "issue == C",
+                        "options": ["Z1", "Z2", "Z3"]
+                    }
+                ]
+            },
+            "scopes": {
+                "create": True,
+                "read": ["id", "mobile", "issue", "status", "created_at"],
+                "update": ["mobile", "issue", "status"],
+                "delete": True
+            },
+            "validation_rules": {
+                "mobile": ["REQUIRED"]
+            },
+            "ai_quality_checks": {
+                "mobile": ["rhymes with potato", "is a fruit or vegetable"]
+            },
+        },
+        "partners": {
+            "options": {
+                "issue": ["A", "B", "C"],
+                "status": ["X", "Y"]
+            },
+            "scopes": {
+                "create": True,
+                "read": ["id", "mobile", "issue", "status", "created_at"],
+                "update": ["issue", "status"],
+                "delete": False
+            }
+        }
+    }
+
+
+
     crm = r.f()
     crm.ser(
         db_preset_name='happy_sudo',
         new_db_name='labsforge',
         vm_preset_name='labs_main_server',
-        modal_map={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'},
+        modal_backend_config=modal_backend_config,
+        modal_frontend_config=modal_frontend_config,
         backend_deploy_at='/home/rgw/Apps/labsforgeAPI',
         backend_deploy_port='8080',
-        frontend_deploy_path='/home/rgw/Apps/forge_frontend'
+        frontend_deploy_path='/home/rgw/Apps/forge_frontend',
+        open_ai_json_mode_model='gpt-3.5-turbo'
     )
 
 

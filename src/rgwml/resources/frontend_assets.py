@@ -3,10 +3,10 @@
 DIR__APP__FILE__PAGE__TSX = '''// src/app/page.tsx
 import React from 'react';
 import {{ redirect }} from 'next/navigation';
+import modalConfig from '../components/modalConfig';
 
 const HomePage: React.FC = () => {{
-
-  const modals = process.env.MODALS.split(',');
+  const modals = Object.keys(modalConfig);
 
   // Perform server-side redirection
   redirect(`/${{modals[0]}}`);
@@ -44,6 +44,8 @@ DIR__APP__FILE__GLOBALS__CSS = '''@tailwind base;
 @tailwind utilities;'''
 
 DIR__COMPONENTS__FILE__CREATE_MODAL__TSX = '''import React, {{ useState, useEffect }} from 'react';
+import modalConfig from './modalConfig';
+import {{ validateField, open_ai_quality_checks }} from './validationUtils';
 
 interface CreateModalProps {{
   modalName: string;
@@ -54,69 +56,227 @@ interface CreateModalProps {{
 
 const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns, onClose }}) => {{
   const [formData, setFormData] = useState<{{ [key: string]: any }}>({{}});
-  const [userId, setUserId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{{ [key: string]: string | null }}>({{}});
+  const [dynamicOptions, setDynamicOptions] = useState<{{ [key: string]: string[] }}>({{}});
+  const config = modalConfig[modalName];
 
   useEffect(() => {{
-    // Extract user_id from cookies
-    const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
+    const initialData = columns.reduce((acc, col) => {{
+      acc[col] = '';
       return acc;
-    }}, {{}} as {{ [key: string]: string }});
+    }}, {{}} as {{ [key: string]: any }});
+    setFormData(initialData);
+  }}, [columns]);
 
-    setUserId(cookies.user_id || null);
-  }}, []);
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [formData]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {{
-    setFormData({{
-      ...formData,
-      [e.target.name]: e.target.value
-    }});
+  const updateDynamicOptions = () => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}
+    }}
+    console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
   }};
 
-  const handleSubmit = async () => {{
-    try {{
-      const dataToSubmit = {{ ...formData, user_id: userId }};
-      console.log('35',dataToSubmit);
-      const response = await fetch(`${{apiHost}}create/${{modalName}}`, {{
-        method: 'POST',
-        headers: {{
-          'Content-Type': 'application/json'
-        }},
-        body: JSON.stringify(dataToSubmit)
-      }});
-      if (response.ok) {{
-        alert('Record created successfully');
-        onClose();
-	 window.location.reload();
-      }} else {{
-        alert('Failed to create record');
+  const evalCondition = (condition: string) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+      if (formData.hasOwnProperty(match)) {{
+        return `formData['${{match}}']`;
       }}
-    }} catch (error) {{
-      console.error('Error creating record:', error);
+      return `'${{match}}'`;
+    }});
+    try {{
+      console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
+      console.log(`Condition result: ${{result}}`);
+      return result;
+    }} catch (e) {{
+      console.error('Error evaluating condition:', condition, e);
+      return false;
     }}
   }};
 
-  const filteredColumns = columns.filter(column => !['id', 'created_at', 'updated_at', 'user_id'].includes(column));
+const getCookie = (name: string): string | undefined => {{
+const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
+const [key, value] = cookie.trim().split('=');
+acc[key] = value;
+return acc;
+}}, {{}} as {{ [key: string]: string }});
+return cookies[name];
+}};
+
+
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {{
+    const {{ name, value }} = e.target;
+    setFormData((prevData) => ({{ ...prevData, [name]: value }}));
+    if (config.validation_rules && config.validation_rules[name]) {{
+      const error = validateField(name, value, config.validation_rules[name]);
+      setErrors((prevErrors) => ({{ ...prevErrors, [name]: error }}));
+    }}
+  }};
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
+    e.preventDefault();
+
+    let valid = true;
+    const newErrors: {{ [key: string]: string | null }} = {{}};
+
+    if (config.validation_rules) {{
+      for (const field of Object.keys(config.validation_rules)) {{
+        const error = validateField(field, formData[field], config.validation_rules[field]);
+        if (error) {{
+          valid = false;
+          newErrors[field] = error;
+        }}
+      }}
+    }}
+
+    if (config.ai_quality_checks) {{
+      for (const field of Object.keys(config.ai_quality_checks)) {{
+        const aiErrors = await open_ai_quality_checks(field, formData[field], config.ai_quality_checks[field]);
+        if (aiErrors.length > 0) {{
+          valid = false;
+          newErrors[field] = aiErrors.join(', ');
+        }}
+      }}
+    }}
+
+    setErrors(newErrors);
+
+    if (!valid) {{
+      alert('Please fix the validation errors.');
+      return;
+    }}
+
+    const user_id = getCookie('user_id');
+    if (user_id) {{
+      formData['user_id'] = user_id;
+    }} else {{
+      console.error('User ID not found in cookies');
+      onClose();
+      return;
+    }}
+
+    try {{
+      const response = await fetch(`${{apiHost}}create/${{modalName}}`, {{
+        method: 'POST',
+        headers: {{
+          'Content-Type': 'application/json',
+        }},
+        body: JSON.stringify(formData),
+      }});
+      const result = await response.json();
+      if (result.status === 'success') {{
+        alert('Record created successfully');
+        onClose();
+        window.location.reload();
+      }} else {{
+        console.error('Failed to create record:', result);
+        onClose();
+      }}
+    }} catch (error) {{
+      console.error('Error creating record:', error);
+      onClose();
+    }}
+  }};
+
+  const isFieldEnabled = (field: string) => {{
+    if (!config.conditional_options || !config.conditional_options[field]) {{
+      return true;
+    }}
+    return config.conditional_options[field].some((conditionObj: any) => evalCondition(conditionObj.condition));
+  }};
+
+  if (!config) {{
+    return <div>Loading...</div>;
+  }}
+
+  const filteredColumns = config.scopes.create ? columns.filter(column => !['id', 'created_at', 'updated_at', 'user_id'].includes(column)) : [];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg text-white w-96">
-        <h2 className="text-2xl mb-4">Create New {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}}</h2>
-        {{filteredColumns.map((column) => (
-          <input
-            key={{column}}
-            type="text"
-            name={{column}}
-            placeholder={{column}}
-            onChange={{handleChange}}
-            className="bg-gray-700 p-2 rounded mb-4 w-full"
-          />
-        ))}}
-        <div className="flex justify-end">
-          <button onClick={{onClose}} className="bg-red-500 hover:bg-red-700 text-white py-2 px-4 rounded mr-2">Cancel</button>
-          <button onClick={{handleSubmit}} className="bg-green-500 hover:bg-green-700 text-white py-2 px-4 rounded">Create</button>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <div className="bg-gray-950 p-6 rounded w-3/4">
+        <h2 className="text-white text-lg mb-4">Create New {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}}</h2>
+        <form onSubmit={{handleSubmit}}>
+          <div className="grid grid-cols-2 gap-4">
+            {{filteredColumns.map((col) => (
+              <div key={{col}} className="mb-2">
+                <label className="block text-white">{{col}}</label>
+                {{dynamicOptions[col] ? (
+                  <select
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    disabled={{!isFieldEnabled(col)}}
+                  >
+                    <option value="" disabled>
+                      Select {{col}}
+                    </option>
+                    {{dynamicOptions[col].map((option: string) => (
+                      <option key={{option}} value={{option}}>
+                        {{option}}
+                      </option>
+                    ))}}
+                  </select>
+                ) : config.options[col] ? (
+                  <select
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    disabled={{!isFieldEnabled(col)}}
+                  >
+                    <option value="" disabled>
+                      Select {{col}}
+                    </option>
+                    {{config.options[col].map((option: string) => (
+                      <option key={{option}} value={{option}}>
+                        {{option}}
+                      </option>
+                    ))}}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    disabled={{!isFieldEnabled(col)}}
+                  />
+                )}}
+                {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
+              </div>
+            ))}}
+          </div>
+          <div className="flex justify-end mt-4">
+            <button
+              type="button"
+              onClick={{onClose}}
+              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mr-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Create
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -165,9 +325,225 @@ const Sidebar: React.FC = () => {{
 
 export default Sidebar;'''
 
-DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect }} from 'react';
+DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (field: string, value: any, rules: string[]): string | null => {{
+  for (const rule of rules) {{
+    const [ruleName, ...params] = rule.split(':');
+    switch (ruleName) {{
+      case 'REQUIRED':
+        if (!value) {{
+          return `${{field}} is required.`;
+        }}
+        break;
+      case 'CHAR_LENGTH':
+        const length = parseInt(params[0], 10);
+        if (value.length !== length) {{
+          return `${{field}} must be ${{length}} characters long.`;
+        }}
+        break;
+      case 'IS_NUMERICALLY_PARSEABLE':
+        if (isNaN(Number(value))) {{
+          return `${{field}} must be numerically parseable.`;
+        }}
+        break;
+      case 'IS_INDIAN_MOBILE_NUMBER':
+        const uniqueDigits = new Set(value.split('')).size;
+        if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
+          return `${{field}} must be a valid Indian mobile number.`;
+        }}
+        break;
+      case 'IS_YYYY-MM-DD':
+        if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+          return `${{field}} must be in YYYY-MM-DD format.`;
+        }}
+        break;
+      case 'IS_AFTER_TODAY':
+        if (new Date(value) <= new Date()) {{
+          return `${{field}} must be a date after today.`;
+        }}
+        break;
+      case 'IS_BEFORE_TODAY':
+        if (new Date(value) >= new Date()) {{
+          return `${{field}} must be a date before today.`;
+        }}
+        break;
+      // Add more validation rules as needed
+      default:
+        break;
+    }}
+  }}
+  return null;
+}};
+
+const OPEN_AI_KEY = process.env.NEXT_PUBLIC_OPEN_AI_KEY;
+const OPEN_AI_MODEL = process.env.NEXT_PUBLIC_OPEN_AI_JSON_MODE_MODEL;
+
+export const open_ai_quality_checks = async (field: string, value: string, checks: string[]): Promise<string[]> => {{
+  const failedChecks: string[] = [];
+
+  if (!OPEN_AI_KEY) {{
+    console.error("OpenAI API key is not set");
+    return ["OpenAI API key is not set"];
+  }}
+
+  for (const check of checks) {{
+    const prompt = `
+    Your only job is to ascertain if the user's input meets this criterion '${{check}}' and output a boolean true or false, as JSON in this format {{"evaluation": "true"}}.
+    `;
+
+    try {{
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {{
+        method: 'POST',
+        headers: {{
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${{OPEN_AI_KEY}}`
+        }},
+        body: JSON.stringify({{
+          model: OPEN_AI_MODEL,
+          messages: [
+            {{
+              role: 'system',
+              content: prompt
+            }},
+            {{
+              role: 'user',
+              content: value
+            }}
+          ]
+        }})
+      }});
+
+      const data = await response.json();
+      const aiResult = data.choices[0].message.content;
+      const evaluation = JSON.parse(aiResult).evaluation;
+
+      if (evaluation !== "true") {{
+        failedChecks.push(`${{field}} does not meet the criterion: ${{check}}`);
+      }}
+    }} catch (error) {{
+      console.error('Error during OpenAI API call:', error);
+      failedChecks.push(`Error evaluating ${{check}}: ${{error.message}}`);
+    }}
+  }}
+
+  return failedChecks;
+}};'''
+
+DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''
+export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
+  setCreateModalOpen(true);
+}};
+
+export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) => {{
+  setCreateModalOpen(false);
+}};
+
+export const fetchData = async (apiHost: string, modal: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}read/${{modal}}`);
+    const result = await response.json();
+    setData(result.data || []);
+  }} catch (error) {{
+    setData([]);
+  }}
+}};
+
+export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number, data: any[], setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}delete/${{modal}}/${{id}}`, {{
+      method: 'DELETE',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify({{ user_id: userId }}),
+    }});
+    const result = await response.json();
+    if (result.status === 'success') {{
+      setData(data.filter((row: any) => row[0] !== id));
+    }}
+  }} catch (error) {{
+    console.error('Error deleting data:', error);
+  }}
+}};
+
+export const handleEdit = (row: {{ [key: string]: any }}, setEditRowData: React.Dispatch<React.SetStateAction<{{ [key: string]: any }} | null>>, setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>) => {{
+  setEditRowData(row);
+  setEditModalOpen(true);
+}};
+
+export const closeEditModal = (
+  updatedData: {{ [key: string]: any }} | null,
+  columns: string[],
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
+  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+) => {{
+  if (updatedData) {{
+    const updatedId = updatedData.id; // Assuming the first column is the unique identifier
+
+    setData(prevData => {{
+      const newData = prevData.map(row => {{
+        if (row[0] === updatedId) {{
+          const updatedRow = columns.map(column => {{
+            return updatedData[column] !== undefined ? updatedData[column] : null;
+          }});
+          return updatedRow;
+        }}
+        return row;
+      }});
+      return newData;
+    }});
+  }}
+  setEditModalOpen(false);
+}};'''
+
+DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dateTime: string) => {{
+  const date = new Date(dateTime);
+  const year = date.getFullYear();
+  const month = ('0' + (date.getMonth() + 1)).slice(-2);
+  const day = ('0' + date.getDate()).slice(-2);
+  const hours = ('0' + date.getHours()).slice(-2);
+  const minutes = ('0' + date.getMinutes()).slice(-2);
+  const seconds = ('0' + date.getSeconds()).slice(-2);
+  return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
+}};
+
+  export const isValidUrl = (url: string) => {{
+    try {{
+      new URL(url);
+      return true;
+    }} catch (_) {{
+      return false;
+    }}
+  }};'''
+
+DIR__COMPONENTS__FILE__FILTER_INPUT__TSX = '''import React from 'react';
+
+interface FilterInputProps {{
+  filterQuery: string;
+  handleFilterChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}}
+
+const FilterInput: React.FC<FilterInputProps> = ({{ filterQuery, handleFilterChange }}) => {{
+  return (
+    <input
+      type="text"
+      value={{filterQuery}}
+      onChange={{handleFilterChange}}
+      placeholder="Query syntax: id > 70 AND Col7 == 'X' ORDER BY id DESC"
+      className="bg-gray-800 text-white px-4 py-2 rounded w-full mr-4"
+    />
+  );
+}};
+
+export default FilterInput;'''
+
+DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect, useMemo, useCallback }} from 'react';
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
+import FilterInput from './FilterInput';
+import modalConfig from './modalConfig';
+import {{ evaluateFilter, filterAndSortRows }} from './filterUtils';
+import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
+import {{ isValidUrl, formatDateTime }} from './formatUtils';
 
 interface DynamicTableProps {{
   apiHost: string;
@@ -181,7 +557,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [editRowData, setEditRowData] = useState<{{ [key: string]: any }} | null>(null);
-  const [filterQuery, setFilterQuery] = useState(''); // State for the filter query
+  const [filterQuery, setFilterQuery] = useState('');
 
   useEffect(() => {{
     setData(initialData);
@@ -189,129 +565,45 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
 
   useEffect(() => {{
     if (!initialData.length) {{
-      const fetchData = async () => {{
-        try {{
-          const response = await fetch(`${{apiHost}}read/${{modal}}`);
-          const result = await response.json();
-          setData(result.data || []);
-        }} catch (error) {{
-          console.error('Error fetching data:', error);
-          setData([]);
-        }}
-      }};
-      fetchData();
+      fetchData(apiHost, modal, setData);
     }}
   }}, [apiHost, modal, initialData]);
 
-  const handleDelete = async (id: number, userId: number) => {{
-    try {{
-      const response = await fetch(`${{apiHost}}delete/${{modal}}/${{id}}`, {{
-        method: 'DELETE',
-        headers: {{
-          'Content-Type': 'application/json',
-        }},
-        body: JSON.stringify({{ user_id: userId }}),
-      }});
-      const result = await response.json();
-      if (result.status === 'success') {{
-        setData(data.filter((row: any) => row[0] !== id)); // Assuming the first column is the ID
-      }}
-    }} catch (error) {{
-      console.error('Error deleting data:', error);
-    }}
-  }};
-
-  const handleEdit = (row: {{ [key: string]: any }}) => {{
-    setEditRowData(row);
-    setEditModalOpen(true);
-  }};
-
-  const handleCreate = () => {{
-    setCreateModalOpen(true);
-  }};
-
-  const closeCreateModal = () => setCreateModalOpen(false);
-
-  const closeEditModal = (updatedData: any[] | null) => {{
-    if (updatedData) {{
-      // Update the rowData with the new data
-      setData(prevData => prevData.map(row => row[0] === updatedData[0] ? updatedData : row));
-    }}
-    setEditModalOpen(false);
-  }};
-
-  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {{
+  const handleFilterChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
     setFilterQuery(event.target.value);
-  }};
+  }}, []);
 
-  const evaluateFilter = (row: any, query: string): boolean => {{
-    const regex = /(\w+)\s*(CONTAINS|STARTS_WITH|==|>|<|>=|<=)\s*'([^']*)'/i;
-    const match = query.match(regex);
+  const filteredData = useMemo(() => {{
+    return filterAndSortRows(data, filterQuery, columns);
+  }}, [data, filterQuery, columns]);
 
-    if (!match) return true;
+  const modalConfiguration = modalConfig[modal];
 
-    const [, column, operator, value] = match;
-    const columnIndex = columns.indexOf(column);
+  if (!modalConfiguration) {{
+    return <div>Loading...</div>;
+  }}
 
-    if (columnIndex === -1) return false;
-
-    const cellValue = row[columnIndex];
-
-    switch (operator) {{
-      case 'CONTAINS':
-        return cellValue.toString().toLowerCase().includes(value.toLowerCase());
-      case 'STARTS_WITH':
-        return cellValue.toString().toLowerCase().startsWith(value.toLowerCase());
-      case '==':
-        return cellValue.toString() === value;
-      case '>':
-        return new Date(cellValue) > new Date(value) || parseFloat(cellValue) > parseFloat(value);
-      case '<':
-        return new Date(cellValue) < new Date(value) || parseFloat(cellValue) < parseFloat(value);
-      case '>=':
-        return new Date(cellValue) >= new Date(value) || parseFloat(cellValue) >= parseFloat(value);
-      case '<=':
-        return new Date(cellValue) <= new Date(value) || parseFloat(cellValue) <= parseFloat(value);
-      default:
-        return true;
-    }}
-  }};
-
-  const filteredData = data.filter(row => evaluateFilter(row, filterQuery));
-
-  const formatDateTime = (dateTime: string) => {{
-    const date = new Date(dateTime);
-    const year = date.getFullYear();
-    const month = ('0' + (date.getMonth() + 1)).slice(-2);
-    const day = ('0' + date.getDate()).slice(-2);
-    const hours = ('0' + date.getHours()).slice(-2);
-    const minutes = ('0' + date.getMinutes()).slice(-2);
-    const seconds = ('0' + date.getSeconds()).slice(-2);
-    return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
-  }};
+  const columnIndices = modalConfiguration.scopes.read.map((col: string) => columns.indexOf(col));
 
   return (
     <div className="bg-gray-900 text-white p-4">
       <div className="flex justify-between mb-4">
-        <input
-          type="text"
-          value={{filterQuery}}
-          onChange={{handleFilterChange}}
-          placeholder="Filter [==, >, >=, <, <=, CONTAINS, STARTS_WITH] ..."
-          className="bg-gray-800 text-white px-4 py-2 rounded w-1/3"
-        />
-        <button
-          onClick={{handleCreate}}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Create
-        </button>
+        <FilterInput filterQuery={{filterQuery}} handleFilterChange={{handleFilterChange}} />
+
+        {{modalConfiguration.scopes.create && (
+          <button
+            onClick={{() => handleCreate(setCreateModalOpen)}}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Create
+          </button>
+        )}}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-700">
           <thead>
             <tr>
-              {{columns.map((col, colIndex) => (
+              {{modalConfiguration.scopes.read.map((col: string, colIndex: number) => (
                 <th
                   key={{`col-${{colIndex}}`}}
                   className="px-3 py-3 text-left text-xs font-medium text-gray-300 tracking-wider"
@@ -323,123 +615,493 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
             </tr>
           </thead>
           <tbody>
-            {{filteredData.map((row, rowIndex) => (
-              <tr key={{`row-${{rowIndex}}`}} className="bg-gray-800">
-                {{row.map((cell: any, cellIndex: number) => (
-                  <td
-                    key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
-                    className="px-3 py-4 whitespace-nowrap text-sm text-gray-300"
-                  >
-                    {{typeof cell === 'string' && !isNaN(Date.parse(cell)) ? formatDateTime(cell) : cell}}
+            {{filteredData.map((row, rowIndex) => {{
+              return (
+                <tr key={{`row-${{rowIndex}}`}} className="bg-gray-800">
+                  {{columnIndices.map((colIndex, cellIndex) => {{
+                    const cellValue = row[colIndex];
+                    return (
+                      <td
+                        key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
+                        className="px-3 py-4 whitespace-nowrap text-sm text-gray-300"
+                      >
+                        {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
+                          <button
+                            onClick={{() => window.open(cellValue, '_blank')}}
+                            className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
+                          >
+                            Open URL
+                          </button>
+                        ) : (
+                          typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
+                        )}}
+                      </td>
+                    );
+                  }})}}
+                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300">
+                    <button
+                      onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
+                      className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded mr-2"
+                    >
+                      Edit
+                    </button>
+                    {{modalConfiguration.scopes.delete && (
+                      <button
+                        onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
+                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                      >
+                        Delete
+                      </button>
+                    )}}
                   </td>
-                ))}}
-                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-300">
-                  <button
-                    onClick={{() => handleEdit(row)}}
-                    className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded mr-2"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={{() => handleDelete(row[0], row.user_id)}} // Pass the user_id here
-                    className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}}
+                </tr>
+              );
+            }})}}
           </tbody>
         </table>
       </div>
-      {{isCreateModalOpen && <CreateModal modalName={{modal}} apiHost={{apiHost}} columns={{columns}} onClose={{closeCreateModal}} />}}
-      {{isEditModalOpen && editRowData && <EditModal modalName={{modal}} apiHost={{apiHost}} columns={{columns}} rowData={{editRowData}} onClose={{closeEditModal}} />}}
+      {{isCreateModalOpen && (
+        <CreateModal
+          modalName={{modal}}
+          apiHost={{apiHost}}
+          columns={{columns}}
+          onClose={{() => closeCreateModal(setCreateModalOpen)}}
+        />
+      )}}
+
+      {{isEditModalOpen && editRowData && (
+        <EditModal
+          modalName={{modal}}
+          apiHost={{apiHost}}
+          columns={{columns}}
+          rowData={{editRowData}}
+          onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
+        />
+      )}}
     </div>
   );
 }};
 
 export default DynamicTable;'''
 
+DIR__COMPONENTS__FILE__FILTER_UTILS__TSX = '''export const evaluateFilter = (row: any, query: string, columns: string[]): boolean => {{
+  const regex = /(\w+)\s*(CONTAINS|STARTS_WITH|==|>|<|>=|<=)\s*'?([^']*)'?\s*(AND\s+|$)/gi;
+  const conditions = query.match(regex);
+
+  if (!conditions) return true;
+
+  for (const condition of conditions) {{
+    const conditionRegex = /(\w+)\s*(CONTAINS|STARTS_WITH|==|>|<|>=|<=)\s*'?([^']*)'?\s*(AND\s+|$)/i;
+    const match = condition.match(conditionRegex);
+
+    if (!match) continue;
+
+    const [, column, operator, value] = match;
+    const columnIndex = columns.indexOf(column);
+
+    if (columnIndex === -1) return false;
+
+    const cellValue = row[columnIndex];
+    const numericValue = parseFloat(value);
+    const isNumericComparison = !isNaN(numericValue);
+
+    let conditionResult = false;
+    switch (operator) {{
+      case 'CONTAINS':
+        conditionResult = cellValue.toString().toLowerCase().includes(value.toLowerCase());
+        break;
+      case 'STARTS_WITH':
+        conditionResult = cellValue.toString().toLowerCase().startsWith(value.toLowerCase());
+        break;
+      case '==':
+        conditionResult = cellValue.toString() === value;
+        break;
+      case '>':
+        if (isNumericComparison) {{
+          conditionResult = parseFloat(cellValue) > numericValue;
+        }} else {{
+          conditionResult = new Date(cellValue) > new Date(value);
+        }}
+        break;
+      case '<':
+        if (isNumericComparison) {{
+          conditionResult = parseFloat(cellValue) < numericValue;
+        }} else {{
+          conditionResult = new Date(cellValue) < new Date(value);
+        }}
+        break;
+      case '>=':
+        if (isNumericComparison) {{
+          conditionResult = parseFloat(cellValue) >= numericValue;
+        }} else {{
+          conditionResult = new Date(cellValue) >= new Date(value);
+        }}
+        break;
+      case '<=':
+        if (isNumericComparison) {{
+          conditionResult = parseFloat(cellValue) <= numericValue;
+        }} else {{
+          conditionResult = new Date(cellValue) <= new Date(value);
+        }}
+        break;
+      default:
+        conditionResult = true;
+    }}
+
+    if (!conditionResult) {{
+      return false;
+    }}
+  }}
+
+  return true;
+}};
+
+export const filterAndSortRows = (rows: any[], query: string, columns: string[]): any[] => {{
+  const orderByRegex = /ORDER BY (\w+) (ASC|DESC)/i;
+  const orderMatch = query.match(orderByRegex);
+  let orderColumn = null;
+  let orderDirection = null;
+
+  if (orderMatch) {{
+    orderColumn = orderMatch[1];
+    orderDirection = orderMatch[2].toUpperCase();
+    query = query.replace(orderMatch[0], '').trim(); // Remove ORDER BY clause from the query
+  }}
+
+  const filteredRows = rows.filter(row => evaluateFilter(row, query, columns));
+
+  if (orderColumn && orderDirection) {{
+    const orderColumnIndex = columns.indexOf(orderColumn);
+
+    if (orderColumnIndex !== -1) {{
+      filteredRows.sort((a, b) => {{
+        const valueA = a[orderColumnIndex];
+        const valueB = b[orderColumnIndex];
+
+        if (orderDirection === 'ASC') {{
+          if (valueA < valueB) return -1;
+          if (valueA > valueB) return 1;
+          return 0;
+        }} else {{
+          if (valueA > valueB) return -1;
+          if (valueA < valueB) return 1;
+          return 0;
+        }}
+      }});
+    }}
+  }}
+
+  return filteredRows;
+}};'''
+
 DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useEffect }} from 'react';
+import modalConfig from './modalConfig';
+import {{ validateField, open_ai_quality_checks }} from './validationUtils';
 
 interface EditModalProps {{
   modalName: string;
   apiHost: string;
   columns: string[];
   rowData: any[];
-  onClose: (updatedData: any[]) => void; // Modify onClose to accept updated data
+  onClose: (updatedData: any[] | null) => void;
 }}
 
 const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, rowData, onClose }}) => {{
   const [formData, setFormData] = useState<{{ [key: string]: any }}>({{}});
+  const [errors, setErrors] =useState<{{ [key: string]: string | null }}>({{}});
+  const [dynamicOptions, setDynamicOptions] = useState<{{ [key: string]: string[] }}>({{}});
+  const config = modalConfig[modalName];
 
   useEffect(() => {{
-    // Convert rowData to an object with column names as keys
-    const initialFormData = columns.reduce((acc, column, index) => {{
-      acc[column] = rowData[index];
+    const initialData = columns.reduce((acc, col, index) => {{
+      acc[col] = rowData[index];
       return acc;
     }}, {{}} as {{ [key: string]: any }});
-    setFormData(initialFormData);
-  }}, [columns, rowData]);
+    setFormData(initialData);
+  }}, [rowData, columns]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {{
-    setFormData({{
-      ...formData,
-      [e.target.name]: e.target.value
-    }});
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [formData]);
+
+  const updateDynamicOptions = () => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}
+    }}
+    console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
   }};
 
-  const handleSubmit = async () => {{
+  const evalCondition = (condition: string) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+      if (formData.hasOwnProperty(match)) {{
+        return `formData['${{match}}']`;
+      }}
+      return `'${{match}}'`;
+    }});
     try {{
-      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{formData.id}}`, {{
+      console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
+      console.log(`Condition result: ${{result}}`);
+      return result;
+    }} catch (e) {{
+      console.error('Error evaluating condition:', condition, e);
+      return false;
+    }}
+  }};
+
+const getCookie = (name: string): string | undefined => {{
+const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
+const [key, value] = cookie.trim().split('=');
+acc[key] = value;
+return acc;
+}}, {{}} as {{ [key: string]: string }});
+return cookies[name];
+
+}};
+
+
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {{
+    const {{ name, value }} = e.target;
+    setFormData((prevData) => ({{ ...prevData, [name]: value }}));
+    if (config.validation_rules && config.validation_rules[name]) {{
+      const error = validateField(name, value, config.validation_rules[name]);
+      setErrors((prevErrors) => ({{ ...prevErrors, [name]: error }}));
+    }}
+  }};
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
+    e.preventDefault();
+
+    let valid = true;
+    const newErrors: {{ [key: string]: string | null }} = {{}};
+
+    if (config.validation_rules) {{
+      for (const field of Object.keys(config.validation_rules)) {{
+        const error = validateField(field, formData[field], config.validation_rules[field]);
+        if (error) {{
+          valid = false;
+          newErrors[field] = error;
+        }}
+      }}
+    }}
+
+    if (config.ai_quality_checks) {{
+      for (const field of Object.keys(config.ai_quality_checks)) {{
+        const aiErrors = await open_ai_quality_checks(field, formData[field], config.ai_quality_checks[field]);
+        if (aiErrors.length > 0) {{
+          valid = false;
+          newErrors[field] = aiErrors.join(', ');
+        }}
+      }}
+    }}
+
+    setErrors(newErrors);
+
+    if (!valid) {{
+      alert('Please fix the validation errors.');
+      return;
+    }}
+
+    const updateData = columns.reduce((acc, col) => {{
+      acc[col] = formData[col];
+      return acc;
+    }}, {{}} as {{ [key: string]: any }});
+
+    const user_id = getCookie('user_id');
+
+    if (user_id) {{
+      updateData['user_id'] = user_id;
+    }} else {{
+      console.error('User ID not found in cookies');
+      onClose(null);
+      return;
+    }}
+
+    try {{
+      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{rowData[0]}}`, {{
         method: 'PUT',
         headers: {{
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         }},
-        body: JSON.stringify(formData)
+        body: JSON.stringify(updateData),
       }});
-      if (response.ok) {{
+      const result = await response.json();
+      if (result.status === 'success') {{
         alert('Record updated successfully');
-        onClose(Object.values(formData)); // Pass updated data to onClose
+        onClose(formData); // Pass updated data back to parent
       }} else {{
-        alert('Failed to update record');
+        console.error('Failed to update data:', result);
+        onClose(null);
       }}
     }} catch (error) {{
-      console.error('Error updating record:', error);
+      console.error('Error updating data:', error);
+      onClose(null);
+    }}
+  }};
+
+  const isUrl = (value: string): boolean => {{
+    try {{
+      new URL(value);
+      return true;
+    }} catch (_) {{
+      return false;
     }}
   }};
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg text-white w-96">
-        <h2 className="text-2xl mb-4">
-          Edit {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}} ({{rowData[0]}})
-        </h2>
-        {{columns.map((column) => (
-          column !== 'created_at' && column !== 'updated_at' && column !== 'id' && column !== 'user_id' && (
-            <div key={{column}} className="mb-4">
-              <label className="block text-sm font-medium text-gray-300">{{column}}</label>
-              <input
-                type="text"
-                name={{column}}
-                value={{formData[column] || ''}}
-                placeholder={{column}}
-                onChange={{handleChange}}
-                className="bg-gray-700 p-2 rounded w-full"
-              />
-            </div>
-          )
-        ))}}
-        <div className="flex justify-end">
-          <button onClick={{() => onClose(null)}} className="bg-red-500 hover:bg-red-700 text-white py-2 px-4 rounded mr-2">Cancel</button>
-          <button onClick={{handleSubmit}} className="bg-green-500 hover:bg-green-700 text-white py-2 px-4 rounded">Update</button>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-gray-950 p-6 rounded w-3/4">
+        <h2 className="text-white text-lg mb-4">Edit {{modalName}}</h2>
+        <form onSubmit={{handleSubmit}}>
+          <div className="grid grid-cols-2 gap-4">
+            {{columns.map((col) => (
+              <div key={{col}} className="mb-2">
+                <label className="block text-white">{{col}}</label>
+                {{config.scopes.update.includes(col) ? (
+                  dynamicOptions[col] ? (
+                    <select
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    >
+                      <option value="" disabled>
+                        Select {{col}}
+                      </option>
+                      {{dynamicOptions[col].map((option: string) => (
+                        <option key={{option}} value={{option}}>
+                          {{option}}
+                        </option>
+                      ))}}
+                    </select>
+                  ) : config.options[col] ? (
+                    <select
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    >
+                      <option value="" disabled>
+                        Select {{col}}
+                      </option>
+                      {{config.options[col].map((option: string) => (
+                        <option key={{option}} value={{option}}>
+                          {{option}}
+                        </option>
+                      ))}}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-gray-700 text-white px-3 py-2 rounded w-full"
+                    />
+                  )
+                ) : (
+                  <div className="bg-gray-900 text-white px-3 py-2 rounded w-full">
+                    {{isUrl(formData[col]) ? (
+                      <button
+                        type="button"
+                        onClick={{() => window.open(formData[col], '_blank')}}
+                        className="bg-green-500 hover:bg-green-700 text-white font-bold px-2 rounded"
+                      >
+                        Open URL
+                      </button>
+                    ) : (
+                      formData[col]
+                    )}}
+                  </div>
+                )}}
+                {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
+              </div>
+            ))}}
+          </div>
+          <div className="flex justify-end mt-4">
+            <button
+              type="button"
+              onClick={{() => onClose(null)}}
+              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mr-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Save
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 }};
 
 export default EditModal;'''
+
+DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX = '''// src/components/modalConfig.tsx
+
+const modalConfig = {{
+  customers: {{
+    options: {{
+      issue: ["A", "B", "C"]
+    }},
+    conditional_options: {{
+      status: [
+	{{
+	   condition: "issue == A",
+	   options: ["X1","X2","X3"]
+	}},
+        {{
+           condition: "issue == B",
+           options: ["Y1","Y2","Y3"]
+        }},
+        {{
+           condition: "issue == C",
+           options: ["Z1","Z2","Z3"]
+        }}      
+      ] 
+    }},
+    scopes: {{
+      create: true,
+      read: ["id", "mobile", "issue", "status", "created_at"],
+      update: ["mobile","issue", "status"],
+      delete: true
+    }},
+    validation_rules: {{
+      "mobile": ["REQUIRED"]
+    }},
+    ai_quality_checks: {{
+      "mobile": ["rhymes with potato", "is a fruit or vegetable"]
+    }},
+  }},
+  partners: {{
+    options: {{
+      issue: ["A", "B", "C"],
+      status: ["X", "Y"]
+    }},
+    scopes: {{
+      create: true,
+      read: ["id", "mobile", "issue", "status", "created_at"],
+      update: ["issue", "status"],
+      delete: false
+    }}
+  }}
+}};
+
+export default modalConfig;'''
 
 DIR__PAGES__FILE__LOGIN__TSX = '''import React, {{ useState }} from 'react';
 import {{ useRouter }} from 'next/navigation';
@@ -559,29 +1221,29 @@ const ModalPage: React.FC = () => {{
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {{
-    console.log("ModalPage useEffect called");
-    console.log("modal:", modal);
-    console.log("apiHost:", apiHost);
+    //console.log("ModalPage useEffect called");
+    //console.log("modal:", modal);
+    //console.log("apiHost:", apiHost);
 
     if (modal && apiHost) {{
       const fetchData = async () => {{
         try {{
-          console.log(`Fetching data from ${{apiHost}}read/${{modal}}`);
+          //console.log(`Fetching data from ${{apiHost}}read/${{modal}}`);
           const response = await fetch(`${{apiHost}}read/${{modal}}`);
-          console.log("Response received:", response);
+          //console.log("Response received:", response);
 
           if (response.ok) {{
             const fetchedData = await response.json();
-            console.log("Fetched data:", fetchedData);
+            //console.log("Fetched data:", fetchedData);
             setColumns(fetchedData.columns);
             setData(fetchedData.data);
           }} else {{
-            console.error("Error response:", response.statusText);
+            //console.error("Error response:", response.statusText);
             setData([]);
             setColumns([]);
           }}
         }} catch (error) {{
-          console.error(`Error fetching data for ${{modal}}:`, error);
+          //console.error(`Error fetching data for ${{modal}}:`, error);
           setData([]);
           setColumns([]);
         }}
