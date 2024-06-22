@@ -1,16 +1,19 @@
+import requests
 import pymysql
 import subprocess
 import os
 import time
 import json
+import paramiko
+import time
 
-def create_database(config):
+def create_database(config, new_db_name):
     temp_config = config.copy()
     temp_config.pop('database', None)  # Remove the database key to connect to the server
 
     conn = pymysql.connect(**temp_config)
     cursor = conn.cursor()
-    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config['database']}")
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {new_db_name}")
     cursor.close()
     conn.close()
 
@@ -90,7 +93,7 @@ def create_modal_table(config, modal_name, columns):
     cursor.close()
     conn.close()
 
-def create_bottle_app(modal_map, config, deploy_port):
+def create_bottle_app(modal_map, config):
     app_code = f"""
 import pymysql
 import json
@@ -302,7 +305,6 @@ def log_operation(modal_name, user_id, operation_type, operation_details):
     cursor.close()
     conn.close()
 
-run(app, host='0.0.0.0', port={deploy_port})
 """
     with open("app.py", "w") as f:
         f.write(app_code)
@@ -311,6 +313,23 @@ def kill_process_on_port(ssh_key_path, gcs_instance, port):
     kill_cmd = f"fuser -k {port}/tcp || true"
     subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, kill_cmd])
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
 def deploy_to_gcs(ssh_key_path, gcs_instance, deploy_path):
     # Create the deployment directory on the remote server
     subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, f'mkdir -p {deploy_path}'])
@@ -323,6 +342,177 @@ def deploy_to_gcs(ssh_key_path, gcs_instance, deploy_path):
     
     # Wait for the server to start
     time.sleep(5)
+"""
+
+def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host):
+
+    def get_dns_zone_id(domain):
+        url = "https://api.netlify.com/api/v1/dns_zones"
+        headers = {"Authorization": f"Bearer {netlify_key}"}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        zones = response.json()
+        print(f"DNS zones retrieved: {zones}")  # Debugging line
+        for zone in zones:
+            if zone["name"] == domain:
+                return zone["id"]
+        return None
+
+    def create_dns_zone(domain):
+        url = "https://api.netlify.com/api/v1/dns_zones"
+        headers = {
+            "Authorization": f"Bearer {netlify_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "name": domain
+        }
+        response = requests.post(url, headers=headers, json=data)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 422 and "conflicting zone" in response.json().get("errors", {}).get("name", [])[0]:
+                print(f"DNS zone for {domain} already exists. Skipping creation.")
+                return get_dns_zone_id(domain)
+            else:
+                print(f"Error creating DNS zone: {e}")
+                print(response.content)
+                raise
+        return response.json()["id"]
+
+    def get_dns_records(zone_id):
+        url = f"https://api.netlify.com/api/v1/dns_zones/{zone_id}/dns_records"
+        headers = {"Authorization": f"Bearer {netlify_key}"}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def create_dns_record(zone_id, hostname, ip_address):
+        url = f"https://api.netlify.com/api/v1/dns_zones/{zone_id}/dns_records"
+        headers = {
+            "Authorization": f"Bearer {netlify_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "type": "A",
+            "hostname": hostname,
+            "value": ip_address,
+            "ttl": 3600
+        }
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()
+
+    parent_domain = ".".join(backend_domain.split('.')[-2:])
+    subdomain = backend_domain.replace(f".{parent_domain}", "")
+
+    zone_id = get_dns_zone_id(parent_domain)
+    print(f"Initial DNS zone ID: {zone_id}")  # Debugging line
+    if zone_id is None:
+        zone_id = create_dns_zone(parent_domain)
+        print(f"DNS zone ID after creation attempt: {zone_id}")  # Debugging line
+        if zone_id is None:
+            print("Retrying to fetch DNS zone ID after creation attempt.")
+            time.sleep(5)  # Adding a short delay before retrying
+            zone_id = get_dns_zone_id(parent_domain)
+            print(f"Fetched DNS zone ID after retry: {zone_id}")  # Debugging line
+        if zone_id is None:
+            raise ValueError(f"Unable to retrieve DNS zone ID for {parent_domain} after creation attempt.")
+        else:
+            print(f"Created DNS zone for {parent_domain} with ID: {zone_id}")
+
+    dns_records = get_dns_records(zone_id)
+    print(f"Retrieved DNS records for zone ID {zone_id}: {dns_records}")
+
+    exists = False
+    for record in dns_records:
+        if record["hostname"] == subdomain and record["value"] == vm_host:
+            exists = True
+            break
+    if not exists:
+        create_dns_record(zone_id, subdomain, vm_host)
+        print(f"Created DNS record for {subdomain} pointing to {vm_host}")
+    else:
+        print(f"DNS record for {subdomain} already exists and points to {vm_host}")
+
+
+def upload_to_gcs(ssh_key_path, gcs_instance, deploy_path):
+    # Create the deployment directory on the remote server
+    subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, f'mkdir -p {deploy_path}'])
+            
+    # Copy the app.py file to the remote server
+    subprocess.run(['scp', '-i', ssh_key_path, 'app.py', f'{gcs_instance}:{deploy_path}/'])
+    
+    # Wait for the server to start
+    time.sleep(3)
+
+
+
+def deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, backend_domain):
+
+    location_of_app_file_on_vm = f"{backend_vm_deploy_path}/app.py"
+    app_name = project_name
+    app_file_name = "app"
+    domain_name = backend_domain
+
+    app_directory = os.path.dirname(location_of_app_file_on_vm)
+    service_file_name = f"{new_db_name}_API_BACKEND_SYSTEMD_SERVICE_FILE"
+    nginx_config_file_name = f"{domain_name}"
+    service_file_path = os.path.join(app_directory, f"{service_file_name}.service")
+    temp_nginx_config_file_path = os.path.join(app_directory, f"temp_{nginx_config_file_name}")
+
+    commands = [
+        "sudo apt update",
+        "sudo apt install -y python3-pip nginx",
+        "sudo pip3 uninstall -y gunicorn bottle",
+        "sudo pip3 install gunicorn bottle pymysql",
+        f"echo '[Unit]\nDescription=Gunicorn instance to serve {new_db_name} API\nAfter=network.target\n\n[Service]\nWorkingDirectory={app_directory}\nExecStart=/usr/local/bin/gunicorn --workers=4 --bind unix:{app_directory}/{app_file_name}.sock app:app\nEnvironment=\"PATH=/usr/local/bin:/usr/bin:/bin\"\nEnvironment=\"PYTHONPATH=/usr/local/lib/python3.10/dist-packages\"\nRestart=always\n\n[Install]\nWantedBy=multi-user.target' > {service_file_path}",
+        f"sudo mv {service_file_path} /etc/systemd/system/{service_file_name}.service",
+        "sudo systemctl daemon-reload",
+        f"sudo systemctl restart {service_file_name}",
+        f"sudo systemctl status {service_file_name}",
+        f"echo 'server {{\nlisten 80;\nserver_name {domain_name};\n\nlocation / {{\ninclude proxy_params;\nproxy_pass http://unix:{app_directory}/{app_file_name}.sock;\n}}\n}}' > {temp_nginx_config_file_path}",
+        f"sudo mv {temp_nginx_config_file_path} /etc/nginx/sites-available/{nginx_config_file_name}",
+        f"sudo chmod 777 /etc/nginx/sites-available/{nginx_config_file_name}",
+        f"if [ -L /etc/nginx/sites-enabled/{domain_name} ]; then sudo rm /etc/nginx/sites-enabled/{domain_name}; fi",
+        f"sudo ln -s /etc/nginx/sites-available/{nginx_config_file_name} /etc/nginx/sites-enabled/{domain_name}",
+        "sudo nginx -t",
+        "sudo systemctl reload nginx",
+        "sudo ufw allow 'Nginx Full'",
+        "sudo apt install -y certbot python3-certbot-nginx",
+        "for pid in $(pgrep certbot); do sudo kill -9 $pid; done",
+        "while pgrep certbot > /dev/null; do sleep 1; done",
+        f"sudo certbot --nginx -d {domain_name} --reinstall",
+    ]
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(vm_preset['host'], username=vm_preset['ssh_user'], key_filename=vm_preset['ssh_key_path'])
+
+    for command in commands:
+        stdin, stdout, stderr = ssh.exec_command(command)
+        print(stdout.read().decode())
+        print(stderr.read().decode())
+
+    ssh.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def run_tests(base_url, modal_map):
     for modal, columns in modal_map.items():
@@ -394,29 +584,28 @@ def cleanup_db(config, modal_map):
     conn.close()
 
 
-def main(config, modal_backend_config, ssh_key_path, instance, deploy_at, deploy_port):
-    create_database(config)
-    create_user_table(config, modal_backend_config)
+def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host):
+    create_database(db_config, new_db_name)
+    create_user_table(db_config, modal_backend_config)
 
     modal_map = modal_backend_config["modals"]
 
     
     for modal_name, columns in modal_map.items():
-        create_modal_table(config, modal_name, columns.split(','))
+        create_modal_table(db_config, modal_name, columns.split(','))
 
     modal_map["users"] = "username,password,type"
-    create_bottle_app(modal_map, config, deploy_port)
+    create_bottle_app(modal_map, db_config)
 
-    # Ensure the port is cleared on the remote server
-    kill_process_on_port(ssh_key_path, instance, deploy_port)
-
-    deploy_to_gcs(ssh_key_path, instance, deploy_at)
+    direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host)
+    upload_to_gcs(ssh_key_path, instance, backend_vm_deploy_path)
+    deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, backend_domain)
 
     # Run dynamic tests
-    run_tests(f"http://{config['host']}:{deploy_port}", modal_map)
+    run_tests(f"https://{backend_domain}", modal_map)
 
-    cleanup_db(config, modal_map)
-    print(f"Backend deployed to: http://{config['host']}:{deploy_port}")
+    cleanup_db(db_config, modal_map)
+    print(f"Backend deployed to: https://{backend_domain}")
     
 
 

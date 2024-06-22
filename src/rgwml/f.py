@@ -7,7 +7,7 @@ class f:
     def __init__(self):
         pass
 
-    def ser(self, db_preset_name, new_db_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_deploy_at, backend_deploy_port, frontend_deploy_path, open_ai_json_mode_model):
+    def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_domain, open_ai_json_mode_model):
         """[f.ser(db_preset_name='your_rgwml_config_mysql_preset_name', new_db_name='name_of_db_to_br_created', vm_preset_name='your_rgwml_config_gcs_vm_preset_name',modal_backend_config={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, modal_frontend_config, modal_frontend_config, backend_deploy_at='path/on/your/vm/to/deploy/your/backend', backend_deploy_port='8080', frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend', 'gpt-3.5-turbo')]"""
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -55,6 +55,22 @@ class f:
             open_ai_key = config.get('open_ai_key')
             return open_ai_key
 
+        def load_netlify_config():
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            netlify_key = config.get('netlify_token')
+            return netlify_key
+
+        def load_vercel_config():
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            vercel_key = config.get('vercel_token')
+            return vercel_key
+
 
 
         # Load DB config
@@ -87,15 +103,17 @@ class f:
 
 
         open_ai_key = load_open_ai_config()
+        netlify_key = load_netlify_config()
+        vercel_key = load_vercel_config()
 
         # Infer modals from modal_map keys
         #modals = ','.join(modal_backend_config.keys())
         modals = ','.join(modal_backend_config['modals'].keys())
     
         # Deploy backend
-        backend_main(db_config, modal_backend_config, ssh_key_path, instance, backend_deploy_at, backend_deploy_port)
+        backend_main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host)
 
         # Deploy frontend
-        frontend_main(frontend_deploy_path, vm_host, backend_deploy_port, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model)
+        frontend_main(project_name, frontend_local_deploy_path, vm_host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
 
 

@@ -4,9 +4,9 @@ import json
 from bottle import Bottle, request, response, run, error, HTTPResponse
 from datetime import datetime
 
-config = {'host': '34.131.124.18', 'user': 'wiomsudo', 'password': 'wiomsudo', 'database': 'labsforge'}
+config = {'host': '34.131.124.18', 'user': 'wiomsudo', 'password': 'wiomsudo', 'database': 'sajal_ka_crm'}
 
-modal_map = {'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status', 'users': 'username,password,type'}
+modal_map = {'social_media_esclataions': 'url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date', 'high_pain_customers': 'mobile,issue,pain_level,status,action_taken,follow_up_date', 'welcome_calls': 'mobile,status,issue,action_taken', 'users': 'username,password,type'}
 
 app = Bottle()
 
@@ -209,4 +209,3 @@ def log_operation(modal_name, user_id, operation_type, operation_details):
     cursor.close()
     conn.close()
 
-run(app, host='0.0.0.0', port=8080)

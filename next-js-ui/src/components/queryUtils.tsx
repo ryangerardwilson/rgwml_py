@@ -23,7 +23,11 @@ export const handleQuerySubmit = async (
     }
   } catch (error) {
     console.error('Error fetching query results:', error);
-    setQueryError(error.message || 'Unknown error occurred');
+    if (error instanceof Error) {
+      setQueryError(error.message || 'Unknown error occurred');
+    } else {
+      setQueryError('Unknown error occurred');
+    }
   }
 };
 

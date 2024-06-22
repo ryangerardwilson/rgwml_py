@@ -241,79 +241,115 @@ def test_pnfl():
 def test_ser():
 
 
+    project_name = "sajal-ka-crm"
     modal_backend_config = {
         "sudo": {
             "username": "sudo",
             "password": "sudo"
             },
         "modals": {
-            "customers": "mobile,issue,status",
-            "partners": "mobile,issue,status"
+            "social_media_esclataions": "url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date",
+            "high_pain_customers": "mobile,issue,pain_level,status,action_taken,follow_up_date",
+            "welcome_calls": "mobile,status,issue,action_taken"
             }
         }
 
-
-
     modal_frontend_config = {
-        "customers": {
-            "options": {
-                "issue": ["A", "B", "C"]
+        "social_media_esclataions": { 
+            "options": { 
+                "forum": ["Google_Reviews", "LinkedIn", "Twitter/X", "Facebook", "Instagram", "YouTube", "Other"],
+                "status": ["Unresolved", "Resolved_but_post_not_removed"],
+                "issue": ["Internet_supply_down", "Slow_speed", "Frequent_disconnect", "Rude_behaviour_of_Partner", "Booking_fee_refund", "Other"]
             },
             "conditional_options": {
-                "status": [
+                "sub_status": [
                     {
-                        "condition": "issue == A",
-                        "options": ["X1", "X2", "X3"]
+                        "condition": "status == Unresolved",
+                        "options": ["Did_not_pick_up", "Picked_up_yet_unresolved"]
                     },
                     {
-                        "condition": "issue == B",
-                        "options": ["Y1", "Y2", "Y3"]
-                    },
-                    {
-                        "condition": "issue == C",
-                        "options": ["Z1", "Z2", "Z3"]
+                        "condition": "Resolved_but_post_not_removed",
+                        "options": ["Was very angry", "Other"]
                     }
                 ]
             },
             "scopes": {
                 "create": True,
-                "read": ["id", "mobile", "issue", "status", "created_at"],
-                "update": ["mobile", "issue", "status"],
+                "read": ["id", "url", "forum", "mobile", "issue", "status", "sub_status", "action_taken", "follow_up_date", "created_at"],
+                "update": ["url", "forum", "mobile", "issue", "status", "sub_status", "action_taken", "follow_up_date"],
                 "delete": True
             },
             "validation_rules": {
-                "mobile": ["REQUIRED"]
+                "url": ["REQUIRED"],
+                "forum": ["REQUIRED"],
+                "issue": ["REQUIRED"],
+                "status": ["REQUIRED"],
+                "sub_status": ["REQUIRED"],
+                "action_taken": ["REQUIRED"],
+                "follow_up_date": ["REQUIRED","IS_AFTER_TODAY"]
             },
             "ai_quality_checks": {
-                "mobile": ["rhymes with potato", "is a fruit or vegetable"]
+                "action_taken": ["must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"]
             },
         },
-        "partners": {
+        "high_pain_customers": {
             "options": {
-                "issue": ["A", "B", "C"],
-                "status": ["X", "Y"]
+                "status": ["WIP (Partner)", "WIP (Wiom)"],
+                "issue": ["Internet_supply_down", "Slow_speed", "Frequent_disconnect", "Rude_behaviour_of_Partner", "Booking_fee_refund", "Other"]
             },
             "scopes": {
                 "create": True,
-                "read": ["id", "mobile", "issue", "status", "created_at"],
-                "update": ["issue", "status"],
+                "read": ["id", "mobile", "issue", "pain_level", "status", "action_taken", "follow_up_date", "created_at"],
+                "update": ["issue", "status", "action_taken", "follow_up_date"],
                 "delete": False
-            }
-        }
+            },
+            "validation_rules": {
+                "mobile":["REQUIRED", "IS_INDIAN_MOBILE_NUMBER"],
+                "issue": ["REQUIRED"],
+                "status": ["REQUIRED"],
+                "action_taken": ["REQUIRED"],
+                "follow_up_date": ["REQUIRED", "IS_AFTER_TODAY"]
+            },
+            "ai_quality_checks": {
+                "action_taken": ["must describe a meaningful step taken to reach out to a high pain customer and resolve a service ticket"]
+            },
+        },
+        "welcome_calls": {
+            "options": {
+                "status": ["FONI_detected", "No_FONI_detected"],
+                "issue": ["Internet supply down", "Slow speed", "Frequent disconnect", "Rude behaviour of Partner", "Booking fee refund", "Other"]
+            },
+            "scopes": {
+                "create": True,
+                "read": ["id", "mobile", "issue", "status", "action_taken", "created_at"],
+                "update": ["issue", "status", "action_taken"],
+                "delete": False
+            },
+            "validation_rules": {
+                "issue": ["REQUIRED"],
+                "status": ["REQUIRED"],
+                "action_taken": ["REQUIRED"]
+            },
+            "ai_quality_checks": {
+                "action_taken": ["must describe a meaningful welcome call conversation with a customer by a customer support agent after a router installation"]
+            },
+        },
     }
 
 
 
     crm = r.f()
     crm.ser(
+        project_name= 'sajal-ka-crm',
+        new_db_name= 'sajal_ka_crm',
         db_preset_name='happy_sudo',
-        new_db_name='labsforge',
         vm_preset_name='labs_main_server',
         modal_backend_config=modal_backend_config,
         modal_frontend_config=modal_frontend_config,
-        backend_deploy_at='/home/rgw/Apps/labsforgeAPI',
-        backend_deploy_port='8080',
-        frontend_deploy_path='/home/rgw/Apps/forge_frontend',
+        backend_vm_deploy_path='/home/rgw/Apps/FORGE_sajal_ka_crm',
+        backend_domain='sajal-ka-crm-api.10xlabs.in',
+        frontend_local_deploy_path='/home/rgw/Apps/forge_sajal_ka_crm',
+        frontend_domain='sajal-ka-crm.10xlabs.in',
         open_ai_json_mode_model='gpt-3.5-turbo'
     )
 

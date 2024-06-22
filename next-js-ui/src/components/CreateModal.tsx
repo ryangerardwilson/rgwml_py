@@ -23,67 +23,6 @@ const CreateModal: React.FC<CreateModalProps> = ({ modalName, apiHost, columns, 
     setFormData(initialData);
   }, [columns]);
 
-  /*
-  useEffect(() => {
-    updateDynamicOptions();
-  }, [formData]);
-
-  
-  const updateDynamicOptions = () => {
-    const newDynamicOptions: { [key: string]: string[] } = {};
-    if (config.conditional_options) {
-      for (const [field, conditions] of Object.entries(config.conditional_options)) {
-        for (const conditionObj of conditions) {
-          if (evalCondition(conditionObj.condition)) {
-            newDynamicOptions[field] = conditionObj.options;
-            break; // Stop checking other conditions if one matches
-          }
-        }
-      }
-    }
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
-    setDynamicOptions(newDynamicOptions);
-  };
- 
-  const updateDynamicOptions = useCallback(() => {
-    const newDynamicOptions: { [key: string]: string[] } = {};
-    if (config.conditional_options) {
-      for (const [field, conditions] of Object.entries(config.conditional_options)) {
-        for (const conditionObj of conditions) {
-          if (evalCondition(conditionObj.condition)) {
-            newDynamicOptions[field] = conditionObj.options;
-            break; // Stop checking other conditions if one matches
-          }
-        }
-      }             
-    }               
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
-    setDynamicOptions(newDynamicOptions);
-  }, [config, formData]); // Include config and formData in dependencies
-
-  useEffect(() => {
-    updateDynamicOptions();
-  }, [updateDynamicOptions]);
-
-
-  const evalCondition = (condition: string) => {
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {
-      if (formData.hasOwnProperty(match)) {
-        return `formData['${match}']`;
-      }
-      return `'${match}'`;
-    });
-    try {
-      //console.log(`Evaluating condition: ${conditionToEvaluate}`);
-      const result = new Function('formData', `return ${conditionToEvaluate};`)(formData);
-      //console.log(`Condition result: ${result}`);
-      return result;
-    } catch (e) {
-      console.error('Error evaluating condition:', condition, e);
-      return false;
-    }
-  };
-*/
 
   const evalCondition = useCallback((condition: string) => {
     const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {

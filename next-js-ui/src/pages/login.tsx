@@ -30,7 +30,7 @@ const LoginPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${apiHost}/authenticate`, {
+      const response = await fetch(`${apiHost}authenticate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
