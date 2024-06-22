@@ -268,7 +268,7 @@ def test_ser():
                         "options": ["Did_not_pick_up", "Picked_up_yet_unresolved"]
                     },
                     {
-                        "condition": "Resolved_but_post_not_removed",
+                        "condition": "status == Resolved_but_post_not_removed",
                         "options": ["Was very angry", "Other"]
                     }
                 ]
