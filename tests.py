@@ -269,7 +269,7 @@ def test_ser():
                     },
                     {
                         "condition": "status == Resolved_but_post_not_removed",
-                        "options": ["Was very angry", "Other"]
+                        "options": ["Was_very_angry", "Other"]
                     }
                 ]
             },
