@@ -1345,27 +1345,26 @@ class p:
             else:
                 raise ValueError("Unsupported optimal clustering method. Choose from 'FIXED:n', 'ELBOW' or 'SILHOUETTE'.")
 
-
-
-        def save_and_show_plot(filename, plots):
+        def save_and_show_plot(plots):
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-            plt.savefig(temp_file.name)
+            plt.savefig(temp_file.name, bbox_inches='tight')
             plt.close()
             plots.append(temp_file.name)
+
 
         def combine_and_show_plots(plot_files):
             images = [Image.open(file) for file in plot_files]
             widths, heights = zip(*(img.size for img in images))
 
             total_width = max(widths)
-            total_height = sum(heights)
+            total_height = sum(heights) + (len(images) - 1) * 10
 
             combined_image = Image.new('RGB', (total_width, total_height))
 
             y_offset = 0
             for img in images:
                 combined_image.paste(img, (0, y_offset))
-                y_offset += img.height
+                y_offset += img.height + 10
 
             combined_image.show()
 
@@ -1380,24 +1379,25 @@ class p:
             ax.set_zlabel(z_col)
             ax.legend()
             plt.title('3D Cluster Plot')
-            save_and_show_plot('3d_cluster_plot.png', plots)
+            save_and_show_plot(plots)
 
         def plot_heatmap_of_centers(X, cluster_col, plots):
             kmeans = KMeans(n_clusters=self.df[cluster_col].nunique(), random_state=0).fit(X)
             cluster_centers = pd.DataFrame(kmeans.cluster_centers_, columns=X.columns)
-            plt.figure(figsize=(10, 6))
+            plt.figure(figsize=(10, 10))
             sns.heatmap(cluster_centers, annot=True, cmap='coolwarm')
             plt.title('Heatmap of Cluster Centers')
-            save_and_show_plot('cluster_centers_heatmap.png', plots)
+            save_and_show_plot(plots)
 
         def plot_cluster_analysis(X, feature_list, cluster_column_name, operation):
             """Visualize cluster analysis results."""
+            plots = []
+
             # Pair plot
             pair_plot = sns.pairplot(self.df[feature_list + [cluster_column_name]], hue=cluster_column_name)
-            pair_plot.fig.set_size_inches(10.31, 6)
-            pair_plot.fig.suptitle('Pair Plot',y=1.02)
-            pair_plot.savefig('pair_plot.png')
-            plots.append('pair_plot.png')
+            pair_plot.fig.set_size_inches(10, 8)
+            pair_plot.fig.suptitle('Pair Plot', y=1.02)
+            save_and_show_plot(plots)
 
             # 3D scatter plot if there are at least 3 features
             if len(feature_list) == 3:
@@ -1461,25 +1461,26 @@ class p:
             dbscan = DBSCAN(eps=eps, min_samples=min_samples)
             return dbscan.fit_predict(X)
 
-        def save_and_show_plot(filename, plots):
+        def save_and_show_plot(plots):
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-            plt.savefig(temp_file.name)
+            plt.savefig(temp_file.name, bbox_inches='tight')
             plt.close()
             plots.append(temp_file.name)
+
 
         def combine_and_show_plots(plot_files):
             images = [Image.open(file) for file in plot_files]
             widths, heights = zip(*(img.size for img in images))
 
             total_width = max(widths)
-            total_height = sum(heights)
+            total_height = sum(heights) + (len(images) - 1) * 10
 
             combined_image = Image.new('RGB', (total_width, total_height))
 
             y_offset = 0
             for img in images:
                 combined_image.paste(img, (0, y_offset))
-                y_offset += img.height
+                y_offset += img.height + 10
 
             combined_image.show()
 
@@ -1494,16 +1495,25 @@ class p:
             ax.set_zlabel(z_col)
             ax.legend()
             plt.title('3D Cluster Plot')
-            save_and_show_plot('3d_cluster_plot.png', plots)
+            save_and_show_plot(plots)
+
+        def plot_heatmap_of_centers(X, cluster_col, plots):
+            kmeans = KMeans(n_clusters=self.df[cluster_col].nunique(), random_state=0).fit(X)
+            cluster_centers = pd.DataFrame(kmeans.cluster_centers_, columns=X.columns)
+            plt.figure(figsize=(10, 10))
+            sns.heatmap(cluster_centers, annot=True, cmap='coolwarm')
+            plt.title('Heatmap of Cluster Centers')
+            save_and_show_plot(plots)
 
         def plot_cluster_analysis(X, feature_list, cluster_column_name):
             """Visualize cluster analysis results."""
+            plots = []
+
             # Pair plot
             pair_plot = sns.pairplot(self.df[feature_list + [cluster_column_name]], hue=cluster_column_name)
-            pair_plot.fig.set_size_inches(10.31, 6)
-            pair_plot.fig.suptitle('Pair Plot',y=1.02)
-            pair_plot.savefig('pair_plot.png')
-            plots.append('pair_plot.png')
+            pair_plot.fig.set_size_inches(10, 8)
+            pair_plot.fig.suptitle('Pair Plot', y=1.02)
+            save_and_show_plot(plots)
 
             # 3D scatter plot if there are at least 3 features
             if len(feature_list) == 3:

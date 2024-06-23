@@ -25,7 +25,7 @@ RGWML
 3. Create a rgwml.config file
 -----------------------------
 
-An rgwml.config file is required for MSSQL, CLICKHOUSE, MYSQL, GOOGLE BIG QUERY, AND OPEN AI integrations. It allows you to namespace your db connections, so you can query like this:
+An rgwml.config file is required for MSSQL, CLICKHOUSE, MYSQL, GOOGLE BIG QUERY, OPEN AI, NETLIFY and VERCEL integrations. It allows you to namespace your db connections, so you can query like this:
 
     import rgwml as r
     d = r.p()
@@ -70,11 +70,13 @@ Set out below is the format of a rgwml.config file. Place it anywhere in your De
         {
           "name": "main_server",
           "host": "",
-          "gcs_instance": "",
+          "ssh_user": "",
           "ssh_key_path": ""
         }
       ],
-    "open_ai_key": ""
+    "open_ai_key": "",
+    "netlify_token": "",
+    "vercel_token": ""
   }
 
 4. `r.p()` Class Methods
@@ -293,14 +295,122 @@ Instantiate this class by crm = r.f()
 
 ### 6.1. Serve a CRM
 
-    # Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e. a Bottle App on your GCS VM), and NextJS Frontend on your local machine 
+    # Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e., a Bottle App on your GCS VM), and NextJS Frontend on your local machine with highly customized options based on modal definitions. Note that all modal names, modal column names, and option values must NOT contain spaces and should be separated by underscores.
+
     crm.ser(
-        db_preset_name='your_rgwml_config_mysql_preset_name', 
-        new_db_name='name_of_db_to_br_created',
-        vm_preset_name='your_rgwml_config_gcs_vm_preset_name', 
-        modal_map={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, 
-        backend_deploy_at='path/on/your/vm/to/deploy/your/backend', 
-        backend_deploy_port='8080', 
-        frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend'
+        project_name= 'my_custom_crm',
+        new_db_name= 'custom_crm_db',
+        db_preset_name='standard_mysql',
+        vm_preset_name='default_gcs_vm',
+        modal_backend_config={
+            "sudo": {
+                "username": "admin",
+                "password": "admin123"
+            },
+            "modals": {
+                "customer_support_tickets": "ticket_id,customer_name,mobile,issue,status,priority,action_taken,follow_up_date",
+                "vip_customers": "customer_id,customer_name,mobile,issue,priority,status,action_taken,follow_up_date",
+                "onboarding_calls": "call_id,customer_name,mobile,status,issue,action_taken"
+            }
+        },
+        modal_frontend_config={
+            "customer_support_tickets": {
+                "options": {
+                    "status": ["Open", "In_Progress", "Resolved", "Closed"],
+                    "priority": ["Low", "Medium", "High"],
+                    "issue": ["Billing_Issue", "Technical_Support", "Account_Management", "Other"]
+                },
+                "conditional_options": {
+                    "priority": [
+                        {
+                            "condition": "status == Open",
+                            "options": ["Low", "Medium", "High"]
+                        },
+                        {
+                            "condition": "status == In_Progress",
+                            "options": ["Medium", "High"]
+                        },
+                        {
+                            "condition": "status == Resolved",
+                            "options": ["Low"]
+                        }
+                    ]
+                },
+                "scopes": {
+                    "create": True,
+                    "read": ["ticket_id", "customer_name", "mobile", "issue", "status", "priority", "action_taken", "follow_up_date", "created_at"],
+                    "update": ["customer_name", "mobile", "issue", "status", "priority", "action_taken", "follow_up_date"],
+                    "delete": True
+                },
+                "validation_rules": {
+                    "ticket_id": ["REQUIRED"],
+                    "customer_name": ["REQUIRED"],
+                    "mobile": ["REQUIRED"],
+                    "issue": ["REQUIRED"],
+                    "status": ["REQUIRED"],
+                    "priority": ["REQUIRED"],
+                    "action_taken": ["REQUIRED"],
+                    "follow_up_date": ["REQUIRED", "IS_AFTER_TODAY"]
+                },
+                "ai_quality_checks": {
+                    "action_taken": ["must describe a meaningful step taken to address the customer's issue"]
+                }
+            },
+            "vip_customers": {
+                "options": {
+                    "status": ["Open", "In_Progress", "Resolved", "Closed"],
+                    "priority": ["Medium", "High"],
+                    "issue": ["Billing_Issue", "Technical_Support", "Account_Management", "Other"]
+                },
+                "scopes": {
+                    "create": True,
+                    "read": ["customer_id", "customer_name", "mobile", "issue", "priority", "status", "action_taken", "follow_up_date", "created_at"],
+                    "update": ["issue", "status", "action_taken", "follow_up_date"],
+                    "delete": False
+                },
+                "validation_rules": {
+                    "customer_id": ["REQUIRED"],
+                    "customer_name": ["REQUIRED"],
+                    "mobile": ["REQUIRED"],
+                    "issue": ["REQUIRED"],
+                    "status": ["REQUIRED"],
+                    "priority": ["REQUIRED"],
+                    "action_taken": ["REQUIRED"],
+                    "follow_up_date": ["REQUIRED", "IS_AFTER_TODAY"]
+                },
+                "ai_quality_checks": {
+                    "action_taken": ["must describe a meaningful step taken to address the VIP customer's issue"]
+                }
+            },
+            "onboarding_calls": {
+                "options": {
+                    "status": ["Completed", "Pending"],
+                    "issue": ["General_Inquiry", "Technical_Support", "Billing_Issue", "Other"]
+                },
+                "scopes": {
+                    "create": True,
+                    "read": ["call_id", "customer_name", "mobile", "issue", "status", "action_taken", "created_at"],
+                    "update": ["issue", "status", "action_taken"],
+                    "delete": False
+                },
+                "validation_rules": {
+                    "call_id": ["REQUIRED"],
+                    "customer_name": ["REQUIRED"],
+                    "mobile": ["REQUIRED"],
+                    "issue": ["REQUIRED"],
+                    "status": ["REQUIRED"],
+                    "action_taken": ["REQUIRED"]
+                },
+                "ai_quality_checks": {
+                    "action_taken": ["must describe a meaningful conversation with the customer during the onboarding call"]
+                }
+            }
+        },
+        backend_vm_deploy_path='/home/user/Apps/custom_crm_backend',
+        backend_domain='my_custom_crm_api.example.com',
+        frontend_local_deploy_path='/home/user/Apps/custom_crm_frontend',
+        frontend_domain='my_custom_crm.example.com',
+        open_ai_json_mode_model='gpt-3.5-turbo'
     )
+
 

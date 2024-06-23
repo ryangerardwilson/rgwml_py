@@ -1,14 +1,25 @@
 #!/bin/bash
 
-# Step 1: Increment the version number in pyproject.toml
+# Step 1: Increment the version number in pyproject.toml and setup.cfg
 increment_version() {
     local version_file="pyproject.toml"
+    local setup_file="setup.cfg"
+    
+    # Extract the current version from pyproject.toml
     local version_line=$(grep -E 'version = "[0-9]+\.[0-9]+\.[0-9]+"' "$version_file")
     local current_version=$(echo "$version_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+    
+    # Increment the patch version
     IFS='.' read -r -a version_parts <<< "$current_version"
     version_parts[2]=$((version_parts[2] + 1))
     local new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
+    
+    # Update the version in pyproject.toml
     sed -i "s/version = \"$current_version\"/version = \"$new_version\"/" "$version_file"
+    
+    # Update the version in setup.cfg
+    sed -i "s/version = $current_version/version = $new_version/" "$setup_file"
+    
     echo "$new_version"
 }
 

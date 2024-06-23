@@ -3,117 +3,64 @@ import json
 from .resources.backend import main as backend_main
 from .resources.frontend import main as frontend_main
 
-class f:
+class Deployment:
     def __init__(self):
         pass
 
     def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_domain, open_ai_json_mode_model):
-        """[f.ser(db_preset_name='your_rgwml_config_mysql_preset_name', new_db_name='name_of_db_to_br_created', vm_preset_name='your_rgwml_config_gcs_vm_preset_name',modal_backend_config={'customers': 'mobile,issue,status', 'partners': 'mobile,issue,status'}, modal_frontend_config, modal_frontend_config, backend_deploy_at='path/on/your/vm/to/deploy/your/backend', backend_deploy_port='8080', frontend_deploy_path='/path/on/your/local/machine/to/provision/your/frontend', 'gpt-3.5-turbo')]"""
+        """Usage: Deployment.ser(project_name, new_db_name, db_preset_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_domain, open_ai_json_mode_model)"""
+
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
 
             for path in search_paths:
-                for root, dirs, files in os.walk(path):
+                for root, _, files in os.walk(path):
                     if filename in files:
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-        def load_db_config(db_preset_name):
+        def load_config(preset_name, key):
             config_path = locate_config_file()
             with open(config_path, 'r') as f:
                 config = json.load(f)
 
-            db_presets = config.get('db_presets', [])
-            db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
-            if not db_preset:
-                raise ValueError(f"No matching db_preset found for {db_preset_name}")
+            presets = config.get(key, [])
+            preset = next((preset for preset in presets if preset['name'] == preset_name), None)
+            if not preset:
+                raise ValueError(f"No matching {key} found for {preset_name}")
 
-            return db_preset
+            return preset
 
-        def load_vm_config(vm_preset_name):
+        def load_key(key_name):
             config_path = locate_config_file()
             with open(config_path, 'r') as f:
                 config = json.load(f)
 
-            vm_presets = config.get('vm_presets', [])
-            vm_preset = next((preset for preset in vm_presets if preset['name'] == vm_preset_name), None)
-            if not vm_preset:
-                raise ValueError(f"No matching vm_preset found for {vm_preset_name}")
-
-            return vm_preset
-
-        def load_open_ai_config():
-            config_path = locate_config_file()
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-
-            open_ai_key = config.get('open_ai_key')
-            return open_ai_key
-
-        def load_netlify_config():
-            config_path = locate_config_file()
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-
-            netlify_key = config.get('netlify_token')
-            return netlify_key
-
-        def load_vercel_config():
-            config_path = locate_config_file()
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-
-            vercel_key = config.get('vercel_token')
-            return vercel_key
-
-
+            return config.get(key_name)
 
         # Load DB config
-        db_preset = load_db_config(db_preset_name)
-        db_type = db_preset['db_type']
-
-        if db_type == 'mysql':
-            host = db_preset['host']
-            username = db_preset['username']
-            password = db_preset['password']
-            database = db_preset.get('database', '')
-
-            db_config = {
-                'host': host,
-                'user': username,
-                'password': password,
-                'database': new_db_name
-            }
+        db_preset = load_config(db_preset_name, 'db_presets')
+        db_config = {
+            'host': db_preset['host'],
+            'user': db_preset['username'],
+            'password': db_preset['password'],
+            'database': new_db_name
+        }
 
         # Load VM config
-        if vm_preset_name:
-            vm_preset = load_vm_config(vm_preset_name)
-            ssh_key_path = vm_preset['ssh_key_path']
-        
-            vm_host = vm_preset['host']
-            ssh_user = vm_preset['ssh_user']
-            instance = f"{ssh_user}@{vm_host}"
-        else:
-            raise ValueError("vm_preset_name is required")
+        vm_preset = load_config(vm_preset_name, 'vm_presets')
+        instance = f"{vm_preset['ssh_user']}@{vm_preset['host']}"
 
+        # Load keys
+        open_ai_key = load_key('open_ai_key')
+        netlify_key = load_key('netlify_token')
+        vercel_key = load_key('vercel_token')
 
-        open_ai_key = load_open_ai_config()
-        netlify_key = load_netlify_config()
-        vercel_key = load_vercel_config()
-
-        # Infer modals from modal_map keys
-        #modals = ','.join(modal_backend_config.keys())
-        modals = ','.join(modal_backend_config['modals'].keys())
-    
         # Deploy backend
-        backend_main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host)
+        backend_main(project_name, new_db_name, db_config, modal_backend_config, vm_preset['ssh_key_path'], instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_preset['host'])
 
         # Deploy frontend
-        frontend_main(project_name, frontend_local_deploy_path, vm_host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
-
+        modals = ','.join(modal_backend_config.keys())
+        frontend_main(project_name, frontend_local_deploy_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
 

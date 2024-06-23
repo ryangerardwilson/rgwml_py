@@ -1,10 +1,10 @@
 [project]
 name = "rgwml"
-version = "0.0.77"
+version = "0.0.80"
 authors = [
   { name="Ryan Gerard Wilson", email="ryangerardwilson@gmail.com" },
 ]
-description = "A small example package"
+description = "Manipulate data with code that is less a golden retriever, and more a Samurai's sword"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -12,7 +12,33 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "pandas",
+    "numpy",
+    "pymssql",
+    "mysql-connector-python",
+    "clickhouse-driver",
+    "google-cloud-bigquery",
+    "google-auth",
+    "pandas-gbq",
+    "xgboost",
+    "matplotlib",
+    "pillow",
+    "scipy",
+    "seaborn",
+    "scikit-learn",
+    "dask[dataframe]",
+    "requests",
+    "pymysql",
+    "paramiko",
+]
+dynamic = ["scripts"]
 
 [project.urls]
 Homepage = "https://github.com/ryangerardwilson/rgwml_py"
 Issues = "https://github.com/ryangerardwilson/rgwml_py"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+

@@ -132,13 +132,8 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
 
             # Capture and print the deployment URL
             deployment_url = result.stdout.strip().split()[-1]
-            print(f"Final Deployment URL: {deployment_url}")
-
-            # Optionally, write the deployment URL to a file
-            with open("deployment-url.txt", "w") as file:
-                file.write(deployment_url)
-
-            print("Deployment successful")
+            print(f"Vercel Deployment URL: {deployment_url}")
+            print(f"Domain Name Deployment URL: https://{domain_name}")
 
         except subprocess.CalledProcessError as e:
             print(f"An error occurred during deployment: {e}")
