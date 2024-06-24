@@ -243,19 +243,6 @@ def test_ser():
 
     project_name = "sajal-ka-crm"
 
-    """
-    modal_backend_config = {
-        "sudo": {
-            "username": "sudo",
-            "password": "sudo"
-            },
-        "modals": {
-            "social_media_esclataions": "url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date",
-            "high_pain_customers": "mobile,issue,pain_level,status,action_taken,follow_up_date",
-            "welcome_calls": "mobile,status,issue,action_taken"
-            }
-        }
-    """
 
     modal_backend_config = {
         "sudo": {

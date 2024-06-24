@@ -8,10 +8,17 @@ export const downloadCSV = (data: any[], columns: string[], filename: string) =>
     csvRows.push(values.join(','));
   });
 
-  const csvContent = `data:text/csv;charset=utf-8,${csvRows.join('\n')}`;
-  const encodedUri = encodeURI(csvContent);
+
+
+
+
+
+  const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvRows.join("\n"));
+
+
+
   const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
+  link.setAttribute('href', csvContent);
   link.setAttribute('download', `${filename}.csv`);
   document.body.appendChild(link);
   link.click();

@@ -37,8 +37,8 @@ process_files() {
         var_name="${prefix}__FILE__${base_name//[^a-zA-Z0-9]/__}__${ext_upper}"
         var_name=$(camel_to_upper "$var_name")
 
-        # Escape { and } in the file content
-        file_content=$(sed 's/{/{{/g; s/}/}}/g' "$file")
+        # Escape {, }, and \n in the file content
+        file_content=$(sed 's/{/{{/g; s/}/}}/g; s/\\n/\\\\n/g' "$file")
 
         # Write to the Python file
         echo "${var_name} = '''$file_content'''" >> "$output_file"
@@ -66,8 +66,8 @@ if [ -f "$middleware_file" ];then
     var_name="ROOT__FILE__${base_name}__TSX"
     var_name=$(camel_to_upper "$var_name")
 
-    # Escape { and } in the file content
-    file_content=$(sed 's/{/{{/g; s/}/}}/g' "$middleware_file")
+    # Escape {, }, and \n in the file content
+    file_content=$(sed 's/{/{{/g; s/}/}}/g; s/\\n/\\\\n/g' "$middleware_file")
 
     # Write to the Python file
     echo "${var_name} = '''$file_content'''" >> "$output_file"

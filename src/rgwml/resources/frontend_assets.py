@@ -473,10 +473,17 @@ DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''export const downloadCSV = (data
     csvRows.push(values.join(','));
   }});
 
-  const csvContent = `data:text/csv;charset=utf-8,${{csvRows.join('\n')}}`;
-  const encodedUri = encodeURI(csvContent);
+
+
+
+
+
+  const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvRows.join("\\n"));
+
+
+
   const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
+  link.setAttribute('href', csvContent);
   link.setAttribute('download', `${{filename}}.csv`);
   document.body.appendChild(link);
   link.click();
