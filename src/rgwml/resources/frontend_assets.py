@@ -463,14 +463,13 @@ export const open_ai_quality_checks = async (field: string, value: string, check
   return failedChecks;
 }};'''
 
-DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''// downloadUtils.ts
-export const downloadCSV = (data: any[], columns: string[], filename: string) => {{
-  const csvRows = [];
+DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''export const downloadCSV = (data: any[], columns: string[], filename: string) => {{
+  const csvRows: string[] = [];
   const headers = columns.join(',');
   csvRows.push(headers);
 
   data.forEach(row => {{
-    const values = row.map((cellValue) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
+    const values = row.map((cellValue: any) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
     csvRows.push(values.join(','));
   }});
 
@@ -484,7 +483,37 @@ export const downloadCSV = (data: any[], columns: string[], filename: string) =>
   document.body.removeChild(link);
 }};'''
 
-DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''
+DIR__COMPONENTS__FILE__SEARCH_INPUT__TSX = '''import React from 'react';
+
+interface SearchInputProps {{
+  searchInput: string;
+  handleSearchInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSearchKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  searchError: string | null;
+}}
+
+const SearchInput: React.FC<SearchInputProps> = ({{
+  searchInput,
+  handleSearchInputChange,
+  handleSearchKeyPress,
+  searchError,
+}}) => {{
+  return (
+      <input
+        type="text"
+        value={{searchInput}}
+        onChange={{handleSearchInputChange}}
+        onKeyPress={{handleSearchKeyPress}}
+        placeholder="SEARCH MODE (fetches fresh data) ..."
+        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
+      />
+  );
+}};
+
+export default SearchInput;'''
+
+DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''// src/components/crudUtils.tsx
+
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
   setCreateModalOpen(true);
 }};
@@ -493,9 +522,12 @@ export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) =>
   setCreateModalOpen(false);
 }};
 
-export const fetchData = async (apiHost: string, modal: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
   try {{
-    const response = await fetch(`${{apiHost}}read/${{modal}}`);
+    //console.log(`${{apiHost}}read/${{modal}}/${{route}}`);
+    const response = await fetch(`${{apiHost}}read/${{modal}}/${{route}}`);
+    //console.log(response);
+    
     const result = await response.json();
     setData(result.data || []);
   }} catch (error) {{
@@ -599,7 +631,7 @@ DIR__COMPONENTS__FILE__QUERY_UTILS__TSX = '''export const handleQuerySubmit = as
   setQueryError: React.Dispatch<React.SetStateAction<string | null>>
 ) => {{
   try {{
-    const response = await fetch(`${{apiHost}}/query/${{modal}}`, {{
+    const response = await fetch(`${{apiHost}}query/${{modal}}`, {{
       method: 'POST',
       headers: {{
         'Content-Type': 'application/json',
@@ -653,36 +685,15 @@ const QueryInput: React.FC<QueryInputProps> = ({{
 
 export default QueryInput;'''
 
-DIR__COMPONENTS__FILE__FILTER_INPUT__TSX = '''import React from 'react';
-
-interface FilterInputProps {{
-  filterQuery: string;
-  handleFilterChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-}}
-
-const FilterInput: React.FC<FilterInputProps> = ({{ filterQuery, handleFilterChange }}) => {{
-  return (
-    <input
-      type="text"
-      value={{filterQuery}}
-      onChange={{handleFilterChange}}
-      placeholder="FILTER MODE (filters existing data) ..."
-      className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
-    />
-  );
-}};
-
-export default FilterInput;'''
-
 DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect, useMemo, useCallback }} from 'react';
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
-import FilterInput from './FilterInput';
+import SearchInput from './SearchInput';
 import QueryInput from './QueryInput';
 import modalConfig from './modalConfig';
-import {{ evaluateFilter, filterAndSortRows }} from './filterUtils';
 import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
 import {{ handleQuerySubmit }} from './queryUtils';
+import {{ handleSearchSubmit }} from './searchUtils';
 import {{ isValidUrl, formatDateTime }} from './formatUtils';
 import {{ downloadCSV }} from './downloadUtils';
 
@@ -698,27 +709,33 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [editRowData, setEditRowData] = useState<any[]>([]);
-  const [filterQuery, setFilterQuery] = useState('');
+
+  const [inputMode, setInputMode] = useState<'query' | 'search'>('search');
   const [queryInput, setQueryInput] = useState('');
   const [useQueryInput, setUseQueryInput] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [useSearchInput, setUseSearchInput] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
 
-  //console.log(columns, data);
+  const readRoutes = useMemo(() => {{
+    return modalConfig[modal]?.read_routes || [];
+  }}, [modal]) as string[];
 
   useEffect(() => {{
-    setData(initialData);
-  }}, [initialData]);
-
-  useEffect(() => {{
-    if (!initialData.length) {{
-      fetchData(apiHost, modal, setData);
+    if (readRoutes.length > 0) {{
+      setActiveTab(readRoutes[0]);
     }}
-  }}, [apiHost, modal, initialData]);
+  }}, [readRoutes]);
 
-  const handleFilterChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
-    setFilterQuery(event.target.value);
-  }}, []);
+  useEffect(() => {{
+    if (activeTab) {{
+      fetchData(apiHost, modal, activeTab, setData);
+    }}
+  }}, [apiHost, modal, activeTab]);
 
   const handleQueryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
     setQueryInput(event.target.value);
@@ -733,39 +750,53 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
     [apiHost, modal, queryInput]
   );
 
-  const filteredData = useMemo(() => {{
-    return filterAndSortRows(data, filterQuery, columns);
-  }}, [data, filterQuery, columns]);
+  const handleSearchInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
+    setSearchInput(event.target.value);
+  }}, []);
 
-  const modalConfiguration = modalConfig[modal];
+  const handleSearchKeyPress = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {{
+      if (event.key === 'Enter') {{
+        handleSearchSubmit(apiHost, modal, searchInput, setData, setSearchError);
+      }}
+    }},
+    [apiHost, modal, searchInput]
+  );
 
-  if (!modalConfiguration) {{
-    return <div>Loading...</div>;
-  }}
-
-  const columnIndices = modalConfiguration.scopes.read.map((col: string) => columns.indexOf(col));
+  const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
 
   return (
-    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4">
+    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
+      <div className="mb-4">
+        {{readRoutes.length > 0 && (
+          <div className="flex space-x-4">
+            {{readRoutes.map((route) => (
+              <button
+                key={{route}}
+                className={{`px-4 py-2 rounded ${{activeTab === route ? 'border-t border-x border-yellow-100/50 rounded-lg' : 'bg-black text-yellow-100/50'}}`}}
+                onClick={{() => setActiveTab(route)}}
+              >
+                {{route}}
+              </button>
+            ))}}
+          </div>
+        )}}
+      </div>
       <div className="flex justify-between mb-4">
         <div className="flex items-center w-full">
-          <label className="flex items-center cursor-pointer">
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={{useQueryInput}}
-                onChange={{() => setUseQueryInput(!useQueryInput)}}
-                className="sr-only"
-              />
-              <div className="block bg-black w-14 h-10 rounded-lg border border-yellow-100/30"></div>
-              <div
-                className={{`absolute left-1 top-1 bg-black border border-yellow-100/50 w-6 h-6 rounded-full transition-transform transform ${{
-                  useQueryInput ? 'translate-x-6 translate-y-2' : ''
-                }}`}}
-              ></div>
-            </div>
-            </label>
-          {{useQueryInput ? (
+          <label className="flex items-center cursor-pointer relative">
+            <select
+              value={{inputMode}}
+              onChange={{(e) => setInputMode(e.target.value as 'query' | 'search')}}
+              className="bg-black border border-yellow-100/30 text-yellow-100 p-2 rounded-lg text-sm pr-8 appearance-none"
+            >
+              <option value="search">Search</option>
+              <option value="query">Query</option>
+            </select>
+            <span className="absolute right-3 pointer-events-none text-yellow-100/50 text-sm">▼</span>
+          </label>
+
+          {{inputMode === 'query' ? (
             <QueryInput
               queryInput={{queryInput}}
               handleQueryInputChange={{handleQueryInputChange}}
@@ -773,18 +804,23 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
               queryError={{queryError}}
             />
           ) : (
-            <FilterInput filterQuery={{filterQuery}} handleFilterChange={{handleFilterChange}} />
+            <SearchInput
+              searchInput={{searchInput}}
+              handleSearchInputChange={{handleSearchInputChange}}
+              handleSearchKeyPress={{handleSearchKeyPress}}
+              searchError={{searchError}}
+            />
           )}}
         </div>
 
         <button
-          onClick={{() => downloadCSV(filteredData, modalConfiguration.scopes.read, `${{modal}}_data`)}}
+          onClick={{() => downloadCSV(data, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
           className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
         >
           CSV
         </button>
 
-        {{modalConfiguration.scopes.create && (
+        {{modalConfig[modal]?.scopes.create && (
           <button
             onClick={{() => handleCreate(setCreateModalOpen)}}
             className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
@@ -797,7 +833,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
         <table className="min-w-full divide-y divide-yellow-100/30">
           <thead>
             <tr>
-              {{modalConfiguration.scopes.read.map((col: string, colIndex: number) => (
+              {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
                 <th
                   key={{`col-${{colIndex}}`}}
                   className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
@@ -809,48 +845,46 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
             </tr>
           </thead>
           <tbody>
-            {{filteredData.map((row, rowIndex) => {{
-              return (
-                <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
-                  {{columnIndices.map((colIndex, cellIndex) => {{
-                    const cellValue = row[colIndex];
-                    return (
-                      <td
-                        key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
-                        className="px-3 py-2 whitespace-nowrap text-sm"
-                      >
-                        {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
-                          <button
-                            onClick={{() => window.open(cellValue, '_blank')}}
-                            className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                          >
-                            Open URL
-                          </button>
-                        ) : (
-                          typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
-                        )}}
-                      </td>
-                    );
-                  }})}}
-                  <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
-                    <button
-                      onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
-                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
+            {{data.map((row, rowIndex) => (
+              <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
+                {{columnIndices.map((colIndex, cellIndex) => {{
+                  const cellValue = row[colIndex];
+                  return (
+                    <td
+                      key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
+                      className="px-3 py-2 whitespace-nowrap text-sm"
                     >
-                      Edit
+                      {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
+                        <button
+                          onClick={{() => window.open(cellValue, '_blank')}}
+                          className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                        >
+                          Open URL
+                        </button>
+                      ) : (
+                        typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
+                      )}}
+                    </td>
+                  );
+                }})}}
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
+                  <button
+                    onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
+                    className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
+                  >
+                    Edit
+                  </button>
+                  {{modalConfig[modal]?.scopes.delete && (
+                    <button
+                      onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                    >
+                      Delete
                     </button>
-                    {{modalConfiguration.scopes.delete && (
-                      <button
-                        onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
-                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                      >
-                        Delete
-                      </button>
-                    )}}
-                  </td>
-                </tr>
-              );
-            }})}}
+                  )}}
+                </td>
+              </tr>
+            ))}}
           </tbody>
         </table>
       </div>
@@ -876,116 +910,6 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
 }};
 
 export default DynamicTable;'''
-
-DIR__COMPONENTS__FILE__FILTER_UTILS__TSX = '''export const evaluateFilter = (row: any, query: string, columns: string[]): boolean => {{
-  const regex = /(\w+)\s*(CONTAINS|STARTS_WITH|==|>|<|>=|<=)\s*'?([^']*)'?\s*(AND\s+|$)/gi;
-  const conditions = query.match(regex);
-
-  if (!conditions) return true;
-
-  for (const condition of conditions) {{
-    const conditionRegex = /(\w+)\s*(CONTAINS|STARTS_WITH|==|>|<|>=|<=)\s*'?([^']*)'?\s*(AND\s+|$)/i;
-    const match = condition.match(conditionRegex);
-
-    if (!match) continue;
-
-    const [, column, operator, value] = match;
-    const columnIndex = columns.indexOf(column);
-
-    if (columnIndex === -1) return false;
-
-    const cellValue = row[columnIndex];
-    const numericValue = parseFloat(value);
-    const isNumericComparison = !isNaN(numericValue);
-
-    let conditionResult = false;
-    switch (operator) {{
-      case 'CONTAINS':
-        conditionResult = cellValue.toString().toLowerCase().includes(value.toLowerCase());
-        break;
-      case 'STARTS_WITH':
-        conditionResult = cellValue.toString().toLowerCase().startsWith(value.toLowerCase());
-        break;
-      case '==':
-        conditionResult = cellValue.toString() === value;
-        break;
-      case '>':
-        if (isNumericComparison) {{
-          conditionResult = parseFloat(cellValue) > numericValue;
-        }} else {{
-          conditionResult = new Date(cellValue) > new Date(value);
-        }}
-        break;
-      case '<':
-        if (isNumericComparison) {{
-          conditionResult = parseFloat(cellValue) < numericValue;
-        }} else {{
-          conditionResult = new Date(cellValue) < new Date(value);
-        }}
-        break;
-      case '>=':
-        if (isNumericComparison) {{
-          conditionResult = parseFloat(cellValue) >= numericValue;
-        }} else {{
-          conditionResult = new Date(cellValue) >= new Date(value);
-        }}
-        break;
-      case '<=':
-        if (isNumericComparison) {{
-          conditionResult = parseFloat(cellValue) <= numericValue;
-        }} else {{
-          conditionResult = new Date(cellValue) <= new Date(value);
-        }}
-        break;
-      default:
-        conditionResult = true;
-    }}
-
-    if (!conditionResult) {{
-      return false;
-    }}
-  }}
-
-  return true;
-}};
-
-export const filterAndSortRows = (rows: any[], query: string, columns: string[]): any[] => {{
-  const orderByRegex = /ORDER BY (\w+) (ASC|DESC)/i;
-  const orderMatch = query.match(orderByRegex);
-  let orderColumn = null;
-  let orderDirection = null;
-
-  if (orderMatch) {{
-    orderColumn = orderMatch[1];
-    orderDirection = orderMatch[2].toUpperCase();
-    query = query.replace(orderMatch[0], '').trim(); // Remove ORDER BY clause from the query
-  }}
-
-  const filteredRows = rows.filter(row => evaluateFilter(row, query, columns));
-
-  if (orderColumn && orderDirection) {{
-    const orderColumnIndex = columns.indexOf(orderColumn);
-
-    if (orderColumnIndex !== -1) {{
-      filteredRows.sort((a, b) => {{
-        const valueA = a[orderColumnIndex];
-        const valueB = b[orderColumnIndex];
-
-        if (orderDirection === 'ASC') {{
-          if (valueA < valueB) return -1;
-          if (valueA > valueB) return 1;
-          return 0;
-        }} else {{
-          if (valueA > valueB) return -1;
-          if (valueA < valueB) return 1;
-          return 0;
-        }}
-      }});
-    }}
-  }}
-
-  return filteredRows;
-}};'''
 
 DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
 import modalConfig from './modalConfig';
@@ -1285,77 +1209,196 @@ interface ModalConfig {{
   scopes: Scopes;
   validation_rules?: ValidationRules;
   ai_quality_checks?: AIQualityChecks;
+  read_routes?: string[];
 }}
 
 interface ModalConfigMap {{
   [key: string]: ModalConfig;
 }}
 
+
+
+
+
 const modalConfig: ModalConfigMap = {{
-  users: {{
-    options: {{
-      type: ["admin", "normal"]
+  "users": {{
+    "options": {{
+      "type": [
+        "admin",
+        "normal"
+      ]
     }},
-    conditional_options: {{}},
-    scopes: {{
-      create: true,
-      read: ["id","username","password","type", "created_at","updated_at"],
-      update: ["username","password","type"],
-      delete: true
+    "conditional_options": {{}},
+    "scopes": {{
+      "create": true,
+      "read": [
+        "id",
+        "username",
+        "password",
+        "type",
+        "created_at",
+        "updated_at"
+      ],
+      "update": [
+        "username",
+        "password",
+        "type"
+      ],
+      "delete": true
     }},
-    validation_rules: {{
-      "username": ["REQUIRED"],
-      "password": ["REQUIRED"] 
-    }}
+    "validation_rules": {{
+      "username": [
+        "REQUIRED"
+      ],
+      "password": [
+        "REQUIRED"
+      ]
+    }},
+    "read_routes": [
+      "default"
+    ]
   }},
-  customers: {{
-    options: {{
-      issue: ["A", "B", "C"]
+  "social_media_escalations": {{
+    "options": {{
+      "forum": [
+        "Google_Reviews",
+        "LinkedIn",
+        "Twitter/X",
+        "Facebook",
+        "Instagram",
+        "YouTube",
+        "Other"
+      ],
+      "status": [
+        "Unresolved",
+        "Resolved_but_post_not_removed",
+        "Not_able_to_identify_poster"
+      ],
+      "issue": [
+        "Internet_supply_down",
+        "Slow_speed",
+        "Frequent_disconnect",
+        "Rude_behaviour_of_Partner",
+        "Booking_fee_refund",
+        "Trust issue",
+        "Other"
+      ]
     }},
-    conditional_options: {{
-      status: [
-	{{
-	   condition: "issue == A",
-	   options: ["X1","X2","X3"]
-	}},
+    "conditional_options": {{
+      "sub_status": [
         {{
-           condition: "issue == B",
-           options: ["Y1","Y2","Y3"]
+          "condition": "status == Unresolved",
+          "options": [
+            "Did_not_pick_up",
+            "Picked_up_yet_unresolved"
+          ]
         }},
         {{
-           condition: "issue == C",
-           options: ["Z1","Z2","Z3"]
-        }}      
-      ] 
+          "condition": "status == Resolved_but_post_not_removed",
+          "options": [
+            "Was_very_angry",
+            "Other"
+          ]
+        }}
+      ]
     }},
-    scopes: {{
-      create: true,
-      read: ["id", "mobile", "issue", "status", "created_at"],
-      update: ["mobile","issue", "status"],
-      delete: true
+    "scopes": {{
+      "create": true,
+      "read": [
+        "id",
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date",
+        "created_at"
+      ],
+      "update": [
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date"
+      ],
+      "delete": true
     }},
-    validation_rules: {{
-      "mobile": ["REQUIRED"]
+    "validation_rules": {{
+      "url": [
+        "REQUIRED"
+      ],
+      "forum": [
+        "REQUIRED"
+      ],
+      "issue": [
+        "REQUIRED"
+      ],
+      "status": [
+        "REQUIRED"
+      ],
+      "sub_status": [
+        "REQUIRED"
+      ],
+      "action_taken": [
+        "REQUIRED"
+      ],
+      "follow_up_date": [
+        "REQUIRED",
+        "IS_AFTER_TODAY"
+      ]
     }},
-    ai_quality_checks: {{
-      "mobile": ["rhymes with potato", "is a fruit or vegetable"]
+    "ai_quality_checks": {{
+      "action_taken": [
+        "must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"
+      ]
     }},
-  }},
-  partners: {{
-    options: {{
-      issue: ["A", "B", "C"],
-      status: ["X", "Y"]
-    }},
-    scopes: {{
-      create: true,
-      read: ["id", "mobile", "issue", "status", "created_at"],
-      update: ["issue", "status"],
-      delete: false
-    }}
+    "read_routes": [
+      "most-recent-500",
+      "todays-cases",
+      "yesterdays-cases"
+    ]
   }}
 }};
 
 export default modalConfig;'''
+
+DIR__COMPONENTS__FILE__SEARCH_UTILS__TSX = '''export const handleSearchSubmit = async (
+  apiHost: string,
+  modal: string,
+  queryInput: string,
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
+  setQueryError: React.Dispatch<React.SetStateAction<string | null>>
+) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}search/${{modal}}`, {{
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify({{ search_string: queryInput.trim() }}),
+    }});
+    const result = await response.json();
+    if (response.ok) {{
+      setData(result.data);
+      setQueryError(null);
+    }} else {{
+      console.error('Error fetching search results:', result);
+      setQueryError(result.error || 'Unknown error occurred');
+    }}
+  }} catch (error) {{
+    console.error('Error fetching search results:', error);
+    if (error instanceof Error) {{
+      setQueryError(error.message || 'Unknown error occurred');
+    }} else {{
+      setQueryError('Unknown error occurred');
+    }}
+  }}
+}};'''
 
 DIR__PAGES__FILE__LOGIN__TSX = '''import React, {{ useState }} from 'react';
 import {{ useRouter }} from 'next/navigation';
@@ -1465,6 +1508,7 @@ DIR__PAGES__FILE____MODAL____TSX = '''import React, {{ useEffect, useState }} fr
 import {{ useRouter }} from 'next/router';
 import DynamicTable from '../components/DynamicTable';
 import Sidebar from '../components/Sidebar';
+import modalConfig from '../components/modalConfig';
 import '../app/globals.css';
 
 const ModalPage: React.FC = () => {{
@@ -1477,26 +1521,33 @@ const ModalPage: React.FC = () => {{
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {{
-    if (modal && apiHost) {{
-      const fetchData = async () => {{
-        try {{
-          const response = await fetch(`${{apiHost}}read/${{modal}}`);
-          if (response.ok) {{
-            const fetchedData = await response.json();
-            setColumns(fetchedData.columns);
-            setData(fetchedData.data);
-          }} else {{
+    const fetchData = async () => {{
+      if (modal && apiHost) {{
+        const config = modalConfig[modal as string];
+        if (config && config.read_routes && config.read_routes.length > 0) {{
+          const readRoute = config.read_routes[0];
+	  //console.log(readRoute);
+          try {{
+            const response = await fetch(`${{apiHost}}read/${{modal}}/${{readRoute}}`);
+	    //console.log(response);
+            if (response.ok) {{
+              const fetchedData = await response.json();
+	      //console.log(fetchedData);
+              setColumns(fetchedData.columns);
+              setData(fetchedData.data);
+            }} else {{
+              setData([]);
+              setColumns([]);
+            }}
+          }} catch (error) {{
             setData([]);
             setColumns([]);
           }}
-        }} catch (error) {{
-          setData([]);
-          setColumns([]);
         }}
-      }};
+      }}
+    }};
 
-      fetchData();
-    }}
+    fetchData();
   }}, [modal, apiHost]);
 
   if (!modal || !apiHost) {{

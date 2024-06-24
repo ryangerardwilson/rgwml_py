@@ -242,6 +242,8 @@ def test_ser():
 
 
     project_name = "sajal-ka-crm"
+
+    """
     modal_backend_config = {
         "sudo": {
             "username": "sudo",
@@ -253,9 +255,28 @@ def test_ser():
             "welcome_calls": "mobile,status,issue,action_taken"
             }
         }
+    """
+
+    modal_backend_config = {
+        "sudo": {
+            "username": "sudo",
+            "password": "sudo"
+            },  
+        "modals": {
+            "social_media_escalations": {
+                "columns": "url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date",
+                "read_routes": [
+                    {"most-recent-500": "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations ORDER BY id DESC LIMIT 500"},
+                    {"todays-cases": "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = CURDATE() ORDER BY id ASC"},
+                    {"yesterdays-cases": "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) ORDER BY id ASC"}
+                    ]
+                },
+            }
+        }  
+
 
     modal_frontend_config = {
-        "social_media_esclataions": { 
+        "social_media_escalations": { 
             "options": { 
                 "forum": ["Google_Reviews", "LinkedIn", "Twitter/X", "Facebook", "Instagram", "YouTube", "Other"],
                 "status": ["Unresolved", "Resolved_but_post_not_removed", "Not_able_to_identify_poster"],
@@ -292,6 +313,8 @@ def test_ser():
                 "action_taken": ["must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"]
             },
         },
+    }
+    """
         "high_pain_customers": {
             "options": {
                 "status": ["WIP_(Partner)", "WIP_(Wiom)"],
@@ -334,7 +357,7 @@ def test_ser():
                 "action_taken": ["must describe a meaningful welcome call conversation with a customer by a customer support agent after a router installation"]
             },
         },
-    }
+    """
 
 
 

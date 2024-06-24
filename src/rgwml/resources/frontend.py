@@ -267,7 +267,14 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
     deploy_with_vercel()
 
 
-def main(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key):
+def main(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key):
+
+    modal_backend_config['modals']['users'] = {
+        "columns": "username,password,type",
+        "read_routes": [
+            {"default": "SELECT * FROM users"}
+        ]
+    }
 
     modal_frontend_config = {
         "users": {
@@ -284,11 +291,41 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
             "validation_rules": {
                 "username": ["REQUIRED"],
                 "password": ["REQUIRED"]
-            }
+            },
         }
     }
 
     modal_frontend_config.update(non_user_modal_frontend_config)
+
+
+    # Extract read_routes from modal_backend_config and append to modal_frontend_config
+    for modal_name, modal_details in modal_backend_config.get('modals', {}).items():
+        if isinstance(modal_details, dict) and 'read_routes' in modal_details:
+            read_routes = [list(route.keys())[0] for route in modal_details['read_routes']]
+            
+            # Debugging: Print read_routes for each modal
+            print(f"Read routes for {modal_name}: {read_routes}")
+            
+            if modal_name in modal_frontend_config:
+                if 'read_routes' in modal_frontend_config[modal_name]:
+                    modal_frontend_config[modal_name]['read_routes'].extend(read_routes)
+                else:
+                    modal_frontend_config[modal_name]['read_routes'] = read_routes
+            else:
+                modal_frontend_config[modal_name] = {
+                    "read_routes": read_routes
+                }
+        else:
+            # Debugging: Print the problematic modal_name and modal_details
+            print(f"Error: {modal_name} does not have the expected structure. modal_details: {modal_details}")
+
+    # Debugging: Print the final structure of modal_frontend_config
+    print("modal_frontend_config:", json.dumps(modal_frontend_config, indent=4))
+
+    # Get all modal names
+    modals = ','.join(modal_backend_config.get('modals', {}).keys())
+    print("Modals:", modals)
+
 
     use_src = True
 
@@ -318,8 +355,8 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
         "DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX": os.path.join(src_dir, "components/validationUtils.tsx"),
         "DIR__COMPONENTS__FILE__CRUD_UTILS__TSX": os.path.join(src_dir, "components/crudUtils.tsx"),
         "DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX": os.path.join(src_dir, "components/formatUtils.tsx"),
-        "DIR__COMPONENTS__FILE__FILTER_INPUT__TSX": os.path.join(src_dir, "components/FilterInput.tsx"),
-        "DIR__COMPONENTS__FILE__FILTER_UTILS__TSX": os.path.join(src_dir, "components/filterUtils.tsx"),
+        "DIR__COMPONENTS__FILE__SEARCH_INPUT__TSX": os.path.join(src_dir, "components/SearchInput.tsx"),
+        "DIR__COMPONENTS__FILE__SEARCH_UTILS__TSX": os.path.join(src_dir, "components/searchUtils.tsx"),
         "DIR__COMPONENTS__FILE__QUERY_INPUT__TSX": os.path.join(src_dir, "components/QueryInput.tsx"),
         "DIR__COMPONENTS__FILE__QUERY_UTILS__TSX": os.path.join(src_dir, "components/queryUtils.tsx"),
         "DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX": os.path.join(src_dir, "components/downloadUtils.tsx"),

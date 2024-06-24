@@ -172,57 +172,23 @@ def create_entry(modal_name):
     log_operation(modal_name, data['user_id'], 'CREATE', {{"user_id": data['user_id'], **data}})
     return {{"status": "success"}}
 
-@app.route('/read/<modal_name>', method=['OPTIONS', 'GET'])
-def read_entries(modal_name):
+@app.route('/read/<modal_name>/<route_name>', method=['OPTIONS', 'GET'])
+def read_entries(modal_name, route_name):
     if request.method == 'OPTIONS':
         return {{}}
 
-    conn = pymysql.connect(**config)
-    cursor = conn.cursor()
-    if modal_name != 'favicon':
-        cursor.execute(f"SELECT * FROM {{modal_name}} ORDER BY id DESC LIMIT 1000")
-        result = cursor.fetchall()
-        column_names = [desc[0] for desc in cursor.description]
-        cursor.close()
-        conn.close()
-
-        # Serialize datetime objects
-        serialized_result = []
-        for row in result:
-            serialized_row = []
-            for item in row:
-                if isinstance(item, datetime):
-                    serialized_row.append(item.isoformat())
-                else:
-                    serialized_row.append(item)
-            serialized_result.append(serialized_row)
-
-        return {{"columns": column_names, "data": serialized_result}}
-
-@app.route('/query/<modal_name>', methods=['OPTIONS', 'POST'])
-def query_entries(modal_name):
-    if request.method == 'OPTIONS':
-        response.headers['Allow'] = 'OPTIONS, POST'
-        return {{}}
-
-    if request.method == 'POST':
-        data = request.json
-        if not data or 'query_string' not in data:
-            response.status = 400
-            return {"error": "query_string is required in the request body"}
-
-        query_string = data['query_string'].strip()
-        lower_query_string = query_string.lower()
-        expected_start = f"select * from {{modal_name}}".lower()
-
-        if not lower_query_string.startswith(expected_start):
-            response.status = 400
-            return {{"error": f"query_string must start with 'SELECT * FROM {{modal_name}}'"}}
-
-        try:
-            conn = pymysql.connect(**config)
-            cursor = conn.cursor()
-            cursor.execute(query_string)
+    try:
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        if modal_name != 'favicon':
+            query = None
+            for route in modal_map[modal_name]['read_routes']:
+                if route_name in route:
+                    query = route[route_name]
+                    break
+            if not query:
+                raise ValueError(f"Read route '{{route_name}}' not found for modal '{{modal_name}}'")
+            cursor.execute(query)
             result = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
             cursor.close()
@@ -240,13 +206,59 @@ def query_entries(modal_name):
                 serialized_result.append(serialized_row)
 
             return {{"columns": column_names, "data": serialized_result}}
-        except Exception as e:
-            response.status = 500
-            return {{"error": str(e)}}
+    except Exception as e:
+        response.status = 500
+        return {{"error": str(e)}}
 
 
 
-@app.route('/search/<modal_name>', methods=['OPTIONS', 'POST'])
+@app.route('/query/<modal_name>', method=['OPTIONS', 'POST'])
+def query_entries(modal_name):
+    if request.method == 'OPTIONS':
+        response.headers['Allow'] = 'OPTIONS, POST'
+        return {{}}
+
+    data = request.json
+    if not data or 'query_string' not in data:
+        response.status = 400
+        return {{"error": "query_string is required in the request body"}}
+
+    query_string = data['query_string'].strip()
+    lower_query_string = query_string.lower()
+    expected_start = f"select * from {{modal_name}}".lower()
+
+    if not lower_query_string.startswith(expected_start):
+        response.status = 400
+        return {{"error": f"query_string must start with 'SELECT * FROM {{modal_name}}'"}}
+
+    try:
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        cursor.execute(query_string)
+        result = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
+        cursor.close()
+        conn.close()
+
+        # Serialize datetime objects
+        serialized_result = []
+        for row in result:
+            serialized_row = []
+            for item in row:
+                if isinstance(item, datetime):
+                    serialized_row.append(item.isoformat())
+                else:
+                    serialized_row.append(item)
+            serialized_result.append(serialized_row)
+
+        return {{"columns": column_names, "data": serialized_result}}
+    except Exception as e:
+        response.status = 500
+        return {{"error": str(e)}}
+
+
+
+@app.route('/search/<modal_name>', method=['OPTIONS', 'POST'])
 def search_entries(modal_name):
     if request.method == 'OPTIONS':
         response.headers['Allow'] = 'OPTIONS, POST'
@@ -363,40 +375,6 @@ def log_operation(modal_name, user_id, operation_type, operation_details):
     with open("app.py", "w") as f:
         f.write(app_code)
 
-def kill_process_on_port(ssh_key_path, gcs_instance, port):
-    kill_cmd = f"fuser -k {port}/tcp || true"
-    subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, kill_cmd])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-def deploy_to_gcs(ssh_key_path, gcs_instance, deploy_path):
-    # Create the deployment directory on the remote server
-    subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, f'mkdir -p {deploy_path}'])
-    
-    # Copy the app.py file to the remote server
-    subprocess.run(['scp', '-i', ssh_key_path, 'app.py', f'{gcs_instance}:{deploy_path}/'])
-    
-    # Start the application on the remote server using nohup and detach from the SSH session
-    subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, f'nohup bash -c "python3 {deploy_path}/app.py > {deploy_path}/app.log 2>&1 &"'])
-    
-    # Wait for the server to start
-    time.sleep(5)
-"""
 
 def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host):
 
@@ -550,93 +528,94 @@ def deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, 
 
     ssh.close()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def run_tests(base_url, modal_map):
-    for modal, columns in modal_map.items():
+    for modal, details in modal_map.items():
+        if modal == 'users':
+            continue
+
+        columns = details['columns']
+        read_routes = details.get('read_routes', [])
+
         columns_list = columns.split(',')
         test_data = {col: "xxxxx" for col in columns_list}
         test_data['user_id'] = 1
 
-        if modal != 'users':
-            print(f"\nTesting {modal} modal:\n")
+        print(f"\nTesting {modal} modal:\n")
 
-            # Create entry
-            create_response = subprocess.run([
-                'curl', '-X', 'POST', f"{base_url}/create/{modal}",
-                '-H', "Content-Type: application/json",
-                '-d', json.dumps(test_data)
-            ], capture_output=True, text=True)
-            print("Create Entry Response:", create_response.stdout)
+        # Create entry
+        create_response = subprocess.run([
+            'curl', '-X', 'POST', f"{base_url}/create/{modal}",
+            '-H', "Content-Type: application/json",
+            '-d', json.dumps(test_data)
+        ], capture_output=True, text=True)
+        print("Create Entry Response:", create_response.stdout)
 
-            # Read entries
-            read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}"], capture_output=True, text=True)
-            print("Read Entries Response:", read_response.stdout)
+        # Read entries
+        for route in read_routes:
+            route_name = list(route.keys())[0]
+            read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}/{route_name}"], capture_output=True, text=True)
+            print(f"Read Entries Response for {route_name}:", read_response.stdout)
 
-            # Query entries
-            query_data = {"query_string": "user_id = 1 ORDER BY id DESC"}
-            query_response = subprocess.run([
-                'curl', '-X', 'POST', f"{base_url}/query/{modal}",
-                '-H', "Content-Type: application/json",
-                '-d', json.dumps(query_data)
-            ], capture_output=True, text=True)
-            print("Query Entries Response:", query_response.stdout)
+        # Query entries
+        query_data = {"query_string": f"SELECT * FROM {modal} WHERE user_id = 1 ORDER BY id DESC"}
+        query_response = subprocess.run([
+            'curl', '-X', 'POST', f"{base_url}/query/{modal}",
+            '-H', "Content-Type: application/json",
+            '-d', json.dumps(query_data)
+        ], capture_output=True, text=True)
+        print("Query Entries Response:", query_response.stdout)
+        print("Query Entries Response (stderr):", query_response.stderr)
 
-            # Update entry
-            updated_data = {col: "xxxxx_updated" for col in columns_list}
-            updated_data['user_id'] = 1
-            update_response = subprocess.run([
-                'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
-                '-H', "Content-Type: application/json",
-                '-d', json.dumps(updated_data)
-            ], capture_output=True, text=True)
-            print("Update Entry Response:", update_response.stdout)
+        # Search entries
+        search_data = {"search_string": "xxxxx"}
+        search_response = subprocess.run([
+            'curl', '-X', 'POST', f"{base_url}/search/{modal}",
+            '-H', "Content-Type: application/json",
+            '-d', json.dumps(search_data)
+        ], capture_output=True, text=True)
+        print("Search Entries Response:", search_response.stdout)
 
-            # Delete entry
-            delete_response = subprocess.run([
-                'curl', '-X', 'DELETE', f"{base_url}/delete/{modal}/1",
-                '-H', "Content-Type: application/json",
-                '-d', json.dumps({'user_id': 1})
-            ], capture_output=True, text=True)
-            print("Delete Entry Response:", delete_response.stdout)
+        # Update entry
+        updated_data = {col: "xxxxx_updated" for col in columns_list}
+        updated_data['user_id'] = 1
+        update_response = subprocess.run([
+            'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
+            '-H', "Content-Type: application/json",
+            '-d', json.dumps(updated_data)
+        ], capture_output=True, text=True)
+        print("Update Entry Response:", update_response.stdout)
+
+        # Delete entry
+        delete_response = subprocess.run([
+            'curl', '-X', 'DELETE', f"{base_url}/delete/{modal}/1",
+            '-H', "Content-Type: application/json",
+            '-d', json.dumps({'user_id': 1})
+        ], capture_output=True, text=True)
+        print("Delete Entry Response:", delete_response.stdout)
 
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
-    for modal_name, columns in modal_map.items():
-        if modal_name != 'users':
-            columns_list = columns.split(',')
-            conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list])
-            
-            # Delete from modal table
-            query = f"DELETE FROM {modal_name} WHERE {conditions}"
-            cursor.execute(query)
-            
-            # Delete from modal logs table
-            log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
-            log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
-            cursor.execute(log_query)
-            
-            conn.commit()
+    for modal_name, details in modal_map.items():
+        if modal_name == 'users':
+            continue
+        
+        columns = details['columns']
+        columns_list = columns.split(',')
+        conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list])
+
+        # Delete from modal table
+        query = f"DELETE FROM {modal_name} WHERE {conditions}"
+        cursor.execute(query)
+
+        # Delete from modal logs table
+        log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
+        log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
+        cursor.execute(log_query)
+
+        conn.commit()
     cursor.close()
     conn.close()
-
 
 def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host):
     create_database(db_config, new_db_name)
@@ -644,11 +623,20 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
 
     modal_map = modal_backend_config["modals"]
 
+    for modal_name, modal_details in modal_map.items():
+        columns = modal_details["columns"].split(',')
+        create_modal_table(db_config, modal_name, columns)
     
-    for modal_name, columns in modal_map.items():
-        create_modal_table(db_config, modal_name, columns.split(','))
+    #modal_map["users"] = "username,password,type"
 
-    modal_map["users"] = "username,password,type"
+    modal_map['users'] = {
+        "columns": "username,password,type",
+        "read_routes": [
+            {"default": "SELECT * FROM users"}
+        ]
+    }
+
+
     create_bottle_app(modal_map, db_config)
 
     direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host)

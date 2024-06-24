@@ -1,3 +1,4 @@
+// src/components/crudUtils.tsx
 
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {
   setCreateModalOpen(true);
@@ -7,9 +8,12 @@ export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) =>
   setCreateModalOpen(false);
 };
 
-export const fetchData = async (apiHost: string, modal: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {
+export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {
   try {
-    const response = await fetch(`${apiHost}read/${modal}`);
+    //console.log(`${apiHost}read/${modal}/${route}`);
+    const response = await fetch(`${apiHost}read/${modal}/${route}`);
+    //console.log(response);
+    
     const result = await response.json();
     setData(result.data || []);
   } catch (error) {

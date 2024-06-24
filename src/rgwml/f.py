@@ -61,6 +61,6 @@ class f:
         backend_main(project_name, new_db_name, db_config, modal_backend_config, vm_preset['ssh_key_path'], instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_preset['host'])
 
         # Deploy frontend
-        modals = ','.join(modal_backend_config.keys())
-        frontend_main(project_name, frontend_local_deploy_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
+        modals = ','.join(modal_backend_config['modals'].keys())
+        frontend_main(project_name, frontend_local_deploy_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_backend_config, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
 

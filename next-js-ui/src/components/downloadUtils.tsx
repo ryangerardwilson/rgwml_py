@@ -1,11 +1,10 @@
-// downloadUtils.ts
 export const downloadCSV = (data: any[], columns: string[], filename: string) => {
-  const csvRows = [];
+  const csvRows: string[] = [];
   const headers = columns.join(',');
   csvRows.push(headers);
 
   data.forEach(row => {
-    const values = row.map((cellValue) => `"${cellValue}"`); // Enclose each cell value in quotes to handle commas within the values
+    const values = row.map((cellValue: any) => `"${cellValue}"`); // Enclose each cell value in quotes to handle commas within the values
     csvRows.push(values.join(','));
   });
 

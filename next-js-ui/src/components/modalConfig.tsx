@@ -32,75 +32,160 @@ interface ModalConfig {
   scopes: Scopes;
   validation_rules?: ValidationRules;
   ai_quality_checks?: AIQualityChecks;
+  read_routes?: string[];
 }
 
 interface ModalConfigMap {
   [key: string]: ModalConfig;
 }
 
+
+
+
+
 const modalConfig: ModalConfigMap = {
-  users: {
-    options: {
-      type: ["admin", "normal"]
+  "users": {
+    "options": {
+      "type": [
+        "admin",
+        "normal"
+      ]
     },
-    conditional_options: {},
-    scopes: {
-      create: true,
-      read: ["id","username","password","type", "created_at","updated_at"],
-      update: ["username","password","type"],
-      delete: true
+    "conditional_options": {},
+    "scopes": {
+      "create": true,
+      "read": [
+        "id",
+        "username",
+        "password",
+        "type",
+        "created_at",
+        "updated_at"
+      ],
+      "update": [
+        "username",
+        "password",
+        "type"
+      ],
+      "delete": true
     },
-    validation_rules: {
-      "username": ["REQUIRED"],
-      "password": ["REQUIRED"] 
-    }
+    "validation_rules": {
+      "username": [
+        "REQUIRED"
+      ],
+      "password": [
+        "REQUIRED"
+      ]
+    },
+    "read_routes": [
+      "default"
+    ]
   },
-  customers: {
-    options: {
-      issue: ["A", "B", "C"]
+  "social_media_escalations": {
+    "options": {
+      "forum": [
+        "Google_Reviews",
+        "LinkedIn",
+        "Twitter/X",
+        "Facebook",
+        "Instagram",
+        "YouTube",
+        "Other"
+      ],
+      "status": [
+        "Unresolved",
+        "Resolved_but_post_not_removed",
+        "Not_able_to_identify_poster"
+      ],
+      "issue": [
+        "Internet_supply_down",
+        "Slow_speed",
+        "Frequent_disconnect",
+        "Rude_behaviour_of_Partner",
+        "Booking_fee_refund",
+        "Trust issue",
+        "Other"
+      ]
     },
-    conditional_options: {
-      status: [
-	{
-	   condition: "issue == A",
-	   options: ["X1","X2","X3"]
-	},
+    "conditional_options": {
+      "sub_status": [
         {
-           condition: "issue == B",
-           options: ["Y1","Y2","Y3"]
+          "condition": "status == Unresolved",
+          "options": [
+            "Did_not_pick_up",
+            "Picked_up_yet_unresolved"
+          ]
         },
         {
-           condition: "issue == C",
-           options: ["Z1","Z2","Z3"]
-        }      
-      ] 
+          "condition": "status == Resolved_but_post_not_removed",
+          "options": [
+            "Was_very_angry",
+            "Other"
+          ]
+        }
+      ]
     },
-    scopes: {
-      create: true,
-      read: ["id", "mobile", "issue", "status", "created_at"],
-      update: ["mobile","issue", "status"],
-      delete: true
+    "scopes": {
+      "create": true,
+      "read": [
+        "id",
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date",
+        "created_at"
+      ],
+      "update": [
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date"
+      ],
+      "delete": true
     },
-    validation_rules: {
-      "mobile": ["REQUIRED"]
+    "validation_rules": {
+      "url": [
+        "REQUIRED"
+      ],
+      "forum": [
+        "REQUIRED"
+      ],
+      "issue": [
+        "REQUIRED"
+      ],
+      "status": [
+        "REQUIRED"
+      ],
+      "sub_status": [
+        "REQUIRED"
+      ],
+      "action_taken": [
+        "REQUIRED"
+      ],
+      "follow_up_date": [
+        "REQUIRED",
+        "IS_AFTER_TODAY"
+      ]
     },
-    ai_quality_checks: {
-      "mobile": ["rhymes with potato", "is a fruit or vegetable"]
+    "ai_quality_checks": {
+      "action_taken": [
+        "must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"
+      ]
     },
-  },
-  partners: {
-    options: {
-      issue: ["A", "B", "C"],
-      status: ["X", "Y"]
-    },
-    scopes: {
-      create: true,
-      read: ["id", "mobile", "issue", "status", "created_at"],
-      update: ["issue", "status"],
-      delete: false
-    }
+    "read_routes": [
+      "most-recent-500",
+      "todays-cases",
+      "yesterdays-cases"
+    ]
   }
 };
 
 export default modalConfig;
-

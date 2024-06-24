@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import DynamicTable from '../components/DynamicTable';
 import Sidebar from '../components/Sidebar';
+import modalConfig from '../components/modalConfig';
 import '../app/globals.css';
 
 const ModalPage: React.FC = () => {
@@ -14,26 +15,33 @@ const ModalPage: React.FC = () => {
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
   useEffect(() => {
-    if (modal && apiHost) {
-      const fetchData = async () => {
-        try {
-          const response = await fetch(`${apiHost}read/${modal}`);
-          if (response.ok) {
-            const fetchedData = await response.json();
-            setColumns(fetchedData.columns);
-            setData(fetchedData.data);
-          } else {
+    const fetchData = async () => {
+      if (modal && apiHost) {
+        const config = modalConfig[modal as string];
+        if (config && config.read_routes && config.read_routes.length > 0) {
+          const readRoute = config.read_routes[0];
+	  //console.log(readRoute);
+          try {
+            const response = await fetch(`${apiHost}read/${modal}/${readRoute}`);
+	    //console.log(response);
+            if (response.ok) {
+              const fetchedData = await response.json();
+	      //console.log(fetchedData);
+              setColumns(fetchedData.columns);
+              setData(fetchedData.data);
+            } else {
+              setData([]);
+              setColumns([]);
+            }
+          } catch (error) {
             setData([]);
             setColumns([]);
           }
-        } catch (error) {
-          setData([]);
-          setColumns([]);
         }
-      };
+      }
+    };
 
-      fetchData();
-    }
+    fetchData();
   }, [modal, apiHost]);
 
   if (!modal || !apiHost) {
