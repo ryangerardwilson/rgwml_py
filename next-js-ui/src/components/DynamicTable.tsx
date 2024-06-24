@@ -8,6 +8,7 @@ import { evaluateFilter, filterAndSortRows } from './filterUtils';
 import { handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal } from './crudUtils';
 import { handleQuerySubmit } from './queryUtils';
 import { isValidUrl, formatDateTime } from './formatUtils';
+import { downloadCSV } from './downloadUtils';
 
 interface DynamicTableProps {
   apiHost: string;
@@ -25,6 +26,9 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
   const [queryInput, setQueryInput] = useState('');
   const [useQueryInput, setUseQueryInput] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+
+
+  //console.log(columns, data);
 
   useEffect(() => {
     setData(initialData);
@@ -96,6 +100,14 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
             <FilterInput filterQuery={filterQuery} handleFilterChange={handleFilterChange} />
           )}
         </div>
+
+        <button
+          onClick={() => downloadCSV(filteredData, modalConfiguration.scopes.read, `${modal}_data`)}
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+        >
+          CSV
+        </button>
+
         {modalConfiguration.scopes.create && (
           <button
             onClick={() => handleCreate(setCreateModalOpen)}

@@ -9,7 +9,7 @@ rebuild_package() {
 
 # Step 2: Uninstall the local library
 uninstall_local_library() {
-    local package_name=$(grep -E 'name = "[^"]+"' pyproject.toml | sed -E 's/name = "(.*)"/\1/')
+    local package_name=$(grep -E '^name\s*=\s*".*"' pyproject.toml | sed -E 's/name\s*=\s*"(.*)"/\1/')
     pip3 uninstall -y "$package_name"
 }
 

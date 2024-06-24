@@ -199,7 +199,7 @@ def read_entries(modal_name):
 
         return {{"columns": column_names, "data": serialized_result}}
 
-@app.route('/query/<modal_name>', method=['OPTIONS', 'POST'])
+@app.route('/query/<modal_name>', methods=['OPTIONS', 'POST'])
 def query_entries(modal_name):
     if request.method == 'OPTIONS':
         response.headers['Allow'] = 'OPTIONS, POST'
@@ -209,14 +209,68 @@ def query_entries(modal_name):
         data = request.json
         if not data or 'query_string' not in data:
             response.status = 400
-            return {{"error": "query_string is required in the request body"}}
+            return {"error": "query_string is required in the request body"}
 
-        query_string = data['query_string']
-        query = f"SELECT * FROM {{modal_name}} WHERE {{query_string}} LIMIT 1000"
+        query_string = data['query_string'].strip()
+        lower_query_string = query_string.lower()
+        expected_start = f"select * from {{modal_name}}".lower()
+
+        if not lower_query_string.startswith(expected_start):
+            response.status = 400
+            return {{"error": f"query_string must start with 'SELECT * FROM {{modal_name}}'"}}
 
         try:
             conn = pymysql.connect(**config)
             cursor = conn.cursor()
+            cursor.execute(query_string)
+            result = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            cursor.close()
+            conn.close()
+
+            # Serialize datetime objects
+            serialized_result = []
+            for row in result:
+                serialized_row = []
+                for item in row:
+                    if isinstance(item, datetime):
+                        serialized_row.append(item.isoformat())
+                    else:
+                        serialized_row.append(item)
+                serialized_result.append(serialized_row)
+
+            return {{"columns": column_names, "data": serialized_result}}
+        except Exception as e:
+            response.status = 500
+            return {{"error": str(e)}}
+
+
+
+@app.route('/search/<modal_name>', methods=['OPTIONS', 'POST'])
+def search_entries(modal_name):
+    if request.method == 'OPTIONS':
+        response.headers['Allow'] = 'OPTIONS, POST'
+        return {{}}
+
+    if request.method == 'POST':
+        data = request.json
+        if not data or 'search_string' not in data:
+            response.status = 400
+            return {{"error": "search_string is required in the request body"}}
+
+        search_string = data['search_string']
+        try:
+            conn = pymysql.connect(**config)
+            cursor = conn.cursor()
+
+            # Retrieve column names of the table
+            cursor.execute(f"SHOW COLUMNS FROM {{modal_name}}")
+            columns = [row[0] for row in cursor.fetchall()]
+
+            # Construct the WHERE clause to search across all columns
+            where_clause = " OR ".join([f"{{col}} LIKE '%{{search_string}}%'" for col in columns])
+            query = f"SELECT * FROM {{modal_name}} WHERE {{where_clause}}"
+
             cursor.execute(query)
             result = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]

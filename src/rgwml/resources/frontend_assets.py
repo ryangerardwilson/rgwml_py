@@ -463,6 +463,27 @@ export const open_ai_quality_checks = async (field: string, value: string, check
   return failedChecks;
 }};'''
 
+DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''// downloadUtils.ts
+export const downloadCSV = (data: any[], columns: string[], filename: string) => {{
+  const csvRows = [];
+  const headers = columns.join(',');
+  csvRows.push(headers);
+
+  data.forEach(row => {{
+    const values = row.map((cellValue) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
+    csvRows.push(values.join(','));
+  }});
+
+  const csvContent = `data:text/csv;charset=utf-8,${{csvRows.join('\n')}}`;
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `${{filename}}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}};'''
+
 DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
   setCreateModalOpen(true);
@@ -663,6 +684,7 @@ import {{ evaluateFilter, filterAndSortRows }} from './filterUtils';
 import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
 import {{ handleQuerySubmit }} from './queryUtils';
 import {{ isValidUrl, formatDateTime }} from './formatUtils';
+import {{ downloadCSV }} from './downloadUtils';
 
 interface DynamicTableProps {{
   apiHost: string;
@@ -680,6 +702,9 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
   const [queryInput, setQueryInput] = useState('');
   const [useQueryInput, setUseQueryInput] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+
+
+  //console.log(columns, data);
 
   useEffect(() => {{
     setData(initialData);
@@ -751,6 +776,14 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
             <FilterInput filterQuery={{filterQuery}} handleFilterChange={{handleFilterChange}} />
           )}}
         </div>
+
+        <button
+          onClick={{() => downloadCSV(filteredData, modalConfiguration.scopes.read, `${{modal}}_data`)}}
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+        >
+          CSV
+        </button>
+
         {{modalConfiguration.scopes.create && (
           <button
             onClick={{() => handleCreate(setCreateModalOpen)}}
