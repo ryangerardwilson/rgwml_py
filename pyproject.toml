@@ -1,8 +1,12 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "rgwml"
-version = "0.0.80"
+version = "0.0.84"
 authors = [
-  { name="Ryan Gerard Wilson", email="ryangerardwilson@gmail.com" },
+  { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
 description = "Manipulate data with code that is less a golden retriever, and more a Samurai's sword"
 readme = "README.md"
@@ -38,7 +42,6 @@ dynamic = ["scripts"]
 Homepage = "https://github.com/ryangerardwilson/rgwml_py"
 Issues = "https://github.com/ryangerardwilson/rgwml_py"
 
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["src"]
 

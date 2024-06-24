@@ -258,8 +258,8 @@ def test_ser():
         "social_media_esclataions": { 
             "options": { 
                 "forum": ["Google_Reviews", "LinkedIn", "Twitter/X", "Facebook", "Instagram", "YouTube", "Other"],
-                "status": ["Unresolved", "Resolved_but_post_not_removed"],
-                "issue": ["Internet_supply_down", "Slow_speed", "Frequent_disconnect", "Rude_behaviour_of_Partner", "Booking_fee_refund", "Other"]
+                "status": ["Unresolved", "Resolved_but_post_not_removed", "Not_able_to_identify_poster"],
+                "issue": ["Internet_supply_down", "Slow_speed", "Frequent_disconnect", "Rude_behaviour_of_Partner", "Booking_fee_refund", "Trust issue", "Other"]
             },
             "conditional_options": {
                 "sub_status": [
@@ -294,7 +294,7 @@ def test_ser():
         },
         "high_pain_customers": {
             "options": {
-                "status": ["WIP (Partner)", "WIP (Wiom)"],
+                "status": ["WIP_(Partner)", "WIP_(Wiom)"],
                 "issue": ["Internet_supply_down", "Slow_speed", "Frequent_disconnect", "Rude_behaviour_of_Partner", "Booking_fee_refund", "Other"]
             },
             "scopes": {
