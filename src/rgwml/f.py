@@ -3,7 +3,7 @@ import json
 from .resources.backend import main as backend_main
 from .resources.frontend import main as frontend_main
 
-class Deployment:
+class f:
     def __init__(self):
         pass
 
