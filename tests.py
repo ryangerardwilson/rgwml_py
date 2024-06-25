@@ -248,10 +248,10 @@ def test_ser():
         "sudo": {
             "username": "sudo",
             "password": "sudo"
-            },  
+            },
         "modals": {
             "social_media_escalations": {
-                "columns": "url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date",
+                "columns": "url[VARCHAR(2048)],forum,mobile,issue,status,sub_status,action_taken,follow_up_date",
                 "read_routes": [
                     {"most-recent-500": "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations ORDER BY id DESC LIMIT 500"},
                     {"todays-cases": "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = CURDATE() ORDER BY id ASC"},
@@ -259,7 +259,8 @@ def test_ser():
                     ]
                 },
             }
-        }  
+        }
+
 
 
     modal_frontend_config = {

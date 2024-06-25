@@ -26,9 +26,9 @@ def create_user_table(config, modal_backend_config):
     CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT,
-        username TEXT,
-        password TEXT,
-        type TEXT,
+        username VARCHAR(255),
+        password VARCHAR(255),
+        type VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
@@ -70,7 +70,7 @@ def create_user_table(config, modal_backend_config):
 def create_modal_table(config, modal_name, columns):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
-    columns_definition = ", ".join([f"{col} TEXT" for col in columns])
+    columns_definition = ", ".join([f"{col} {col_type}" for col, col_type in columns])
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {modal_name} (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,6 +92,7 @@ def create_modal_table(config, modal_name, columns):
     """)
     cursor.close()
     conn.close()
+
 
 def create_bottle_app(modal_map, config):
     app_code = f"""
@@ -528,17 +529,28 @@ def deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, 
 
     ssh.close()
 
+def parse_column_names(columns_str):
+    columns = []
+    for col in columns_str.split(','):
+        if '[' in col and ']' in col:
+            col_name = col.split('[')[0]
+        else:
+            col_name = col
+        columns.append(col_name.strip())
+    return columns
+
 def run_tests(base_url, modal_map):
     for modal, details in modal_map.items():
-        if modal == 'users':
-            continue
-
-        columns = details['columns']
+        columns_str = details['columns']
         read_routes = details.get('read_routes', [])
 
-        columns_list = columns.split(',')
-        test_data = {col: "xxxxx" for col in columns_list}
-        test_data['user_id'] = 1
+        # Parse columns to get names only
+        columns_list = parse_column_names(columns_str)
+        print(f"Parsed columns for modal {modal}: {columns_list}")
+
+        # Prepare test data
+        test_data = {col: "xxxxx" if col != 'user_id' else 1 for col in columns_list}
+        print(f"Test data for modal {modal}: {test_data}")
 
         print(f"\nTesting {modal} modal:\n")
 
@@ -558,6 +570,7 @@ def run_tests(base_url, modal_map):
 
         # Query entries
         query_data = {"query_string": f"SELECT * FROM {modal} WHERE user_id = 1 ORDER BY id DESC"}
+        print(f"Query data for modal {modal}: {query_data}")
         query_response = subprocess.run([
             'curl', '-X', 'POST', f"{base_url}/query/{modal}",
             '-H', "Content-Type: application/json",
@@ -567,7 +580,9 @@ def run_tests(base_url, modal_map):
         print("Query Entries Response (stderr):", query_response.stderr)
 
         # Search entries
-        search_data = {"search_string": "xxxxx"}
+        search_conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list if col != 'user_id'])
+        search_data = {"query_string": f"SELECT * FROM {modal} WHERE {search_conditions}"}
+        print(f"Search data for modal {modal}: {search_data}")
         search_response = subprocess.run([
             'curl', '-X', 'POST', f"{base_url}/search/{modal}",
             '-H', "Content-Type: application/json",
@@ -576,8 +591,8 @@ def run_tests(base_url, modal_map):
         print("Search Entries Response:", search_response.stdout)
 
         # Update entry
-        updated_data = {col: "xxxxx_updated" for col in columns_list}
-        updated_data['user_id'] = 1
+        updated_data = {col: "xxxxx_updated" if col != 'user_id' else 1 for col in columns_list}
+        print(f"Updated data for modal {modal}: {updated_data}")
         update_response = subprocess.run([
             'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
             '-H', "Content-Type: application/json",
@@ -593,29 +608,47 @@ def run_tests(base_url, modal_map):
         ], capture_output=True, text=True)
         print("Delete Entry Response:", delete_response.stdout)
 
+
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
     for modal_name, details in modal_map.items():
         if modal_name == 'users':
             continue
-        
-        columns = details['columns']
-        columns_list = columns.split(',')
+
+        columns_str = details['columns']
+        columns_list = parse_column_names(columns_str)
+        print(f"Parsed columns for modal {modal_name}: {columns_list}")
+
         conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list])
+        print(f"Conditions for modal {modal_name}: {conditions}")
 
         # Delete from modal table
         query = f"DELETE FROM {modal_name} WHERE {conditions}"
+        print(f"Delete query for modal {modal_name}: {query}")
         cursor.execute(query)
 
         # Delete from modal logs table
         log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
         log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
+        print(f"Delete log query for modal {modal_name}: {log_query}")
         cursor.execute(log_query)
 
         conn.commit()
     cursor.close()
     conn.close()
+
+
+def parse_column_definitions(columns_str):
+    columns = []
+    for col in columns_str.split(','):
+        if '[' in col and ']' in col:
+            col_name, col_type = col.split('[')
+            col_type = col_type.rstrip(']')
+        else:
+            col_name, col_type = col, 'VARCHAR(255)'
+        columns.append((col_name.strip(), col_type.strip()))
+    return columns
 
 def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host):
     create_database(db_config, new_db_name)
@@ -624,9 +657,9 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
     modal_map = modal_backend_config["modals"]
 
     for modal_name, modal_details in modal_map.items():
-        columns = modal_details["columns"].split(',')
+        columns = parse_column_definitions(modal_details["columns"])
         create_modal_table(db_config, modal_name, columns)
-    
+
     #modal_map["users"] = "username,password,type"
 
     modal_map['users'] = {
