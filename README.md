@@ -297,6 +297,12 @@ Instantiate this class by crm = r.f()
 
     # Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e., a Bottle App on your GCS VM), and NextJS Frontend on your local machine with highly customized options based on modal definitions. Note that all modal names, modal column names, and option values must NOT contain spaces and should be separated by underscores.
 
+    """
+    ENVIRONMENT SETUP
+    1. Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager/current)
+    2. Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
+    """
+
     crm.ser(
         project_name= 'my_custom_crm',
         new_db_name= 'custom_crm_db',
