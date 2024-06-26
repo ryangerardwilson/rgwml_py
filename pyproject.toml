@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.94"
+version = "0.0.95"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "pandas",
-    "numpy",
+    "numpy<2.0.0",
     "pymssql",
     "mysql-connector-python",
     "clickhouse-driver",
@@ -35,7 +35,8 @@ dependencies = [
     "requests",
     "pymysql",
     "paramiko",
-    "tables"
+    "tables",
+    "google-cloud-bigquery-storage"
 ]
 dynamic = ["scripts"]
 
