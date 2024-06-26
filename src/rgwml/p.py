@@ -288,7 +288,7 @@ class p:
 
 
     def fp(self, file_path):
-        """INSTANTIATE::[d.fp('/absolute/path')] From path."""
+        """LOAD::[d.fp('/absolute/path')] From path."""
         file_extension = file_path.split('.')[-1]
         
         if file_extension == 'csv':
@@ -330,7 +330,7 @@ class p:
 
 
     def fd(self):
-        """INSTANTIATE::[d.fd()] From directory."""
+        """LOAD::[d.fd()] From directory."""
         directories = [os.path.expanduser(f"~/{folder}") for folder in ["Desktop", "Downloads", "Documents"]]
         parseable_extensions = ['csv', 'xls', 'xlsx', 'json', 'parquet', 'h5', 'hdf5', 'feather', 'pkl']
 
