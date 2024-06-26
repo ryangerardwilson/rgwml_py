@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.93"
+version = "0.0.94"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -35,6 +35,7 @@ dependencies = [
     "requests",
     "pymysql",
     "paramiko",
+    "tables"
 ]
 dynamic = ["scripts"]
 
