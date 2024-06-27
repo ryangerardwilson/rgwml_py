@@ -1,4 +1,5 @@
 import dask.dataframe as dd
+from dask.distributed import Client
 import pandas as pd  # Importing pandas for HDF5 support
 import gc
 import os
@@ -17,8 +18,8 @@ class d:
 
     def frd(self, headers, data):
         """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
-        if isinstance(data, list) and all(isinstance(col, list) for col in data):
-            self.df = dd.from_pandas(pd.DataFrame(data={header: col for header, col in zip(headers, data)}), npartitions=1)
+        if isinstance(data, list) and all(isinstance(row, list) for row in data):
+            self.df = dd.from_pandas(pd.DataFrame(data, columns=headers), npartitions=1)
         else:
             raise ValueError("Data should be an array of arrays.")
         return self
@@ -48,6 +49,16 @@ class d:
         gc.collect()
         return self
 
+    def rnc(self, rename_pairs):
+        """TINKER::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
+        if self.df is not None:
+            self.df = self.df.rename(columns=rename_pairs)
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to rename columns. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
     def pr(self):
         """INSPECT::[d.pr()] Print."""
         if self.df is not None:
@@ -57,6 +68,22 @@ class d:
         else:
             raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
 
+        gc.collect()
+        return self
+
+    def f(self, filter_expr):
+        """TINKER::[d.f("col1 > 100 and Col1 == Col3 and Col5 == 'XYZ'")] Filter."""
+        if self.df is not None:
+            try:
+                # Attempt to use query method for simple expressions
+                self.df = self.df.query(filter_expr)
+            except Exception as e:
+                print(f"Query method failed: {e}, falling back to eval method.")
+                # Fallback to eval for more complex expressions
+                self.df = self.df[self.df.eval(filter_expr)]
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
 
@@ -169,42 +196,65 @@ class d:
         return self
 
     def g(self, target_cols, agg_funcs):
-        """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc."""
-
+        """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc. Warning: When using MEAN, its essential that the column values are such that they avoid division by zero errors"""
         def css(series):
-            """Comma-separated strings aggregation function."""
             return ','.join(series.astype(str))
-
+        
         if self.df is not None:
-            # Create a copy of the DataFrame to avoid modifying the original
             df_copy = self.df.copy()
 
-            # Step 1: Create new columns by duplicating the specified columns
-            new_cols = []
+
+            # Internal preprocessing: Convert columns for numerical aggregation (excluding 'css' and 'count') to floats
+            for agg_func in agg_funcs:
+                col, func = agg_func.split('::')
+                if func not in ['css', 'count']:
+                    # Check if column exists and can be converted to float
+                    if col in df_copy.columns:
+                        try:
+                            # Convert to numeric, setting errors='coerce' to handle non-numeric values
+                            df_copy[col] = df_copy[col].map_partitions(pd.to_numeric, errors='coerce')
+                        except Exception as e:
+                            raise ValueError(f"Error converting column '{col}' to numeric: {e}")
+
+
+            agg_results = []
+            css_results = []
             for agg_func in agg_funcs:
                 col, func = agg_func.split('::')
                 new_col_name = f'{col}_{func}'
                 df_copy[new_col_name] = self.df[col]
-                new_cols.append(new_col_name)
 
-            # Step 2: Perform group-by and aggregations
-            agg_dict = {}
-            for agg_func in agg_funcs:
-                col, func = agg_func.split('::')
-                new_col_name = f'{col}_{func}'
                 if func == 'css':
-                    agg_dict[new_col_name] = css
+                    df_pandas_copy = df_copy.compute()
+                    css_grouped_pandas_step = df_pandas_copy.groupby(target_cols)[new_col_name].apply(css).reset_index()
+                    css_results.append(css_grouped_pandas_step)
+                    continue
+
+                # Use .agg() method instead of direct aggregation functions
+                result = df_copy.groupby(target_cols)[new_col_name].agg({new_col_name: func}).reset_index()
+                agg_results.append(result)
+
+            if agg_results:
+                combined_df = agg_results[0]
+                for res in agg_results[1:]:
+                    combined_df = combined_df.merge(res, on=target_cols, how='outer')
+            else:
+                combined_df = None
+
+            if css_results:
+                css_combined = pd.concat(css_results, axis=1).loc[:, ~pd.concat(css_results, axis=1).columns.duplicated()]
+                css_combined = dd.from_pandas(css_combined, npartitions=1)
+
+                if combined_df is not None:
+                    combined_df = combined_df.merge(css_combined, on=target_cols, how='outer')
                 else:
-                    agg_dict[new_col_name] = func
+                    combined_df = css_combined
 
-            grouped_df = df_copy.groupby(target_cols).agg(agg_dict).reset_index()
-
-            self.df = grouped_df
+            self.df = combined_df
             self.pr()
         else:
-            raise ValueError("No DataFrame to transform. Please load a file first using the frm or frml method.")
+            raise ValueError("No DataFrame to transform. Please load a file first.")
 
-        gc.collect()
         return self
 
     def doc(self, method_type_filter=None):

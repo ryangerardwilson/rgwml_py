@@ -37,8 +37,8 @@ class p:
 
     def frd(self, headers, data):
         """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
-        if isinstance(data, list) and all(isinstance(col, list) for col in data):
-            self.df = pd.DataFrame(data={header: col for header, col in zip(headers, data)})
+        if isinstance(data, list) and all(isinstance(row, list) for row in data):
+            self.df = pd.DataFrame(data, columns=headers)
         else:
             raise ValueError("Data should be an array of arrays.")
         return self
@@ -579,11 +579,17 @@ class p:
 
             # Step 1: Create new columns by duplicating the specified columns
             new_cols = []
+            numeric_funcs = {'sum', 'mean', 'min', 'max', 'std', 'var', 'median'}
             for agg_func in agg_funcs:
                 col, func = agg_func.split('::')
                 new_col_name = f'{col}_{func}'
                 df_copy[new_col_name] = self.df[col]
                 new_cols.append(new_col_name)
+                
+                # Convert columns to numeric if the aggregation function requires it
+                if func in numeric_funcs:
+                    if df_copy[new_col_name].dtype == 'object':
+                        df_copy[new_col_name] = pd.to_numeric(df_copy[new_col_name].str.replace(' ', ''), errors='coerce')
 
             # Step 2: Perform group-by and aggregations
             agg_dict = {}
@@ -595,16 +601,17 @@ class p:
                 else:
                     agg_dict[new_col_name] = func
 
-            grouped_df = df_copy.groupby(target_cols).agg(agg_dict).reset_index()
-
-            self.df = grouped_df
-            self.pr()
+            try:
+                grouped_df = df_copy.groupby(target_cols).agg(agg_dict).reset_index()
+                self.df = grouped_df
+                self.pr()
+            except Exception as e:
+                print(f"Aggregation error: {e}")
         else:
             raise ValueError("No DataFrame to transform. Please load a file first using the frm or frml method.")
 
         gc.collect()
         return self
-
 
     def p(self, index, values, aggfunc='sum', seg_columns=None):
         """TRANSFORM::[d.p(['group_by_cols'], 'values_to_agg_col', 'sum', ['seg_columns'])] Pivot. Optional param: seg_columns. Available agg options: sum, mean, min, max, count, size, std, var, median, etc."""
@@ -923,10 +930,13 @@ class p:
         self.pr()
         return self
 
+
     def rnc(self, rename_pairs):
         """TINKER::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
+        print("aaa")
+        self.pr()
         if self.df is not None:
-            self.df = self.df.rename(columns=rename_pairs, inplace=True)
+            self.df = self.df.rename(columns=rename_pairs)
             self.pr()
         else:
             raise ValueError("No DataFrame to rename columns. Please load a file first using the frm or frml method.")

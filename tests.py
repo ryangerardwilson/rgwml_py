@@ -364,6 +364,40 @@ def test_ser():
         open_ai_json_mode_model='gpt-3.5-turbo'
     )
 
+def test_dg():
+    # Create an instance of the class
+    d_instance = r.d()
+
+    # Load a DataFrame using the frd method
+    headers = ['group', 'column1', 'column2']
+    data = [
+        [1, 10, 'A'],
+        [1, 20, 'B'],
+        [2, 30, 'A'],
+    ]
+    d_instance.frd(headers, data)
+
+    # Use the g method to perform the group-by and aggregations
+    d_instance.g(['group'], ['column1::sum', 'column2::count'])
+
+
+def test_dg_2():
+
+    # Create an instance of the class
+    d = r.d()
+
+    # Load a DataFrame using the frd method
+    headers = ['group', 'column1', 'column2']
+    data = [
+        [1, 10, 'A'],
+        [1, 20, 'B'],
+        [2, 30, 'A'],
+    ]
+    d.frd(headers, data)
+
+    # Use the g method to perform the group-by and aggregations
+    d.g(['group'], ['column1::sum', 'column2::css', 'column2::count'])
+
 
 # Call the test method
 #test_axlinr()
@@ -379,4 +413,6 @@ def test_ser():
 #test_adbscancc()
 #test_pnfc()
 #test_pnfl()
-test_ser()
+#test_ser()
+test_dg()
+test_dg_2()
