@@ -24,6 +24,7 @@ import seaborn as sns
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, MeanShift, SpectralClustering, Birch
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
+import dask.dataframe as dd
 
 class p:
     def __init__(self, df=None):
@@ -573,6 +574,22 @@ class p:
             """Comma-separated strings aggregation function."""
             return ','.join(series.astype(str))
 
+        def css_unique(series):
+            """Comma-separated strings aggregation function with unique values."""
+            return ','.join(pd.Series(series.astype(str)).drop_duplicates().tolist())
+
+        def css_granular_unique(series):
+            """Comma-separated strings aggregation function with unique values after splitting."""
+            all_values = ','.join(series.astype(str)).split(',')
+            unique_values = pd.Series(all_values).drop_duplicates().tolist()
+            return ','.join(unique_values)
+
+        def count_granular_unique(series):
+            """Count unique values after splitting comma-separated strings."""
+            all_values = ','.join(series.astype(str)).split(',')
+            unique_values = pd.Series(all_values).drop_duplicates()
+            return unique_values.count()
+
         if self.df is not None:
             # Create a copy of the DataFrame to avoid modifying the original
             df_copy = self.df.copy()
@@ -585,7 +602,7 @@ class p:
                 new_col_name = f'{col}_{func}'
                 df_copy[new_col_name] = self.df[col]
                 new_cols.append(new_col_name)
-                
+
                 # Convert columns to numeric if the aggregation function requires it
                 if func in numeric_funcs:
                     if df_copy[new_col_name].dtype == 'object':
@@ -598,6 +615,12 @@ class p:
                 new_col_name = f'{col}_{func}'
                 if func == 'css':
                     agg_dict[new_col_name] = css
+                elif func == 'css_unique':
+                    agg_dict[new_col_name] = css_unique
+                elif func == 'css_granular_unique':
+                    agg_dict[new_col_name] = css_granular_unique
+                elif func == 'count_granular_unique':
+                    agg_dict[new_col_name] = count_granular_unique
                 else:
                     agg_dict[new_col_name] = func
 
@@ -734,6 +757,95 @@ class p:
 
         gc.collect()
         return self
+
+
+    def ds(self, path):
+        """PERSIST::[d.ds('/filename/or/path')] Dask Save the DataFrame as a HDF5 or CSV file."""
+        if self.df is None:
+            raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
+
+        # Determine the format based on the file extension
+        if path.lower().endswith('.h5'):
+            format = 'h5'
+        else:
+            format = 'csv'
+
+        # Convert the Pandas DataFrame to a Dask DataFrame
+        dask_df = dd.from_pandas(self.df, npartitions=10)
+
+        # Convert nullable integer columns to regular integers
+        for col in dask_df.select_dtypes(include=["integer"]).columns:
+            dask_df[col] = dask_df[col].astype('int64')
+
+        # Convert datetime columns to timezone-naive (remove timezone information)
+        for col in dask_df.select_dtypes(include=["datetimetz", "datetime64"]).columns:
+            dask_df[col] = dask_df[col].dt.tz_localize(None)
+
+        # Convert date object columns to strings for HDF5 serialization
+        for col in dask_df.columns:
+            if pd.api.types.is_object_dtype(dask_df[col]):
+                try:
+                    # Attempt to convert the entire column to string
+                    dask_df[col] = dask_df[col].astype(str)
+                except Exception as e:
+                    # Fallback: Convert each element to string individually
+                    dask_df[col] = dask_df[col].apply(lambda x: str(x) if isinstance(x, (pd.Timestamp, pd.Period, pd.NaTType)) else x)
+                print(f"Converting object column {col} to string")
+
+        # Convert other extension arrays to strings
+        for col in dask_df.columns:
+            if pd.api.types.is_extension_array_dtype(dask_df[col]):
+                dask_df[col] = dask_df[col].astype(str)
+
+        # Save the DataFrame as a CSV or HDF5 file
+        if path.lower().endswith('.csv'):
+            dask_df.to_csv(path, single_file=True, index=False)
+            print(f"DataFrame saved to {path}")
+        elif path.lower().endswith('.h5'):
+            dask_df.compute().to_hdf(path, key='df', mode='w', format='table')
+            print(f"DataFrame saved to {path}")
+
+        gc.collect()
+        return self
+
+    def oc(self, column_order_str):
+        """TINKER::[d.oc('Column1, ..., Column2')] Order columns based on a string input."""
+        
+        if self.df is None:
+            raise ValueError("No DataFrame to reorder. Please load or create a DataFrame first.")
+        
+        columns = self.df.columns.tolist()
+        parts = [part.strip() for part in column_order_str.split(',')]
+        
+        new_order = []
+        seen = set()
+        
+        for part in parts:
+            if part == '...':
+                continue
+            elif part in columns:
+                new_order.append(part)
+                seen.add(part)
+            else:
+                raise ValueError(f"Column {part} not found in DataFrame.")
+
+        remaining = [col for col in columns if col not in seen]
+
+        if parts[0] == '...':
+            new_order = remaining + new_order
+        elif parts[-1] == '...':
+            new_order = new_order + remaining
+        else:
+            pos = parts.index('...')
+            new_order = new_order[:pos] + remaining + new_order[pos:]
+
+        self.df = self.df[new_order]
+        return self
+
+
+
+
+
 
 
 
@@ -1674,3 +1786,18 @@ class p:
 
         return self
 
+    def rtc(self, columns_to_retain):
+        """TINKER::[d.rtc(['column1','column2'])] Retain columns specified and drop the rest."""
+        if not isinstance(columns_to_retain, list):
+            raise ValueError("columns_to_retain should be a list of column names.")
+        self.df = self.df[columns_to_retain]
+        return self
+
+    def mad(self, other_p, column_name):
+        """MASK::[d.mad(mask_p_instance, 'column7')] Mask against DataFrame, retaining only rows with common column values. Only rows where for the mutual column 7, values exist in mask_p_instance, will be retained"""
+        if not isinstance(other_p, p):
+            raise ValueError("other_p should be an instance of the class p.")
+        if column_name not in self.df.columns or column_name not in other_p.df.columns:
+            raise ValueError("The specified column must exist in both DataFrames.")
+        self.df = self.df[self.df[column_name].isin(other_p.df[column_name])]
+        return self

@@ -372,7 +372,7 @@ def test_dg():
     headers = ['group', 'column1', 'column2']
     data = [
         [1, 10, 'A'],
-        [1, 20, 'B'],
+        [1, 20, 'A'],
         [2, 30, 'A'],
     ]
     d_instance.frd(headers, data)
@@ -390,13 +390,65 @@ def test_dg_2():
     headers = ['group', 'column1', 'column2']
     data = [
         [1, 10, 'A'],
-        [1, 20, 'B'],
+        [1, 20, 'A'],
         [2, 30, 'A'],
     ]
     d.frd(headers, data)
 
     # Use the g method to perform the group-by and aggregations
     d.g(['group'], ['column1::sum', 'column2::css', 'column2::count'])
+
+def test_dg_3():
+
+    # Create an instance of the class
+    d = r.d()
+
+    # Load a DataFrame using the frd method
+    headers = ['group', 'column1', 'column2']
+    data = [
+        [1, 10, 'A'],
+        [1, 20, 'A'],
+        [2, 30, 'A'],
+    ]
+    d.frd(headers, data)
+
+    # Use the g method to perform the group-by and aggregations
+    d.g(['group'], ['column1::sum', 'column2::css_unique', 'column2::count_unique'])
+
+
+def test_dg_4():
+
+    # Create an instance of the class
+    d = r.d()
+
+    # Load a DataFrame using the frd method
+    headers = ['group', 'column1', 'column2']
+    data = [
+        [1, 10, 'A,B,C'],
+        [1, 20, 'A,X,Y'],
+        [2, 30, 'A'],
+    ]
+    d.frd(headers, data)
+
+    # Use the g method to perform the group-by and aggregations
+    d.g(['group'], ['column1::sum', 'column2::css_granular_unique', 'column2::count_granular_unique'])
+
+def test_pg_4():
+
+    # Create an instance of the class
+    d = r.p()
+
+    # Load a DataFrame using the frd method
+    headers = ['group', 'column1', 'column2']
+    data = [
+        [1, 10, 'A,B,C'],
+        [1, 20, 'A,X,Y'],
+        [2, 30, 'A'],
+    ]
+    d.frd(headers, data)
+
+    # Use the g method to perform the group-by and aggregations
+    d.g(['group'], ['column1::sum', 'column2::css_granular_unique', 'column2::count_granular_unique'])
 
 
 # Call the test method
@@ -416,3 +468,6 @@ def test_dg_2():
 #test_ser()
 test_dg()
 test_dg_2()
+test_dg_3()
+test_dg_4()
+#test_pg_4()

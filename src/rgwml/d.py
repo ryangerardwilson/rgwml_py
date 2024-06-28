@@ -138,8 +138,9 @@ class d:
             print(f"DataFrame saved to {full_path}")
         elif full_path.lower().endswith('.h5'):
             # For Dask, converting to Pandas DataFrame for HDF5 saving
-            pandas_df = self.df.compute()
-            pandas_df.to_hdf(full_path, key='df', mode='w', format='table')
+            dask_df.compute().to_hdf(full_path, key='df', mode='w', format='table')
+            #pandas_df = self.df.compute()
+            #pandas_df.to_hdf(full_path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {full_path}")
 
         gc.collect()
@@ -162,6 +163,28 @@ class d:
                 raise ValueError("Both DataFrames must have the same columns for a union join")
 
             self.df = dd.concat([self.df, other.df]).drop_duplicates()
+
+        self.pr()
+        gc.collect()
+        return self
+
+    def buj(self, other):
+        """JOINS::[d.buj(d2)] Bag union join without dropping duplicates."""
+        if not isinstance(other, d):
+            raise TypeError("The 'other' parameter must be an instance of the d class")
+
+        if self.df is None and other.df is None:
+            raise ValueError("Both instances must contain a DataFrame or be empty")
+
+        if self.df is None or self.df.compute().empty:
+            self.df = other.df
+        elif other.df is None or other.df.compute().empty:
+            pass
+        else:
+            if set(self.df.columns) != set(other.df.columns):
+                raise ValueError("Both DataFrames must have the same columns for a union join")
+
+            self.df = dd.concat([self.df, other.df])
 
         self.pr()
         gc.collect()
@@ -197,17 +220,38 @@ class d:
 
     def g(self, target_cols, agg_funcs):
         """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc. Warning: When using MEAN, its essential that the column values are such that they avoid division by zero errors"""
-        def css(series):
-            return ','.join(series.astype(str))
         
+        def css(series):
+            if series.empty or series.isnull().all():
+                return ''
+            return ','.join(series.dropna().astype(str))
+
+        def css_unique(series):
+            if series.empty or series.isnull().all():
+                return ''
+            return ','.join(pd.Series(series.dropna().astype(str)).drop_duplicates().tolist())
+
+        def css_granular_unique(series):
+            if series.empty or series.isnull().all():
+                return ''
+            all_values = ','.join(series.dropna().astype(str)).split(',')
+            unique_values = pd.Series(all_values).drop_duplicates().tolist()
+            return ','.join(unique_values)
+
+        def count_granular_unique(series):
+            if series.empty or series.isnull().all():
+                return 0
+            all_values = ','.join(series.dropna().astype(str)).split(',')
+            unique_values = pd.Series(all_values).drop_duplicates()
+            return unique_values.count()
+
         if self.df is not None:
             df_copy = self.df.copy()
-
 
             # Internal preprocessing: Convert columns for numerical aggregation (excluding 'css' and 'count') to floats
             for agg_func in agg_funcs:
                 col, func = agg_func.split('::')
-                if func not in ['css', 'count']:
+                if func not in ['css', 'count', 'css_unique', 'count_unique', 'css_granular_unique', 'count_granular_unique']:
                     # Check if column exists and can be converted to float
                     if col in df_copy.columns:
                         try:
@@ -216,7 +260,6 @@ class d:
                         except Exception as e:
                             raise ValueError(f"Error converting column '{col}' to numeric: {e}")
 
-
             agg_results = []
             css_results = []
             for agg_func in agg_funcs:
@@ -224,14 +267,28 @@ class d:
                 new_col_name = f'{col}_{func}'
                 df_copy[new_col_name] = self.df[col]
 
-                if func == 'css':
+                if func in ['css', 'css_unique', 'css_granular_unique']:
+                    if func == 'css':
+                        css_func = css
+                    elif func == 'css_unique':
+                        css_func = css_unique
+                    else:
+                        css_func = css_granular_unique
+
                     df_pandas_copy = df_copy.compute()
-                    css_grouped_pandas_step = df_pandas_copy.groupby(target_cols)[new_col_name].apply(css).reset_index()
+                    css_grouped_pandas_step = df_pandas_copy.groupby(target_cols)[new_col_name].apply(css_func).reset_index()
                     css_results.append(css_grouped_pandas_step)
                     continue
 
-                # Use .agg() method instead of direct aggregation functions
-                result = df_copy.groupby(target_cols)[new_col_name].agg({new_col_name: func}).reset_index()
+                if func == 'count_unique':
+                    result = df_copy.groupby(target_cols)[new_col_name].nunique().reset_index()
+                elif func == 'count_granular_unique':
+                    df_pandas_copy = df_copy.compute()
+                    result = df_pandas_copy.groupby(target_cols)[new_col_name].apply(count_granular_unique).reset_index()
+                    result.columns = target_cols + [new_col_name]
+                else:
+                    # Use .agg() method instead of direct aggregation functions
+                    result = df_copy.groupby(target_cols)[new_col_name].agg({new_col_name: func}).reset_index()
                 agg_results.append(result)
 
             if agg_results:
@@ -306,5 +363,21 @@ class d:
                     print(f"{sub_branch}{sub_branch_end} {method}: {description}")
 
         gc.collect()
+        return self
+
+    def rtc(self, columns_to_retain):
+        """TINKER::[d.rtc(['column1','column2'])] Retain columns specified and drop the rest."""
+        if not isinstance(columns_to_retain, list):
+            raise ValueError("columns_to_retain should be a list of column names.")
+        self.df = self.df[columns_to_retain]
+        return self
+
+    def mad(self, other_d, column_name):
+        """MASK::[d.mad(mask_d_instance, 'column7')] Mask against DataFrame, retaining only rows with common column values. Only rows where for the mutual column 7, values exist in mask_d_instance, will be retained"""
+        if not isinstance(other_d, d):
+            raise ValueError("other_d should be an instance of the class d.")
+        if column_name not in self.df.columns or column_name not in other_d.df.columns:
+            raise ValueError("The specified column must exist in both DataFrames.")
+        self.df = self.df.merge(other_d.df[[column_name]].drop_duplicates(), on=column_name, how='inner')
         return self
 
