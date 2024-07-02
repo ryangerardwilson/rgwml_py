@@ -140,6 +140,112 @@ class p:
         gc.collect()
         return self
 
+    def dbq(self, preset_name, db_or_dataset_name, query, show_all_rows=True):
+        """Execute a query on the specified database and print the results if it returns data."""
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == preset_name), None)
+
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {preset_name}")
+
+        # Override the database name
+        db_preset['database'] = db_or_dataset_name
+
+        db_type = db_preset['db_type']
+
+        if db_type == 'mssql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with pymssql.connect(server=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    if cursor.description:
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        df = pd.DataFrame(rows, columns=columns)
+                        if not show_all_rows:
+                            df = df.head()  # Show only the first few rows
+                        print(df)
+                    else:
+                        conn.commit()
+
+        elif db_type == 'mysql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    if cursor.description:
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        df = pd.DataFrame(rows, columns=columns)
+                        if not show_all_rows:
+                            df = df.head()  # Show only the first few rows
+                        print(df)
+                    else:
+                        conn.commit()
+                    # Fetch all remaining results to clear the cursor
+                    while cursor.nextset():
+                        pass
+
+        elif db_type == 'clickhouse':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            rows = client.execute(query)
+            if rows:
+                columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+                columns = [row[0] for row in client.execute(columns_query)]
+                df = pd.DataFrame(rows, columns=columns)
+                if not show_all_rows:
+                    df = df.head()  # Show only the first few rows
+                print(df)
+
+        elif db_type == 'google_big_query':
+            json_file_path = db_preset['json_file_path']
+            project_id = db_preset['project_id']
+
+            credentials = service_account.Credentials.from_service_account_file(json_file_path)
+            client = bigquery.Client(credentials=credentials, project=project_id)
+
+            query_job = client.query(query)
+            result = query_job.result()
+            if query.strip().lower().startswith("select"):
+                df = result.to_dataframe()
+                if not show_all_rows:
+                    df = df.head()  # Show only the first few rows
+                print(df)
+            else:
+                client.query(query).result()  # Executes the query without returning a DataFrame
+
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        gc.collect()
+        return self
+
     def dbct(self, db_preset_name, db_name, table_name, columns_str, print_query=False):
         """DATABASE::[d.dbct('preset_name', 'db_name', 'your_table', 'Column1, Column2, Column3[VARCHAR(1000)]', print_query=False)] Create table."""
         def locate_config_file(filename="rgwml.config"):
@@ -527,156 +633,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     print(insert_query)
                 data = [tuple(x) for x in self.df.to_numpy()]
                 cursor.executemany(insert_query, data)
-                conn.commit()
-
-            finally:
-                cursor.close()
-                gc.collect()
-
-        return self
-
-    def dbct(self, db_preset_name, table_name, columns_str, print_query=False):
-        """DATABASE::[d.dbct('preset_name', 'your_table', 'Column1, Column2, Column3[VARCHAR(1000)]', print_query=False)] Create table."""
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-
-        # Find the matching db_preset
-        db_presets = config.get('db_presets', [])
-        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
-        if not db_preset:
-            raise ValueError(f"No matching db_preset found for {db_preset_name}")
-
-        db_type = db_preset['db_type']
-        if db_type != 'mysql':
-            raise ValueError(f"Unsupported db_type for this method: {db_type}")
-
-        host = db_preset['host']
-        username = db_preset['username']
-        password = db_preset['password']
-        database = db_preset.get('database', '')
-
-        # Process columns
-        columns = columns_str.split(',')
-        columns = [col.strip() for col in columns]
-        processed_columns = []
-        for col in columns:
-            if '[' in col and ']' in col:
-                col_name, col_type = col.split('[')
-                col_type = col_type.strip(']')
-                processed_columns.append(f"`{col_name.strip()}` {col_type}")
-            else:
-                processed_columns.append(f"`{col}` VARCHAR(255)")
-
-        # Add id, created_at, and updated_at columns
-        processed_columns.insert(0, "`id` INT AUTO_INCREMENT PRIMARY KEY")
-        processed_columns.append("`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-        processed_columns.append("`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-
-        create_query = f"CREATE TABLE `{table_name}` ({', '.join(processed_columns)})"
-
-        # Connect to the database
-        with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
-            cursor = conn.cursor()
-
-            try:
-                if print_query:
-                    print(create_query)
-                cursor.execute(create_query)
-                conn.commit()
-
-            finally:
-                cursor.close()
-                gc.collect()
-
-        return self
-
-    def dbrct(self, db_preset_name, table_name, columns_str, print_query=False):
-        """DATABASE::[d.dbrct('preset_name', 'your_table', 'Column1, Column2, Column3[VARCHAR(1000)]', print_query=False)] Recreate table. Deletes existing table and recreates it."""
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-
-        # Find the matching db_preset
-        db_presets = config.get('db_presets', [])
-        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
-        if not db_preset:
-            raise ValueError(f"No matching db_preset found for {db_preset_name}")
-
-        db_type = db_preset['db_type']
-        if db_type != 'mysql':
-            raise ValueError(f"Unsupported db_type for this method: {db_type}")
-
-        host = db_preset['host']
-        username = db_preset['username']
-        password = db_preset['password']
-        database = db_preset.get('database', '')
-
-        # Process columns
-        columns = columns_str.split(',')
-        columns = [col.strip() for col in columns]
-        processed_columns = []
-        for col in columns:
-            if '[' in col and ']' in col:
-                col_name, col_type = col.split('[')
-                col_type = col_type.strip(']')
-                processed_columns.append(f"`{col_name.strip()}` {col_type}")
-            else:
-                processed_columns.append(f"`{col}` VARCHAR(255)")
-
-        # Add id, created_at, and updated_at columns
-        processed_columns.insert(0, "`id` INT AUTO_INCREMENT PRIMARY KEY")
-        processed_columns.append("`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-        processed_columns.append("`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-
-        create_query = f"CREATE TABLE `{table_name}` ({', '.join(processed_columns)})"
-
-        # Connect to the database
-        with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
-            cursor = conn.cursor()
-
-            try:
-                # Drop the existing table
-                drop_query = f"DROP TABLE IF EXISTS `{table_name}`"
-                if print_query:
-                    print(drop_query)
-                cursor.execute(drop_query)
-                conn.commit()
-
-                # Create the table
-                if print_query:
-                    print(create_query)
-                cursor.execute(create_query)
                 conn.commit()
 
             finally:
