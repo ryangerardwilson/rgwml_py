@@ -141,7 +141,7 @@ class p:
         return self
 
     def dbq(self, preset_name, db_or_dataset_name, query, show_all_rows=True):
-        """Execute a query on the specified database and print the results if it returns data."""
+        """DATABASE::[d.dbq('preset_name', 'db_or_dataset_name', 'YOUR QUERY')] Execute a query on the specified database and print the results if it returns data."""
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
