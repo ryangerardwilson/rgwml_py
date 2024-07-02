@@ -140,6 +140,221 @@ class p:
         gc.collect()
         return self
 
+    def dbq(self, db_preset_name, query):
+        """DATABASE::[d.dbq('preset_name','DESCRIBE your_table')] Database query. Executes a query on the database and prints the results. Returns reference to self."""
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Read the rgwml.config file from the Desktop
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+
+        if db_type == 'mssql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with pymssql.connect(server=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    if query.strip().lower().startswith("select"):
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        df = pd.DataFrame(rows, columns=columns)
+                        print(df)
+                    else:
+                        conn.commit()
+        elif db_type == 'mysql':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    if query.strip().lower().startswith("select") or query.strip().lower().startswith("show"):
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
+                        df = pd.DataFrame(rows, columns=columns)
+                        print(df)
+                    else:
+                        conn.commit()
+        elif db_type == 'clickhouse':
+            host = db_preset['host']
+            username = db_preset['username']
+            password = db_preset['password']
+            database = db_preset.get('database', '')
+
+            client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            if query.strip().lower().startswith("select"):
+                rows = client.execute(query)
+                columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+                columns = [row[0] for row in client.execute(columns_query)]
+                df = pd.DataFrame(rows, columns=columns)
+                print(df)
+            else:
+                client.execute(query)
+        elif db_type == 'google_big_query':
+            json_file_path = db_preset['json_file_path']
+            project_id = db_preset['project_id']
+
+            bigquery_presets = config.get('google_big_query_presets', [])
+            if not db_preset:
+                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
+
+            credentials = service_account.Credentials.from_service_account_file(json_file_path)
+            client = bigquery.Client(credentials=credentials, project=project_id)
+
+            # Run the query and get the results as a DataFrame
+            query_job = client.query(query)
+            result = query_job.result()
+
+            # Convert the result to a pandas DataFrame
+            df = result.to_dataframe()
+            print(df)
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        gc.collect()
+        return self
+
+    def dbh(self, db_type):
+        """DATABASE::[d.dbh('mysql')] Database help. Prints the syntax to show all tables, describe tables, show column data types, and select the most recent 100 records of any table."""
+        if db_type == 'mssql':
+            help_text = """
+-- Show all databases
+SELECT name FROM sys.databases;
+
+-- Show all tables
+SELECT * FROM INFORMATION_SCHEMA.TABLES;
+
+-- Describe a table
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'your_table_name';
+
+-- Show column data types
+SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'your_table_name';
+
+-- Select the most recent 100 records
+SELECT TOP 100 * FROM your_table_name ORDER BY your_date_column DESC;
+            """
+        elif db_type == 'mysql':
+            help_text = """
+-- DATABASE COMMANDS
+
+    -- Show all databases
+    SHOW DATABASES;
+
+    -- Create a new database
+    CREATE DATABASE new_database_name;
+
+    -- Delete a database
+    DROP DATABASE database_name;
+
+    -- Rename a database (MySQL does not support renaming databases directly. This workaround can be used)
+    CREATE DATABASE new_database_name; 
+    RENAME TABLE old_database_name.table1 TO new_database_name.table1; 
+    RENAME TABLE old_database_name.table2 TO new_database_name.table2; 
+    DROP DATABASE old_database_name;
+
+-- TABLE COMMANDS
+
+    -- Show all tables
+    SHOW TABLES;
+
+    -- Describe a table
+    DESCRIBE your_table_name;
+
+    -- Show column data types
+    SELECT COLUMN_NAME, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'your_table_name';
+
+    -- Select the most recent 100 records
+    SELECT * FROM your_table_name ORDER BY your_date_column DESC LIMIT 100;
+
+    -- Rename a table
+    ALTER TABLE old_table_name RENAME TO new_table_name;
+
+    -- Remove a column from a table
+    ALTER TABLE your_table_name DROP COLUMN column_name;
+
+    -- Change the order of columns (requires recreating the table)
+    CREATE TABLE new_table_name AS SELECT column1, column2, column3 FROM old_table_name;
+
+    -- Change the data type of a column
+    ALTER TABLE your_table_name MODIFY COLUMN column_name new_data_type;
+
+    -- Create a new table
+    CREATE TABLE new_table_name (id INT AUTO_INCREMENT PRIMARY KEY, column1 VARCHAR(255), column2 VARCHAR(255), column3 VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+
+    -- Update a record in a table
+    UPDATE your_table_name SET column1 = value1, column2 = value2 WHERE condition;
+
+    -- Delete a record from a table
+    DELETE FROM your_table_name WHERE condition;
+
+    -- Delete a table
+    DROP TABLE your_table_name;
+            """
+        elif db_type == 'clickhouse':
+            help_text = """
+-- Show all databases
+SHOW DATABASES;
+
+-- Show all tables
+SHOW TABLES;
+
+-- Describe a table
+DESCRIBE TABLE your_table_name;
+
+-- Show column data types
+SELECT name, type FROM system.columns WHERE table = 'your_table_name';
+
+-- Select the most recent 100 records
+SELECT * FROM your_table_name ORDER BY your_date_column DESC LIMIT 100;
+            """
+        elif db_type == 'google_big_query':
+            help_text = """
+-- Show all datasets
+SHOW SCHEMAS;
+
+-- Show all tables
+SELECT * FROM `project_id.dataset_id.INFORMATION_SCHEMA.TABLES`;
+
+-- Describe a table
+SELECT column_name, data_type, is_nullable FROM `project_id.dataset_id.INFORMATION_SCHEMA.COLUMNS` WHERE table_name = 'your_table_name';
+
+-- Show column data types
+SELECT column_name, data_type FROM `project_id.dataset_id.INFORMATION_SCHEMA.COLUMNS` WHERE table_name = 'your_table_name';
+
+-- Select the most recent 100 records
+SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column DESC LIMIT 100;
+            """
+        else:
+            raise ValueError(f"Unsupported db_type: {db_type}")
+
+        print(help_text)
+        return self
 
     def fcq(self, db_preset_name, query, chunk_size):
         """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
