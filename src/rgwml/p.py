@@ -786,8 +786,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 rows_to_update = merge_df[merge_df['_merge'] == 'both']
                 rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
 
-                print("Rows to update:", rows_to_update)
-                print("Rows to insert:", rows_to_insert)
+                #print("Rows to update:", rows_to_update)
+                #print("Rows to insert:", rows_to_insert)
 
                 # Prepare update queries
                 for _, row in rows_to_update.iterrows():
