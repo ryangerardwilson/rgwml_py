@@ -450,6 +450,61 @@ def test_pg_4():
     # Use the g method to perform the group-by and aggregations
     d.g(['group'], ['column1::sum', 'column2::css_granular_unique', 'column2::count_granular_unique'])
 
+def test_dbq_1():
+    d = r.p()
+    d.dbq('happy_sudo','test','DROP DATABASE test')
+    d.dbq('happy_sudo', 'happy_main', 'SHOW DATABASES')
+    d.dbq('happy_sudo', 'happy_main', 'CREATE DATABASE test')
+    d.dbq('happy_sudo', 'happy_main', 'SHOW DATABASES')
+
+def test_dbct():
+    d = r.p()
+    d.dbct('happy_sudo','test','test_table','Column1, Column2, Column3[VARCHAR(1000)]')
+    d.dbq('happy_sudo', 'test', 'SHOW TABLES')
+    d.dbq('happy_sudo', 'test', 'DESCRIBE test.test_table')
+
+def test_dbrct():
+    d = r.p()
+    d.dbrct('happy_sudo','test','test_table','Column7, Column9, Column3[VARCHAR(900)]')
+    d.dbq('happy_sudo', 'test', 'SHOW TABLES')
+    d.dbq('happy_sudo', 'test', 'DESCRIBE test.test_table')
+
+def test_dbi():
+    d = r.p()
+    d.frd(['Column7','Column9','Column3'],[[1,2,3],[4,5,6],[7,8,9]])
+    d.dbi('happy_sudo', 'test','test_table', insert_columns=['Column7','Column9','Column3'])
+    d.frd(['Column7','Column9','Column3'],[[10,11,12],[13,14,15],[16,17,18]])
+    d.dbi('happy_sudo', 'test','test_table', insert_columns=['Column7','Column9','Column3'])
+    d.frd(['Column7','Column9','Column3'],[[1,2,3],[4,5,6],[7,8,9]])
+    d.dbi('happy_sudo', 'test','test_table', insert_columns=['Column7','Column9','Column3'])
+    d.fq('happy_sudo','SELECT * FROM test.test_table')
+
+def test_dbiu():
+    d = r.p()
+    d.frd(['Column7','Column9','Column3'],[[1,2,3],[4,5,6],[7,8,9]])
+    d.dbiu('happy_sudo', 'test','test_table', unique_columns=['Column7','Column9','Column3'], insert_columns=['Column7','Column9','Column3'])
+    d.frd(['Column7','Column9','Column3'],[[10,11,12],[13,14,15],[16,17,18]])
+    d.dbiu('happy_sudo', 'test','test_table', unique_columns=['Column7','Column9','Column3'], insert_columns=['Column7','Column9','Column3'])
+    d.fq('happy_sudo','SELECT * FROM test.test_table')
+
+def test_dbtai():
+    d = r.p()
+    d.frd(['Column7','Column9','Column3'],[[1,2,3],[4,5,6],[7,8,9]])
+    d.dbtai('happy_sudo', 'test','test_table', ['Column7','Column9','Column3'])
+    d.fq('happy_sudo','SELECT * FROM test.test_table')
+
+def test_dbuoi():
+    d = r.p()
+    d.frd(['Column7','Column9','Column3'],[[1,2,3],[4,5,6],[7,8,9]])
+    d.dbtai('happy_sudo', 'test','test_table', ['Column7','Column9','Column3'])
+    d.fq('happy_sudo','SELECT * FROM test.test_table')
+
+    d = r.p()
+    d.frd(['Column7','Column9','Column3'],[[1,2,33333],[10,11,12],[13,14,15]])
+    d.dbuoi('happy_sudo', 'test','test_table', update_where_columns=['Column7','Column9'], update_at_column_names=['Column3'])
+    d.fq('happy_sudo','SELECT * FROM test.test_table')
+
+
 
 # Call the test method
 #test_axlinr()
@@ -466,8 +521,17 @@ def test_pg_4():
 #test_pnfc()
 #test_pnfl()
 #test_ser()
-test_dg()
-test_dg_2()
-test_dg_3()
-test_dg_4()
+#test_dg()
+#test_dg_2()
+#test_dg_3()
+#test_dg_4()
 #test_pg_4()
+
+#test_dbq_1()
+#test_dbct()
+#test_dbrct()
+#test_dbi()
+#test_dbiu()
+#test_dbtai()
+test_dbuoi()
+

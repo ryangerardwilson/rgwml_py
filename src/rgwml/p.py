@@ -510,8 +510,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(help_text)
         return self
 
-    def dbtai(self, db_preset_name, table_name, insert_columns=None, print_query=False):
-        """DATABASE::[d.dbtai('preset_name','your_table', insert_columns=None, print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
+    def dbi(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbi('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3']] Simply insert of all rows in the DataFrame into the specified table."""
+
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -544,16 +545,160 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
-        database = db_preset.get('database', '')
 
         # Determine columns to insert
         if insert_columns is None:
             insert_columns = self.df.columns.tolist()
         else:
-            insert_columns = [col.strip() for col in insert_columns.split(',')]
+            insert_columns = [col.strip() for col in insert_columns]
 
         # Connect to the database
-        with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+        with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
+            cursor = conn.cursor()
+
+            try:
+                # Insert data into the table
+                cols = ", ".join(insert_columns)
+                insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
+                if print_query:
+                    print(insert_query)
+                data = self.df[insert_columns].values.tolist()
+                cursor.executemany(insert_query, data)
+                conn.commit()
+
+            finally:
+                cursor.close()
+                gc.collect()
+
+        return self
+
+
+
+    def dbiu(self, db_preset_name, db_name, table_name, unique_columns, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbiu('preset_name', 'db_name', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Read the rgwml.config file from the Desktop
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        if db_type != 'mysql':
+            raise ValueError(f"Unsupported db_type for this method: {db_type}")
+
+        host = db_preset['host']
+        username = db_preset['username']
+        password = db_preset['password']
+
+        # Determine columns to insert
+        if insert_columns is None:
+            insert_columns = self.df.columns.tolist()
+        else:
+            insert_columns = [col.strip() for col in insert_columns]
+
+        # Connect to the database
+        with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
+            cursor = conn.cursor()
+
+            try:
+                # Fetch existing data from the table
+                select_query = f"SELECT {', '.join(unique_columns)} FROM {table_name}"
+                if print_query:
+                    print(select_query)
+                cursor.execute(select_query)
+                existing_data = cursor.fetchall()
+                existing_df = pd.DataFrame(existing_data, columns=unique_columns)
+
+                # Ensure column types match for merging
+                for col in unique_columns:
+                    self.df[col] = self.df[col].astype(str)
+                    existing_df[col] = existing_df[col].astype(str)
+
+                # Determine the unique rows to insert
+                new_data_df = self.df[insert_columns]
+                merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
+                unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
+
+                # Insert unique new data into the table
+                if not unique_new_data_df.empty:
+                    cols = ", ".join(insert_columns)
+                    insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
+                    if print_query:
+                        print(insert_query)
+                    data = unique_new_data_df.values.tolist()
+                    cursor.executemany(insert_query, data)
+                    conn.commit()
+
+            finally:
+                cursor.close()
+                gc.collect()
+
+        return self
+
+    def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Read the rgwml.config file from the Desktop
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        if db_type != 'mysql':
+            raise ValueError(f"Unsupported db_type for this method: {db_type}")
+
+        host = db_preset['host']
+        username = db_preset['username']
+        password = db_preset['password']
+
+        # Determine columns to insert
+        if insert_columns is None:
+            insert_columns = self.df.columns.tolist()
+        else:
+            insert_columns = [col.strip() for col in insert_columns]
+
+        # Connect to the database
+        with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
 
             try:
@@ -579,8 +724,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
-    def dbuoi(self, db_preset_name, table_name, update_where_columns, update_at_column_names, print_query=False):
-        """DATABASE::[d.dbuoi('preset_name', 'your_table', ['where_column1', 'where_column2'], ['update_column1', 'update_column2'], print_query=False)] Update or insert. Updates rows based on columns, inserts if no update occurs."""
+    def dbuoi(self, db_preset_name, db_name, table_name, update_where_columns, update_at_column_names, print_query=False):
+        """DATABASE::[d.dbuoi('preset_name', 'db_name', 'your_table', ['where_column1', 'where_column2'], ['update_column1', 'update_column2'], print_query=False)] Update or insert. Updates rows based on columns, inserts if no update occurs."""
+
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -613,26 +759,55 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
-        database = db_preset.get('database', '')
 
         # Connect to the database
-        with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
+        with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
 
             try:
-                cols = list(self.df.columns)
-                update_cols = [col for col in cols if col not in update_where_columns]
-                update_set_clause = ", ".join([f"{col} = VALUES({col})" for col in update_cols])
-                update_at_clause = ", ".join([f"{col} = CURRENT_TIMESTAMP" for col in update_at_column_names])
-                insert_query = f"""
-                INSERT INTO {table_name} ({", ".join(cols)})
-                VALUES ({", ".join(['%s'] * len(cols))})
-                ON DUPLICATE KEY UPDATE {update_set_clause}, {update_at_clause}
-                """
+                # Fetch existing data from the table
+                select_query = f"SELECT * FROM {table_name}"
                 if print_query:
-                    print(insert_query)
-                data = [tuple(x) for x in self.df.to_numpy()]
-                cursor.executemany(insert_query, data)
+                    print(select_query)
+                cursor.execute(select_query)
+                existing_data = cursor.fetchall()
+                existing_columns = [desc[0] for desc in cursor.description]
+                existing_df = pd.DataFrame(existing_data, columns=existing_columns)
+
+                # Ensure column types match for merging
+                for col in update_where_columns:
+                    self.df[col] = self.df[col].astype(str)
+                    existing_df[col] = existing_df[col].astype(str)
+
+                # Merge new data with existing data
+                merge_df = pd.merge(self.df, existing_df, on=update_where_columns, how='left', suffixes=('', '_existing'), indicator=True)
+
+                # Determine rows to update and insert
+                rows_to_update = merge_df[merge_df['_merge'] == 'both']
+                rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
+
+                print("Rows to update:", rows_to_update)
+                print("Rows to insert:", rows_to_insert)
+
+                # Prepare update queries
+                for _, row in rows_to_update.iterrows():
+                    set_clause = ", ".join([f"{col} = %s" for col in update_at_column_names])
+                    where_clause = " AND ".join([f"{col} = %s" for col in update_where_columns])
+                    update_query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+                    update_values = [row[f"{col}"] for col in update_at_column_names] + [row[col] for col in update_where_columns]
+                    if print_query:
+                        print(update_query, update_values)
+                    cursor.execute(update_query, update_values)
+
+                # Prepare insert queries
+                if not rows_to_insert.empty:
+                    cols = ", ".join(self.df.columns)
+                    insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(self.df.columns))})"
+                    if print_query:
+                        print(insert_query)
+                    insert_values = rows_to_insert[self.df.columns].values.tolist()
+                    cursor.executemany(insert_query, insert_values)
+
                 conn.commit()
 
             finally:
@@ -640,7 +815,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 gc.collect()
 
         return self
-
 
     def fcq(self, db_preset_name, query, chunk_size):
         """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
