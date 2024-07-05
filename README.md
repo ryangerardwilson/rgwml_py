@@ -301,122 +301,126 @@ Instantiate this class by crm = r.f()
     ENVIRONMENT SETUP
     1. Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager/current)
     2. Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
+
+    BACKEND CONFIG
+    1. Ensure that queries in the read routes return columns in the same order as a simple SELECT * FROM `your_table` query
+    2. Keep the `read_routes` queries simple by avoiding adding columns from other tables, and returning only the columns present in the corresponding modal. 
+
+    FRONTEND CONFIG
+    1. For simplicity, keep the order of the READ permissions the same as the order of a simple SELECT * FROM `your_table` query with respect to the concerned modal.
+
     """
 
-    crm.ser(
-        project_name= 'my_custom_crm',
-        new_db_name= 'custom_crm_db',
-        db_preset_name='standard_mysql',
-        vm_preset_name='default_gcs_vm',
-        modal_backend_config={
-            "sudo": {
-                "username": "admin",
-                "password": "admin123"
+    project_name = "crm"
+    db_name = "crm"
+
+    modal_backend_config = {
+        "sudo": {
+            "username": "sudo",
+            "password": "sudo"
             },
-            "modals": {
-                "customer_support_tickets": "ticket_id,customer_name,mobile,issue,status,priority,action_taken,follow_up_date",
-                "vip_customers": "customer_id,customer_name,mobile,issue,priority,status,action_taken,follow_up_date",
-                "onboarding_calls": "call_id,customer_name,mobile,status,issue,action_taken"
-            }
-        },
-        modal_frontend_config={
-            "customer_support_tickets": {
-                "options": {
-                    "status": ["Open", "In_Progress", "Resolved", "Closed"],
-                    "priority": ["Low", "Medium", "High"],
-                    "issue": ["Billing_Issue", "Technical_Support", "Account_Management", "Other"]
-                },
-                "conditional_options": {
-                    "priority": [
-                        {
-                            "condition": "status == Open",
-                            "options": ["Low", "Medium", "High"]
-                        },
-                        {
-                            "condition": "status == In_Progress",
-                            "options": ["Medium", "High"]
-                        },
-                        {
-                            "condition": "status == Resolved",
-                            "options": ["Low"]
-                        }
+        "modals": {
+            "social_media_escalations": {
+                "columns": "url[VARCHAR(2048)],post_text,post_author,star_rating,forum,mobile,ai_sentiment,ai_category,ai_author_type,reach_out_method,action_taken,comment[VARCHAR(1000)],follow_up_date",
+                "read_routes": [
+                    {"a-most-recent-500": "SELECT id, user_id, url, post_text, post_author, star_rating, forum, mobile, ai_sentiment, ai_category, ai_author_type, reach_out_method, action_taken, comment, follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM cx_crm.social_media_escalations ORDER BY id DESC LIMIT 500""}
                     ]
                 },
-                "scopes": {
-                    "create": True,
-                    "read": ["ticket_id", "customer_name", "mobile", "issue", "status", "priority", "action_taken", "follow_up_date", "created_at"],
-                    "update": ["customer_name", "mobile", "issue", "status", "priority", "action_taken", "follow_up_date"],
-                    "delete": True
+            "welcome_calls": {
+                "columns": "mobile,name,city,nasid,device_id,plan_name,plan_amount,payment_mode,internet_state,customer_tenure_days,last_ping_time,device_type,data_usage_rng,priority,disposition,issue,sub_issue,alternate_number,comment[VARCHAR(1000)]",
+                "read_routes": [
+                    {"a-unprosecuted": "SELECT id, user_id, mobile, name, city, nasid, device_id, plan_name, plan_amount, payment_mode, internet_state, customer_tenure_days, last_ping_time, device_type, data_usage_rng, priority, disposition, issue, sub_issue, alternate_number, comment, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM cx_crm.welcome_calls WHERE disposition != 'wc_completed' OR disposition IS NULL ORDER BY priority ASC"},
+                    {"b-prosecuted": "SELECT id, user_id, mobile, name, city, nasid, device_id, plan_name, plan_amount, payment_mode, internet_state, customer_tenure_days, last_ping_time, device_type, data_usage_rng, priority, disposition, issue, sub_issue, alternate_number, comment, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM cx_crm.welcome_calls WHERE disposition = 'wc_completed' ORDER BY updated_at DESC"}
+                    ]
                 },
-                "validation_rules": {
-                    "ticket_id": ["REQUIRED"],
-                    "customer_name": ["REQUIRED"],
-                    "mobile": ["REQUIRED"],
-                    "issue": ["REQUIRED"],
-                    "status": ["REQUIRED"],
-                    "priority": ["REQUIRED"],
-                    "action_taken": ["REQUIRED"],
-                    "follow_up_date": ["REQUIRED", "IS_AFTER_TODAY"]
-                },
-                "ai_quality_checks": {
-                    "action_taken": ["must describe a meaningful step taken to address the customer's issue"]
-                }
+            }
+        }
+
+
+    modal_frontend_config = {
+        "social_media_escalations": {
+            "options": {
+                "forum": ["playstore", "google_review", "freshdesk", "mail_to_management", "facebook", "instagram", "twitter","linkedin","other"],
+                "reach_out_method": ["post", "comment", "dm","other"],
+                "action_taken": ["no_customer_detail_found", "resolved", "post_removed_and_resolved", "other"]
             },
-            "vip_customers": {
-                "options": {
-                    "status": ["Open", "In_Progress", "Resolved", "Closed"],
-                    "priority": ["Medium", "High"],
-                    "issue": ["Billing_Issue", "Technical_Support", "Account_Management", "Other"]
-                },
-                "scopes": {
-                    "create": True,
-                    "read": ["customer_id", "customer_name", "mobile", "issue", "priority", "status", "action_taken", "follow_up_date", "created_at"],
-                    "update": ["issue", "status", "action_taken", "follow_up_date"],
-                    "delete": False
-                },
-                "validation_rules": {
-                    "customer_id": ["REQUIRED"],
-                    "customer_name": ["REQUIRED"],
-                    "mobile": ["REQUIRED","IS_INDIAN_MOBILE_NUMBER"],
-                    "issue": ["REQUIRED"],
-                    "status": ["REQUIRED"],
-                    "priority": ["REQUIRED"],
-                    "action_taken": ["REQUIRED"],
-                    "follow_up_date": ["REQUIRED", "IS_AFTER_TODAY"]
-                },
-                "ai_quality_checks": {
-                    "action_taken": ["must describe a meaningful step taken to address the VIP customer's issue"]
-                }
+            "scopes": {
+                "create": True,
+                "read": ["username","id","url","post_text","post_author","star_rating","forum","mobile","ai_sentiment","ai_category","ai_author_type","reach_out_method","action_taken","comment","follow_up_date","created_at","updated_at"],
+                "update": ["url","post_text","post_author","star_rating","forum","mobile","reach_out_method","action_taken","comment","follow_up_date"],
+                "delete": True
             },
-            "onboarding_calls": {
-                "options": {
-                    "status": ["Completed", "Pending"],
-                    "issue": ["General_Inquiry", "Technical_Support", "Billing_Issue", "Other"]
-                },
-                "scopes": {
-                    "create": True,
-                    "read": ["call_id", "customer_name", "mobile", "issue", "status", "action_taken", "created_at"],
-                    "update": ["issue", "status", "action_taken"],
-                    "delete": False
-                },
-                "validation_rules": {
-                    "call_id": ["REQUIRED"],
-                    "customer_name": ["REQUIRED"],
-                    "mobile": ["REQUIRED"],
-                    "issue": ["REQUIRED"],
-                    "status": ["REQUIRED"],
-                    "action_taken": ["REQUIRED"]
-                },
-                "ai_quality_checks": {
-                    "action_taken": ["must describe a meaningful conversation with the customer during the onboarding call"]
-                }
+            "validation_rules": {
+                "post_text": ["REQUIRED"],
+                "post_author": ["REQUIRED"],
+                "forum": ["REQUIRED"],
+                "reach_out_method": ["REQUIRED"],
+                "action_taken": ["REQUIRED"],
+                "mobile": ["IS_INDIAN_MOBILE_NUMBER"],
+                "follow_up_date": ["IS_AFTER_TODAY"]
             }
         },
-        backend_vm_deploy_path='/home/user/Apps/custom_crm_backend',
-        backend_domain='my_custom_crm_api.example.com',
-        frontend_local_deploy_path='/home/user/Apps/custom_crm_frontend',
-        frontend_domain='my_custom_crm.example.com',
+        "welcome_calls": {
+            "options": {
+                "disposition": ["wc_completed", "dnp", "asked_to_call_back", "call_disconnected_in_between"],
+                "issue": ["no_issue", "internet_issue", "misbehave", "not_proper_install", "other_issue"]
+            },
+            "conditional_options": {
+                "sub_issue": [
+                    {
+                        "condition": "issue == no_issue",
+                        "options": ["happy","neutral","unhappy"]
+                    },
+                    {
+                        "condition": "issue == internet_issue",
+                        "options": ["slow_speed","range","frequent_disconnect","internet_down","slow_speed_and_frequent_disconnect","other"]
+                    },
+                    {
+                        "condition": "issue == misbehave",
+                        "options": ["rude_behaviour","fake_installation","disintermediation","false_promises","took_extra_cash","demanded_extra_cash","other"]
+                    },
+                    {
+                        "condition": "issue == not_proper_install",
+                        "options": ["untidy_wiring","wrong_positioning","other"]
+                    },
+                    {
+                        "condition": "issue == other_issue",
+                        "options": ["other_issue"]
+                    }
+                ]
+            },
+            "scopes": {
+                "create": False,
+                "read": ["id","user_id","mobile","name","device_id","plan_name","plan_amount","internet_state","customer_tenure_days","last_ping_time","device_type","data_usage_rng","priority","disposition","issue","sub_issue","alternate_number","comment","created_at","updated_at"],
+                "update": ["disposition","issue","sub_issue","alternate_number","comment"],
+                "delete": False
+            },
+            "validation_rules": {
+                "disposition": ["REQUIRED"],
+                "issue": ["REQUIRED"],
+                "sub_issue": ["REQUIRED"],
+                "alternate_number": ["IS_INDIAN_MOBILE_NUMBER"],
+                "comment": ["REQUIRED"],
+            },
+            "ai_quality_checks": {
+                "comment": ["the text should not be gibberish"]
+            },
+        }
+    }
+
+
+    crm = r.f()
+    crm.ser(
+        project_name= project_name,
+        new_db_name= db_name,
+        db_preset_name='your_rgwml_mysql_db_preset_name',
+        vm_preset_name='your_server_preset_name',
+        modal_backend_config=modal_backend_config,
+        modal_frontend_config=modal_frontend_config,
+        backend_vm_deploy_path='/path/to/deploy/on/your/vm',
+        backend_domain='your.backend-domain.com',
+        frontend_local_deploy_path='/path/on/your/local/machine/to/forge/frontend/assets',
+        frontend_domain='your.frontend-domain.com',
         open_ai_json_mode_model='gpt-3.5-turbo'
     )
-
 
