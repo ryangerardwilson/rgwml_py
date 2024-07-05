@@ -2,6 +2,7 @@ import requests
 import pymysql
 import subprocess
 import os
+import re
 import time
 import json
 import paramiko
@@ -95,6 +96,20 @@ def create_modal_table(config, modal_name, columns):
 
 
 def create_bottle_app(modal_map, config):
+
+    # Function to clean the column names
+    def clean_columns(columns_str):
+        # Remove data type references in square brackets
+        clean_columns = re.sub(r'\[.*?\]', '', columns_str)
+        # Remove extra whitespace and return the cleaned columns string
+        return clean_columns.replace(" ", "")
+
+    # Clean the columns in the modal_map
+    for modal, details in modal_map.items():
+        columns_str = details.get('columns', '')
+        clean_columns_str = clean_columns(columns_str)
+        modal_map[modal]['columns'] = clean_columns_str
+
     app_code = f"""
 import pymysql
 import json
@@ -154,24 +169,38 @@ def authenticate():
 
 @app.route('/create/<modal_name>', method=['OPTIONS', 'POST'])
 def create_entry(modal_name):
+
     if request.method == 'OPTIONS':
         return {{}}
 
     data = request.json
-    columns = modal_map[modal_name].split(",")
-    column_names = ", ".join(columns)
-    placeholders = ", ".join(["%s"] * len(columns))
-    values = [data.get(col) for col in columns]
+    if not data or 'user_id' not in data:
+        response.status = 400
+        return {{"error": "user_id is required in the request body"}}
+    try:
+        modal_details = modal_map.get(modal_name, {{}})
+        if not modal_details:
+            raise ValueError(f"Modal {{modal_name}} not found in modal_map")
 
-    conn = pymysql.connect(**config)
-    cursor = conn.cursor()
-    cursor.execute(f"INSERT INTO {{modal_name}} (user_id, {{column_names}}) VALUES (%s, {{placeholders}})", [data['user_id']] + values)
-    conn.commit()
-    cursor.close()
-    conn.close()
+        columns_str = modal_details.get('columns', '')
+        columns = columns_str.split(",")
 
-    log_operation(modal_name, data['user_id'], 'CREATE', {{"user_id": data['user_id'], **data}})
-    return {{"status": "success"}}
+        column_names = ", ".join(columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        values = [data.get(col) for col in columns]
+
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        cursor.execute(f"INSERT INTO {{modal_name}} (user_id, {{column_names}}) VALUES (%s, {{placeholders}})", [data['user_id']] + values)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        log_operation(modal_name, data['user_id'], 'CREATE', {{"user_id": data['user_id'], **data}})
+        return {{"status": "success"}}
+    except Exception as e:
+        print(f"Error creating entry: {{e}}")
+        response.status = 500
+        return {{"error": str(e)}}
 
 @app.route('/read/<modal_name>/<route_name>', method=['OPTIONS', 'GET'])
 def read_entries(modal_name, route_name):
@@ -313,34 +342,38 @@ def update_entry(modal_name, entry_id):
         return {{}}
 
     data = request.json
-    columns = modal_map[modal_name].split(",")
-    
-    # Remove columns that should not be updated
-    columns = [col for col in columns if col not in ['id', 'created_at', 'updated_at', 'user_id']]
+    modal_details = modal_map.get(modal_name, {{}})
+    if not modal_details:
+        response.status = 400
+        return {{"error": f"Modal {{modal_name}} not found in modal_map"}}
+
+    columns_str = modal_details.get('columns', '')
+    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'user_id']]
 
     # Construct the SET clause with placeholders for SQL parameters
     set_clause = ", ".join([f"{{col}} = %s" for col in columns])
     values = [data.get(col) for col in columns]
 
-    conn = pymysql.connect(**config)
-    cursor = conn.cursor()
-
     try:
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+
         # Fetch the old row for logging purposes
         cursor.execute(f"SELECT * FROM {{modal_name}} WHERE id = %s", [entry_id])
         old_row = cursor.fetchone()
-        print(old_row)
+        print(f"Old row: {{old_row}}")
 
         # Perform the update operation
         cursor.execute(f"UPDATE {{modal_name}} SET {{set_clause}} WHERE id = %s", values + [entry_id])
         conn.commit()
 
-        # Log the operation
         log_operation(modal_name, data['user_id'], 'UPDATE', {{"old": old_row, "new": data}})
 
         return {{"status": "success"}}
     except Exception as e:
         conn.rollback()
+        print(f"Error updating entry: {{e}}")
+        response.status = 500
         return {{"status": "error", "message": str(e)}}
     finally:
         cursor.close()
@@ -376,7 +409,6 @@ def log_operation(modal_name, user_id, operation_type, operation_details):
     with open("app.py", "w") as f:
         f.write(app_code)
 
-
 def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host):
 
     def get_dns_zone_id(domain):
@@ -385,7 +417,6 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         zones = response.json()
-        print(f"DNS zones retrieved: {zones}")  # Debugging line
         for zone in zones:
             if zone["name"] == domain:
                 return zone["id"]
@@ -405,11 +436,8 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if response.status_code == 422 and "conflicting zone" in response.json().get("errors", {}).get("name", [])[0]:
-                print(f"DNS zone for {domain} already exists. Skipping creation.")
                 return get_dns_zone_id(domain)
             else:
-                print(f"Error creating DNS zone: {e}")
-                print(response.content)
                 raise
         return response.json()["id"]
 
@@ -419,6 +447,12 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
+
+    def delete_dns_record(zone_id, record_id):
+        url = f"https://api.netlify.com/api/v1/dns_zones/{zone_id}/dns_records/{record_id}"
+        headers = {"Authorization": f"Bearer {netlify_key}"}
+        response = requests.delete(url, headers=headers)
+        response.raise_for_status()
 
     def create_dns_record(zone_id, hostname, ip_address):
         url = f"https://api.netlify.com/api/v1/dns_zones/{zone_id}/dns_records"
@@ -438,35 +472,44 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
 
     parent_domain = ".".join(backend_domain.split('.')[-2:])
     subdomain = backend_domain.replace(f".{parent_domain}", "")
+    full_domain = backend_domain  # Store full domain for precise matching
+
+    print(f"Parent domain: {parent_domain}")
+    print(f"Subdomain: {subdomain}")
+    print(f"Full domain: {full_domain}")
 
     zone_id = get_dns_zone_id(parent_domain)
-    print(f"Initial DNS zone ID: {zone_id}")  # Debugging line
     if zone_id is None:
         zone_id = create_dns_zone(parent_domain)
-        print(f"DNS zone ID after creation attempt: {zone_id}")  # Debugging line
         if zone_id is None:
-            print("Retrying to fetch DNS zone ID after creation attempt.")
             time.sleep(5)  # Adding a short delay before retrying
             zone_id = get_dns_zone_id(parent_domain)
-            print(f"Fetched DNS zone ID after retry: {zone_id}")  # Debugging line
         if zone_id is None:
             raise ValueError(f"Unable to retrieve DNS zone ID for {parent_domain} after creation attempt.")
-        else:
-            print(f"Created DNS zone for {parent_domain} with ID: {zone_id}")
+    
+    print(f"DNS Zone ID: {zone_id}")
 
     dns_records = get_dns_records(zone_id)
-    print(f"Retrieved DNS records for zone ID {zone_id}: {dns_records}")
+    print(f"DNS Records: {dns_records}")
 
-    exists = False
+    # Delete existing A records for the exact full domain match
     for record in dns_records:
-        if record["hostname"] == subdomain and record["value"] == vm_host:
-            exists = True
-            break
-    if not exists:
-        create_dns_record(zone_id, subdomain, vm_host)
-        print(f"Created DNS record for {subdomain} pointing to {vm_host}")
-    else:
-        print(f"DNS record for {subdomain} already exists and points to {vm_host}")
+        print(f"Checking record: {record}")
+        if record["type"] == "A" and record["hostname"] == full_domain:
+            print(f"Deleting DNS record {record['id']} for {full_domain}")
+            delete_dns_record(zone_id, record["id"])
+
+    # Verify deletion
+    dns_records_after_deletion = get_dns_records(zone_id)
+    for record in dns_records_after_deletion:
+        if record["type"] == "A" and record["hostname"] == full_domain:
+            print(f"Record still exists after deletion attempt: {record}")
+        else:
+            print(f"Record successfully deleted or not present: {record}")
+
+    # Create new DNS record
+    create_dns_record(zone_id, subdomain, vm_host)
+    print(f"Created DNS record for {subdomain} pointing to {vm_host}")
 
 
 def upload_to_gcs(ssh_key_path, gcs_instance, deploy_path):
@@ -548,8 +591,9 @@ def run_tests(base_url, modal_map):
         columns_list = parse_column_names(columns_str)
         print(f"Parsed columns for modal {modal}: {columns_list}")
 
-        # Prepare test data
-        test_data = {col: "xxxxx" if col != 'user_id' else 1 for col in columns_list}
+        # Prepare test data, ensuring 'user_id' is included
+        test_data = {col: "xxxxx" for col in columns_list}
+        test_data['user_id'] = 1  # Ensure user_id is included
         print(f"Test data for modal {modal}: {test_data}")
 
         print(f"\nTesting {modal} modal:\n")
@@ -560,13 +604,13 @@ def run_tests(base_url, modal_map):
             '-H', "Content-Type: application/json",
             '-d', json.dumps(test_data)
         ], capture_output=True, text=True)
-        print("Create Entry Response:", create_response.stdout)
+        print("CREATE Entry Response:", create_response.stdout)
 
         # Read entries
         for route in read_routes:
             route_name = list(route.keys())[0]
             read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}/{route_name}"], capture_output=True, text=True)
-            print(f"Read Entries Response for {route_name}:", read_response.stdout)
+            print(f"READ Entries Response for {route_name}:", read_response.stdout)
 
         # Query entries
         query_data = {"query_string": f"SELECT * FROM {modal} WHERE user_id = 1 ORDER BY id DESC"}
@@ -576,29 +620,30 @@ def run_tests(base_url, modal_map):
             '-H', "Content-Type: application/json",
             '-d', json.dumps(query_data)
         ], capture_output=True, text=True)
-        print("Query Entries Response:", query_response.stdout)
-        print("Query Entries Response (stderr):", query_response.stderr)
+        print("READ Query Entries Response:", query_response.stdout)
+        print("READ Query Entries Response (stderr):", query_response.stderr)
 
         # Search entries
         search_conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list if col != 'user_id'])
-        search_data = {"query_string": f"SELECT * FROM {modal} WHERE {search_conditions}"}
+        search_data = {"search_string": "xxxxx"}
         print(f"Search data for modal {modal}: {search_data}")
         search_response = subprocess.run([
             'curl', '-X', 'POST', f"{base_url}/search/{modal}",
             '-H', "Content-Type: application/json",
             '-d', json.dumps(search_data)
         ], capture_output=True, text=True)
-        print("Search Entries Response:", search_response.stdout)
+        print("READ Search Entries Response:", search_response.stdout)
 
         # Update entry
-        updated_data = {col: "xxxxx_updated" if col != 'user_id' else 1 for col in columns_list}
+        updated_data = {col: "xxxxx_updated" for col in columns_list}
+        updated_data['user_id'] = 1  # Ensure user_id is included
         print(f"Updated data for modal {modal}: {updated_data}")
         update_response = subprocess.run([
             'curl', '-X', 'PUT', f"{base_url}/update/{modal}/1",
             '-H', "Content-Type: application/json",
             '-d', json.dumps(updated_data)
         ], capture_output=True, text=True)
-        print("Update Entry Response:", update_response.stdout)
+        print("UPDATE Entry Response:", update_response.stdout)
 
         # Delete entry
         delete_response = subprocess.run([
@@ -606,8 +651,7 @@ def run_tests(base_url, modal_map):
             '-H', "Content-Type: application/json",
             '-d', json.dumps({'user_id': 1})
         ], capture_output=True, text=True)
-        print("Delete Entry Response:", delete_response.stdout)
-
+        print("DELETE Entry Response:", delete_response.stdout)
 
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)

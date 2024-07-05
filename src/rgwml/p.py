@@ -32,9 +32,14 @@ class p:
         self.df = df
 
     def cl(self):
-        """[d.clo()] Clone."""
+        """UTILS::[d.clo()] Clone."""
         gc.collect()
         return p(df=copy.deepcopy(self.df))
+
+    def gdf(self):
+        """UTILS::[d.gdf()] Get DataFrame."""
+        return self.df
+
 
     def frd(self, headers, data):
         """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
@@ -119,13 +124,16 @@ class p:
             credentials = service_account.Credentials.from_service_account_file(json_file_path)
             client = bigquery.Client(credentials=credentials, project=project_id)
 
-            # Run the query and get the results as a DataFrame
+            # Run the query and manually fetch the results
             query_job = client.query(query)
-            result = query_job.result()
+            results = query_job.result()
 
-            # Convert the result to a pandas DataFrame
-            df = result.to_dataframe()
-            #columns = df.columns
+            # Extract rows and columns
+            rows = [list(row.values()) for row in results]
+            columns = results.schema
+
+            # Convert to DataFrame
+            df = pd.DataFrame(rows, columns=[field.name for field in columns])
             self.df = df
             self.pr()
             gc.collect()
@@ -140,7 +148,7 @@ class p:
         gc.collect()
         return self
 
-    def dbq(self, preset_name, db_or_dataset_name, query, show_all_rows=True):
+    def dbq(self, preset_name, db_or_dataset_name, query):
         """DATABASE::[d.dbq('preset_name', 'db_or_dataset_name', 'YOUR QUERY')] Execute a query on the specified database and print the results if it returns data."""
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -165,6 +173,8 @@ class p:
         db_preset['database'] = db_or_dataset_name
 
         db_type = db_preset['db_type']
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None) 
 
         if db_type == 'mssql':
             host = db_preset['host']
@@ -179,8 +189,6 @@ class p:
                         rows = cursor.fetchall()
                         columns = [desc[0] for desc in cursor.description]
                         df = pd.DataFrame(rows, columns=columns)
-                        if not show_all_rows:
-                            df = df.head()  # Show only the first few rows
                         print(df)
                     else:
                         conn.commit()
@@ -198,8 +206,6 @@ class p:
                         rows = cursor.fetchall()
                         columns = [desc[0] for desc in cursor.description]
                         df = pd.DataFrame(rows, columns=columns)
-                        if not show_all_rows:
-                            df = df.head()  # Show only the first few rows
                         print(df)
                     else:
                         conn.commit()
@@ -219,8 +225,6 @@ class p:
                 columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
                 columns = [row[0] for row in client.execute(columns_query)]
                 df = pd.DataFrame(rows, columns=columns)
-                if not show_all_rows:
-                    df = df.head()  # Show only the first few rows
                 print(df)
 
         elif db_type == 'google_big_query':
@@ -234,8 +238,6 @@ class p:
             result = query_job.result()
             if query.strip().lower().startswith("select"):
                 df = result.to_dataframe()
-                if not show_all_rows:
-                    df = df.head()  # Show only the first few rows
                 print(df)
             else:
                 client.query(query).result()  # Executes the query without returning a DataFrame
@@ -243,6 +245,7 @@ class p:
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
 
+        pd.reset_option('all')
         gc.collect()
         return self
 
@@ -573,7 +576,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
 
-
     def dbiu(self, db_preset_name, db_name, table_name, unique_columns, insert_columns=None, print_query=False):
         """DATABASE::[d.dbiu('preset_name', 'db_name', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""
 
@@ -638,6 +640,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 new_data_df = self.df[insert_columns]
                 merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
                 unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
+
+                # Handle NaN values in the unique new data
+                unique_new_data_df = unique_new_data_df.fillna('')
 
                 # Insert unique new data into the table
                 if not unique_new_data_df.empty:

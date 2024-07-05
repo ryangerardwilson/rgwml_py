@@ -6,7 +6,7 @@ from datetime import datetime
 
 config = {'host': '34.131.124.18', 'user': 'wiomsudo', 'password': 'wiomsudo', 'database': 'sajal_ka_crm'}
 
-modal_map = {'social_media_escalations': {'columns': 'url[VARCHAR(2048)],forum,mobile,issue,status,sub_status,action_taken,follow_up_date', 'read_routes': [{'most-recent-500': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations ORDER BY id DESC LIMIT 500"}, {'todays-cases': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = CURDATE() ORDER BY id ASC"}, {'yesterdays-cases': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) ORDER BY id ASC"}]}, 'users': {'columns': 'username,password,type', 'read_routes': [{'default': 'SELECT * FROM users'}]}}
+modal_map = {'social_media_escalations': {'columns': 'url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date', 'read_routes': [{'most-recent-500': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations ORDER BY id DESC LIMIT 500"}, {'todays-cases': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = CURDATE() ORDER BY id ASC"}, {'yesterdays-cases': "SELECT id, url,forum,mobile,issue,status,sub_status,action_taken,follow_up_date, CONVERT_TZ(created_at, '+00:00', '+05:30') AS created_at, CONVERT_TZ(updated_at, '+00:00', '+05:30') AS updated_at FROM social_media_escalations WHERE DATE(CONVERT_TZ(created_at, '+00:00', '+05:30')) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) ORDER BY id ASC"}]}, 'users': {'columns': 'username,password,type', 'read_routes': [{'default': 'SELECT * FROM users'}]}}
 
 app = Bottle()
 
@@ -57,24 +57,38 @@ def authenticate():
 
 @app.route('/create/<modal_name>', method=['OPTIONS', 'POST'])
 def create_entry(modal_name):
+
     if request.method == 'OPTIONS':
         return {}
 
     data = request.json
-    columns = modal_map[modal_name].split(",")
-    column_names = ", ".join(columns)
-    placeholders = ", ".join(["%s"] * len(columns))
-    values = [data.get(col) for col in columns]
+    if not data or 'user_id' not in data:
+        response.status = 400
+        return {"error": "user_id is required in the request body"}
+    try:
+        modal_details = modal_map.get(modal_name, {})
+        if not modal_details:
+            raise ValueError(f"Modal {modal_name} not found in modal_map")
 
-    conn = pymysql.connect(**config)
-    cursor = conn.cursor()
-    cursor.execute(f"INSERT INTO {modal_name} (user_id, {column_names}) VALUES (%s, {placeholders})", [data['user_id']] + values)
-    conn.commit()
-    cursor.close()
-    conn.close()
+        columns_str = modal_details.get('columns', '')
+        columns = columns_str.split(",")
 
-    log_operation(modal_name, data['user_id'], 'CREATE', {"user_id": data['user_id'], **data})
-    return {"status": "success"}
+        column_names = ", ".join(columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        values = [data.get(col) for col in columns]
+
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        cursor.execute(f"INSERT INTO {modal_name} (user_id, {column_names}) VALUES (%s, {placeholders})", [data['user_id']] + values)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        log_operation(modal_name, data['user_id'], 'CREATE', {"user_id": data['user_id'], **data})
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error creating entry: {e}")
+        response.status = 500
+        return {"error": str(e)}
 
 @app.route('/read/<modal_name>/<route_name>', method=['OPTIONS', 'GET'])
 def read_entries(modal_name, route_name):
@@ -216,34 +230,38 @@ def update_entry(modal_name, entry_id):
         return {}
 
     data = request.json
-    columns = modal_map[modal_name].split(",")
-    
-    # Remove columns that should not be updated
-    columns = [col for col in columns if col not in ['id', 'created_at', 'updated_at', 'user_id']]
+    modal_details = modal_map.get(modal_name, {})
+    if not modal_details:
+        response.status = 400
+        return {"error": f"Modal {modal_name} not found in modal_map"}
+
+    columns_str = modal_details.get('columns', '')
+    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'user_id']]
 
     # Construct the SET clause with placeholders for SQL parameters
     set_clause = ", ".join([f"{col} = %s" for col in columns])
     values = [data.get(col) for col in columns]
 
-    conn = pymysql.connect(**config)
-    cursor = conn.cursor()
-
     try:
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+
         # Fetch the old row for logging purposes
         cursor.execute(f"SELECT * FROM {modal_name} WHERE id = %s", [entry_id])
         old_row = cursor.fetchone()
-        print(old_row)
+        print(f"Old row: {old_row}")
 
         # Perform the update operation
         cursor.execute(f"UPDATE {modal_name} SET {set_clause} WHERE id = %s", values + [entry_id])
         conn.commit()
 
-        # Log the operation
         log_operation(modal_name, data['user_id'], 'UPDATE', {"old": old_row, "new": data})
 
         return {"status": "success"}
     except Exception as e:
         conn.rollback()
+        print(f"Error updating entry: {e}")
+        response.status = 500
         return {"status": "error", "message": str(e)}
     finally:
         cursor.close()

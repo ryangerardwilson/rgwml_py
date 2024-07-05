@@ -520,7 +520,7 @@ def test_dbuoi():
 #test_adbscancc()
 #test_pnfc()
 #test_pnfl()
-#test_ser()
+test_ser()
 #test_dg()
 #test_dg_2()
 #test_dg_3()
@@ -533,5 +533,5 @@ def test_dbuoi():
 #test_dbi()
 #test_dbiu()
 #test_dbtai()
-test_dbuoi()
+#test_dbuoi()
 
