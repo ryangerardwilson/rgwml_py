@@ -377,7 +377,7 @@ Instantiate this class by crm = r.f()
                 "validation_rules": {
                     "customer_id": ["REQUIRED"],
                     "customer_name": ["REQUIRED"],
-                    "mobile": ["REQUIRED"],
+                    "mobile": ["REQUIRED","IS_INDIAN_MOBILE_NUMBER"],
                     "issue": ["REQUIRED"],
                     "status": ["REQUIRED"],
                     "priority": ["REQUIRED"],

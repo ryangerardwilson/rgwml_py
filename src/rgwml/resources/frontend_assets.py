@@ -43,6 +43,888 @@ DIR__APP__FILE__GLOBALS__CSS = '''@tailwind base;
 @tailwind components;
 @tailwind utilities;'''
 
+DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
+import modalConfig from './modalConfig';
+import {{ validateField, open_ai_quality_checks }} from './validationUtils';
+
+interface EditModalProps {{
+  modalName: string;
+  apiHost: string;
+  columns: string[];
+  rowData: any[];
+  onClose: (updatedData: any[] | null) => void;
+}}
+
+const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, rowData, onClose }}) => {{
+  const [formData, setFormData] = useState<{{ [key: string]: any }}>({{}});
+  const [errors, setErrors] =useState<{{ [key: string]: string | null }}>({{}});
+  const [dynamicOptions, setDynamicOptions] = useState<{{ [key: string]: string[] }}>({{}});
+  const config = modalConfig[modalName];
+
+
+
+
+  useEffect(() => {{
+    const initialData = columns.reduce((acc, col, index) => {{
+      acc[col] = rowData[0][index]; // Assuming rowData is an array of arrays and we are interested in the first row
+      return acc;
+    }}, {{}} as {{ [key: string]: any }});
+    setFormData(initialData);
+  }}, [rowData, columns]);
+
+
+  const evalCondition = useCallback((condition: string) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+      if (formData.hasOwnProperty(match)) {{
+        return `formData['${{match}}']`;
+      }}
+      return `'${{match}}'`;
+    }});
+    try {{
+      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
+      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
+      //console.log(`Condition result: ${{result}}`);
+      return result;
+    }} catch (e) {{
+      console.error('Error evaluating condition:', condition, e);
+      return false;
+    }}
+  }}, [formData]); // Include formData in dependencies
+
+  const updateDynamicOptions = useCallback(() => {{
+    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
+    if (config.conditional_options) {{
+      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
+        for (const conditionObj of conditions) {{
+          if (evalCondition(conditionObj.condition)) {{
+            newDynamicOptions[field] = conditionObj.options;
+            break; // Stop checking other conditions if one matches
+          }}
+        }}
+      }}
+    }}
+    //console.log("Dynamic Options Updated:", newDynamicOptions);
+    setDynamicOptions(newDynamicOptions);
+  }}, [config, evalCondition]); // Include config and evalCondition in dependencies
+
+  useEffect(() => {{
+    updateDynamicOptions();
+  }}, [updateDynamicOptions]);
+
+
+const getCookie = (name: string): string | undefined => {{
+const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
+const [key, value] = cookie.trim().split('=');
+acc[key] = value;
+return acc;
+}}, {{}} as {{ [key: string]: string }});
+return cookies[name];
+
+}};
+
+
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {{
+    const {{ name, value }} = e.target;
+    setFormData((prevData) => ({{ ...prevData, [name]: value }}));
+    if (config.validation_rules && config.validation_rules[name]) {{
+      const error = validateField(name, value, config.validation_rules[name]);
+      setErrors((prevErrors) => ({{ ...prevErrors, [name]: error }}));
+    }}
+  }};
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
+    e.preventDefault();
+
+    let valid = true;
+    const newErrors: {{ [key: string]: string | null }} = {{}};
+
+    if (config.validation_rules) {{
+      for (const field of Object.keys(config.validation_rules)) {{
+        const error = validateField(field, formData[field], config.validation_rules[field]);
+        if (error) {{
+          valid = false;
+          newErrors[field] = error;
+        }}
+      }}
+    }}
+
+    if (config.ai_quality_checks) {{
+      for (const field of Object.keys(config.ai_quality_checks)) {{
+        const aiErrors = await open_ai_quality_checks(field, formData[field], config.ai_quality_checks[field]);
+        if (aiErrors.length > 0) {{
+          valid = false;
+          newErrors[field] = aiErrors.join(', ');
+        }}
+      }}
+    }}
+
+    setErrors(newErrors);
+
+    if (!valid) {{
+      alert('Please fix the validation errors.');
+      return;
+    }}
+
+    const updateData = columns.reduce((acc, col) => {{
+      acc[col] = formData[col];
+      return acc;
+    }}, {{}} as {{ [key: string]: any }});
+
+    const user_id = getCookie('user_id');
+
+    if (user_id) {{
+      updateData['user_id'] = user_id;
+    }} else {{
+      console.error('User ID not found in cookies');
+      onClose(null);
+      return;
+    }}
+
+    try {{
+	  //console.log('151', rowData[0][0], updateData);
+      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{rowData[0][0]}}`, {{
+        method: 'PUT',
+        headers: {{
+          'Content-Type': 'application/json',
+        }},
+        body: JSON.stringify(updateData),
+      }});
+      const result = await response.json();
+      //console.log('160',result);
+      if (result.status === 'success') {{
+        alert('Record updated successfully');
+        onClose([formData]); // Pass updated data back to parent
+      }} else {{
+        console.error('Failed to update data:', result);
+        onClose(null);
+      }}
+    }} catch (error) {{
+      console.error('Error updating data:', error);
+      onClose(null);
+    }}
+  }};
+
+  const isUrl = (value: string): boolean => {{
+    try {{
+      new URL(value);
+      return true;
+    }} catch (_) {{
+      return false;
+    }}
+  }};
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+        <h2 className="text-yellow-100/50 text-center mb-8">Edit {{modalName}}</h2>
+        <form onSubmit={{handleSubmit}}>
+          <div className="grid grid-cols-2 gap-4">
+            {{columns.map((col) => (
+              <div key={{col}} className="mb-2">
+                <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
+                {{config.scopes.update.includes(col) ? (
+                  dynamicOptions[col] ? (
+                    <select
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                    >
+                      <option value="" disabled>
+                        Select {{col}}
+                      </option>
+                      {{dynamicOptions[col].map((option: string) => (
+                        <option key={{option}} value={{option}}>
+                          {{option}}
+                        </option>
+                      ))}}
+                    </select>
+                  ) : config.options[col] ? (
+                    <select
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                    >
+                      <option value="" disabled>
+                        Select {{col}}
+                      </option>
+                      {{config.options[col]?.map((option: string) => (
+                        <option key={{option}} value={{option}}>
+                          {{option}}
+                        </option>
+                      ))}}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name={{col}}
+                      value={{formData[col] || ''}}
+                      onChange={{handleChange}}
+                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                    />
+                  )
+                ) : (
+                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
+                    {{isUrl(formData[col]) ? (
+                      <button
+                        type="button"
+                        onClick={{() => window.open(formData[col], '_blank')}}
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
+                      >
+                        Open URL
+                      </button>
+                    ) : (
+                      formData[col]
+                    )}}
+                  </div>
+                )}}
+                {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
+              </div>
+            ))}}
+          </div>
+          <div className="flex justify-end mt-4">
+            <button
+              type="button"
+              onClick={{() => onClose(null)}}
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}};
+
+export default EditModal;'''
+
+DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''// src/components/crudUtils.tsx
+
+export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
+  setCreateModalOpen(true);
+}};
+
+export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) => {{
+  setCreateModalOpen(false);
+}};
+
+export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+  try {{
+    //console.log(`${{apiHost}}read/${{modal}}/${{route}}`);
+    const response = await fetch(`${{apiHost}}read/${{modal}}/${{route}}`);
+    //console.log(response);
+    
+    const result = await response.json();
+    setData(result.data || []);
+  }} catch (error) {{
+    setData([]);
+  }}
+}};
+
+export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number, data: any[], setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}delete/${{modal}}/${{id}}`, {{
+      method: 'DELETE',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify({{ user_id: userId }}),
+    }});
+    const result = await response.json();
+    if (result.status === 'success') {{
+      setData(data.filter((row: any) => row[0] !== id));
+    }}
+  }} catch (error) {{
+    console.error('Error deleting data:', error);
+  }}
+}};
+
+export const handleEdit = (
+  row: {{ [key: string]: any }},
+  setEditRowData: React.Dispatch<React.SetStateAction<any[]>>, // Expect an array
+  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+) => {{
+  setEditRowData([row]); // Wrap the row in an array
+  setEditModalOpen(true);
+}};
+
+export const closeEditModal = (
+  updatedData: any[] | null,
+  columns: string[],
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
+  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+) => {{
+  if (updatedData && updatedData.length > 0) {{
+    //console.log('56', updatedData);
+    const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
+
+    const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
+    //console.log('60', updatedId);
+
+    setData(prevData => {{
+      const newData = prevData.map(row => {{
+        // Assuming `row` is an array and the first element is the id
+        if (row[0] === updatedId) {{
+          return columns.map(column => updatedRow[column] !== undefined ? updatedRow[column] : row[columns.indexOf(column)]);
+        }}
+        return row;
+      }});
+      //console.log('72', newData);
+      return newData;
+    }});
+  }}
+  setEditModalOpen(false);
+}};'''
+
+DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dateTime: string): string => {{
+  // Check if the input is a simple number
+  if (!isNaN(Number(dateTime))) {{
+    return dateTime;
+  }}
+
+  const date = new Date(dateTime);
+  if (isNaN(date.getTime())) {{
+    // Return the original value if the input is not a valid date string
+    return dateTime;
+  }}
+  
+  const year = date.getFullYear();
+  const month = ('0' + (date.getMonth() + 1)).slice(-2);
+  const day = ('0' + date.getDate()).slice(-2);
+  const hours = ('0' + date.getHours()).slice(-2);
+  const minutes = ('0' + date.getMinutes()).slice(-2);
+  const seconds = ('0' + date.getSeconds()).slice(-2);
+  
+  return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
+}};
+
+
+
+  export const isValidUrl = (url: string) => {{
+    try {{
+      new URL(url);
+      return true;
+    }} catch (_) {{
+      return false;
+    }}
+  }};'''
+
+DIR__COMPONENTS__FILE__SEARCH_UTILS__TSX = '''export const handleSearchSubmit = async (
+  apiHost: string,
+  modal: string,
+  queryInput: string,
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
+  setQueryError: React.Dispatch<React.SetStateAction<string | null>>
+) => {{
+  try {{
+    const response = await fetch(`${{apiHost}}search/${{modal}}`, {{
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify({{ search_string: queryInput.trim() }}),
+    }});
+    const result = await response.json();
+    if (response.ok) {{
+      setData(result.data);
+      setQueryError(null);
+    }} else {{
+      console.error('Error fetching search results:', result);
+      setQueryError(result.error || 'Unknown error occurred');
+    }}
+  }} catch (error) {{
+    console.error('Error fetching search results:', error);
+    if (error instanceof Error) {{
+      setQueryError(error.message || 'Unknown error occurred');
+    }} else {{
+      setQueryError('Unknown error occurred');
+    }}
+  }}
+}};'''
+
+DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect, useMemo, useCallback }} from 'react';
+import CreateModal from './CreateModal';
+import EditModal from './EditModal';
+import SearchInput from './SearchInput';
+import QueryInput from './QueryInput';
+import modalConfig from './modalConfig';
+import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
+import {{ handleQuerySubmit }} from './queryUtils';
+import {{ handleSearchSubmit }} from './searchUtils';
+import {{ isValidUrl, formatDateTime }} from './formatUtils';
+import {{ downloadCSV }} from './downloadUtils';
+
+interface DynamicTableProps {{
+  apiHost: string;
+  modal: string;
+  columns: string[];
+  data: any[];
+}}
+
+const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, data: initialData }}) => {{
+  const [data, setData] = useState<any[]>(initialData);
+  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [editRowData, setEditRowData] = useState<any[]>([]);
+
+  const [inputMode, setInputMode] = useState<'query' | 'search'>('search');
+  const [queryInput, setQueryInput] = useState('');
+  const [useQueryInput, setUseQueryInput] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [useSearchInput, setUseSearchInput] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+
+
+  const readRoutes = useMemo(() => {{
+    return modalConfig[modal]?.read_routes || [];
+  }}, [modal]) as string[];
+
+  useEffect(() => {{
+    if (readRoutes.length > 0) {{
+      setActiveTab(readRoutes[0]);
+    }}
+  }}, [readRoutes]);
+
+  useEffect(() => {{
+    if (activeTab) {{
+      fetchData(apiHost, modal, activeTab, setData);
+    }}
+  }}, [apiHost, modal, activeTab]);
+
+  const handleQueryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
+    setQueryInput(event.target.value);
+  }}, []);
+
+  const handleQueryKeyPress = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {{
+      if (event.key === 'Enter') {{
+        handleQuerySubmit(apiHost, modal, queryInput, setData, setQueryError);
+      }}
+    }},
+    [apiHost, modal, queryInput]
+  );
+
+  const handleSearchInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
+    setSearchInput(event.target.value);
+  }}, []);
+
+  const handleSearchKeyPress = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {{
+      if (event.key === 'Enter') {{
+        handleSearchSubmit(apiHost, modal, searchInput, setData, setSearchError);
+      }}
+    }},
+    [apiHost, modal, searchInput]
+  );
+
+  const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
+
+  return (
+    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
+      <div className="mb-4">
+        {{readRoutes.length > 0 && (
+          <div className="flex space-x-4">
+            {{readRoutes.map((route) => (
+              <button
+                key={{route}}
+                className={{`px-4 py-2 rounded ${{activeTab === route ? 'border-t border-x border-yellow-100/50 rounded-lg' : 'bg-black text-yellow-100/50'}}`}}
+                onClick={{() => setActiveTab(route)}}
+              >
+                {{route}}
+              </button>
+            ))}}
+          </div>
+        )}}
+      </div>
+      <div className="flex justify-between mb-4">
+        <div className="flex items-center w-full">
+          <label className="flex items-center cursor-pointer relative">
+            <select
+              value={{inputMode}}
+              onChange={{(e) => setInputMode(e.target.value as 'query' | 'search')}}
+              className="bg-black border border-yellow-100/30 text-yellow-100 p-2 rounded-lg text-sm pr-8 appearance-none"
+            >
+              <option value="search">Search</option>
+              <option value="query">Query</option>
+            </select>
+            <span className="absolute right-3 pointer-events-none text-yellow-100/50 text-sm">▼</span>
+          </label>
+
+          {{inputMode === 'query' ? (
+            <QueryInput
+              queryInput={{queryInput}}
+              handleQueryInputChange={{handleQueryInputChange}}
+              handleQueryKeyPress={{handleQueryKeyPress}}
+              queryError={{queryError}}
+            />
+          ) : (
+            <SearchInput
+              searchInput={{searchInput}}
+              handleSearchInputChange={{handleSearchInputChange}}
+              handleSearchKeyPress={{handleSearchKeyPress}}
+              searchError={{searchError}}
+            />
+          )}}
+        </div>
+
+        <button
+          onClick={{() => downloadCSV(data, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+        >
+          CSV
+        </button>
+
+        {{modalConfig[modal]?.scopes.create && (
+          <button
+            onClick={{() => handleCreate(setCreateModalOpen)}}
+            className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
+          >
+            Create
+          </button>
+        )}}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-yellow-100/30">
+          <thead>
+            <tr>
+              {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
+                <th
+                  key={{`col-${{colIndex}}`}}
+                  className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
+                >
+                  {{col}}
+                </th>
+              ))}}
+              <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{data.map((row, rowIndex) => (
+              <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
+                {{columnIndices.map((colIndex, cellIndex) => {{
+                  const cellValue = row[colIndex];
+                  return (
+                    <td
+                      key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
+                      className="px-3 py-2 whitespace-nowrap text-sm"
+                    >
+                      {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
+                        <button
+                          onClick={{() => window.open(cellValue, '_blank')}}
+                          className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                        >
+                          Open URL
+                        </button>
+                      ) : (
+                        typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
+                      )}}
+                    </td>
+                  );
+                }})}}
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
+                  <button
+                    onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
+                    className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
+                  >
+                    Edit
+                  </button>
+                  {{modalConfig[modal]?.scopes.delete && (
+                    <button
+                      onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                    >
+                      Delete
+                    </button>
+                  )}}
+                </td>
+              </tr>
+            ))}}
+          </tbody>
+        </table>
+      </div>
+      {{isCreateModalOpen && (
+        <CreateModal
+          modalName={{modal}}
+          apiHost={{apiHost}}
+          columns={{columns}}
+          onClose={{() => closeCreateModal(setCreateModalOpen)}}
+        />
+      )}}
+      {{isEditModalOpen && editRowData && (
+        <EditModal
+          modalName={{modal}}
+          apiHost={{apiHost}}
+          columns={{columns}}
+          rowData={{editRowData}}
+          onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
+        />
+      )}}
+    </div>
+  );
+}};
+
+export default DynamicTable;'''
+
+DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX = '''// src/components/modalConfig.tsx
+
+interface Options {{
+  [key: string]: string[] | undefined; // Allows any string key with string array or undefined value
+}}
+
+interface ConditionalOption {{
+  condition: string;
+  options: string[];
+}}
+
+interface Scopes {{
+  create: boolean;
+  read: string[];
+  update: string[];
+  delete: boolean;
+}}
+
+interface ValidationRules {{
+  [key: string]: string[];
+}}
+
+interface AIQualityChecks {{
+  [key: string]: string[];
+}}
+
+interface ModalConfig {{
+  options: Options;
+  conditional_options?: {{
+    [key: string]: ConditionalOption[];
+  }};
+  scopes: Scopes;
+  validation_rules?: ValidationRules;
+  ai_quality_checks?: AIQualityChecks;
+  read_routes?: string[];
+}}
+
+interface ModalConfigMap {{
+  [key: string]: ModalConfig;
+}}
+
+
+
+
+
+const modalConfig: ModalConfigMap = {{
+  "users": {{
+    "options": {{
+      "type": [
+        "admin",
+        "normal"
+      ]
+    }},
+    "conditional_options": {{}},
+    "scopes": {{
+      "create": true,
+      "read": [
+        "id",
+        "username",
+        "password",
+        "type",
+        "created_at",
+        "updated_at"
+      ],
+      "update": [
+        "username",
+        "password",
+        "type"
+      ],
+      "delete": true
+    }},
+    "validation_rules": {{
+      "username": [
+        "REQUIRED"
+      ],
+      "password": [
+        "REQUIRED"
+      ]
+    }},
+    "read_routes": [
+      "default"
+    ]
+  }},
+  "social_media_escalations": {{
+    "options": {{
+      "forum": [
+        "Google_Reviews",
+        "LinkedIn",
+        "Twitter/X",
+        "Facebook",
+        "Instagram",
+        "YouTube",
+        "Other"
+      ],
+      "status": [
+        "Unresolved",
+        "Resolved_but_post_not_removed",
+        "Not_able_to_identify_poster"
+      ],
+      "issue": [
+        "Internet_supply_down",
+        "Slow_speed",
+        "Frequent_disconnect",
+        "Rude_behaviour_of_Partner",
+        "Booking_fee_refund",
+        "Trust issue",
+        "Other"
+      ]
+    }},
+    "conditional_options": {{
+      "sub_status": [
+        {{
+          "condition": "status == Unresolved",
+          "options": [
+            "Did_not_pick_up",
+            "Picked_up_yet_unresolved"
+          ]
+        }},
+        {{
+          "condition": "status == Resolved_but_post_not_removed",
+          "options": [
+            "Was_very_angry",
+            "Other"
+          ]
+        }}
+      ]
+    }},
+    "scopes": {{
+      "create": true,
+      "read": [
+        "id",
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date",
+        "created_at"
+      ],
+      "update": [
+        "url",
+        "forum",
+        "mobile",
+        "issue",
+        "status",
+        "sub_status",
+        "action_taken",
+        "follow_up_date"
+      ],
+      "delete": true
+    }},
+    "validation_rules": {{
+      "url": [
+        "REQUIRED"
+      ],
+      "forum": [
+        "REQUIRED"
+      ],
+      "issue": [
+        "REQUIRED"
+      ],
+      "status": [
+        "REQUIRED"
+      ],
+      "sub_status": [
+        "REQUIRED"
+      ],
+      "action_taken": [
+        "REQUIRED"
+      ],
+      "follow_up_date": [
+        "REQUIRED",
+        "IS_AFTER_TODAY"
+      ]
+    }},
+    "ai_quality_checks": {{
+      "action_taken": [
+        "must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"
+      ]
+    }},
+    "read_routes": [
+      "most-recent-500",
+      "todays-cases",
+      "yesterdays-cases"
+    ]
+  }}
+}};
+
+export default modalConfig;'''
+
+DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''export const downloadCSV = (data: any[], columns: string[], filename: string) => {{
+  const csvRows: string[] = [];
+  const headers = columns.join(',');
+  csvRows.push(headers);
+
+  data.forEach(row => {{
+    const values = row.map((cellValue: any) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
+    csvRows.push(values.join(','));
+  }});
+
+
+
+
+
+
+  const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvRows.join("\\n"));
+
+
+
+  const link = document.createElement('a');
+  link.setAttribute('href', csvContent);
+  link.setAttribute('download', `${{filename}}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}};'''
+
+DIR__COMPONENTS__FILE__QUERY_INPUT__TSX = '''import React from 'react';
+
+interface QueryInputProps {{
+  queryInput: string;
+  handleQueryInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleQueryKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  queryError: string | null;
+}}
+
+const QueryInput: React.FC<QueryInputProps> = ({{
+  queryInput,
+  handleQueryInputChange,
+  handleQueryKeyPress,
+  queryError,
+}}) => {{
+  return (
+      <input
+        type="text"
+        value={{queryInput}}
+        onChange={{handleQueryInputChange}}
+        onKeyPress={{handleQueryKeyPress}}
+        placeholder="QUERY MODE (fetches fresh data) ..."
+        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
+      />
+  );
+}};
+
+export default QueryInput;'''
+
 DIR__COMPONENTS__FILE__CREATE_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
 import modalConfig from './modalConfig';
 import {{ validateField, open_ai_quality_checks }} from './validationUtils';
@@ -287,76 +1169,38 @@ return cookies[name];
 
 export default CreateModal;'''
 
-DIR__COMPONENTS__FILE__SIDEBAR__TSX = '''import React from 'react';
-import Link from 'next/link';
-import {{ useRouter }} from 'next/router';
-import modalConfig from './modalConfig';
+DIR__COMPONENTS__FILE__SEARCH_INPUT__TSX = '''import React from 'react';
 
-const parseCookies = () => {{
-  return document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
-    const [key, value] = cookie.trim().split('=');
-    acc[key] = value;
-    return acc;
-  }}, {{}} as {{ [key: string]: string }});
-}};
+interface SearchInputProps {{
+  searchInput: string;
+  handleSearchInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSearchKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  searchError: string | null;
+}}
 
-
-const Sidebar: React.FC = () => {{
-  const cookies = parseCookies();
-  const userType = cookies.type;
-  const userName = cookies.username;
-  const userId = cookies.user_id;
-  
-
-  // Get the modals from the configuration
-  const modals = Object.keys(modalConfig);
-
-  // Create the modals_array and conditionally remove "users" if the user type is not "admin" or "sudo"
-  const modals_array = modals.filter(modal => {{
-    if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {{
-      return false;
-    }}
-    return true;
-  }});
-
-  const router = useRouter();
-  const {{ modal }} = router.query;
-
-  const handleLogout = () => {{
-    document.cookie = 'user_id=; Max-Age=0; path=/';
-    document.cookie = 'auth=; Max-Age=0; path=/';
-    document.cookie = 'username=; Max-Age=0; path=/';
-    document.cookie = 'type=; Max-Age=0; path=/'
-    router.push('/login');
-  }};
-
+const SearchInput: React.FC<SearchInputProps> = ({{
+  searchInput,
+  handleSearchInputChange,
+  handleSearchKeyPress,
+  searchError,
+}}) => {{
   return (
-    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col justify-between">
-      <div>
-        <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
-        <ul>
-          {{modals_array.map((item) => (
-            <li key={{item}} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
-              <Link href={{`/${{item}}`}}>
-                <span className="ps-1 cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
-              </Link>
-            </li>
-          ))}}
-        </ul>
-      </div>
-      <button
-        onClick={{handleLogout}}
-        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
-      >
-        Logout {{userName}} [{{userId}},{{userType}}]
-      </button>
-    </div>
+      <input
+        type="text"
+        value={{searchInput}}
+        onChange={{handleSearchInputChange}}
+        onKeyPress={{handleSearchKeyPress}}
+        placeholder="SEARCH MODE (fetches fresh data) ..."
+        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
+      />
   );
 }};
 
-export default Sidebar;'''
+export default SearchInput;'''
 
 DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (field: string, value: any, rules: string[]): string | null => {{
+  const isRequired = rules.includes('REQUIRED');
+
   for (const rule of rules) {{
     const [ruleName, ...params] = rule.split(':');
     switch (ruleName) {{
@@ -377,6 +1221,9 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
         }}
         break;
       case 'IS_INDIAN_MOBILE_NUMBER':
+        if (!isRequired && !value) {{
+          break; // Skip this rule if the field is not required and value is empty
+        }}
         const uniqueDigits = new Set(value.split('')).size;
         if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
           return `${{field}} must be a valid Indian mobile number.`;
@@ -463,172 +1310,74 @@ export const open_ai_quality_checks = async (field: string, value: string, check
   return failedChecks;
 }};'''
 
-DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''export const downloadCSV = (data: any[], columns: string[], filename: string) => {{
-  const csvRows: string[] = [];
-  const headers = columns.join(',');
-  csvRows.push(headers);
+DIR__COMPONENTS__FILE__SIDEBAR__TSX = '''import React from 'react';
+import Link from 'next/link';
+import {{ useRouter }} from 'next/router';
+import modalConfig from './modalConfig';
 
-  data.forEach(row => {{
-    const values = row.map((cellValue: any) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
-    csvRows.push(values.join(','));
+const parseCookies = () => {{
+  return document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
+    const [key, value] = cookie.trim().split('=');
+    acc[key] = value;
+    return acc;
+  }}, {{}} as {{ [key: string]: string }});
+}};
+
+
+const Sidebar: React.FC = () => {{
+  const cookies = parseCookies();
+  const userType = cookies.type;
+  const userName = cookies.username;
+  const userId = cookies.user_id;
+  
+
+  // Get the modals from the configuration
+  const modals = Object.keys(modalConfig);
+
+  // Create the modals_array and conditionally remove "users" if the user type is not "admin" or "sudo"
+  const modals_array = modals.filter(modal => {{
+    if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {{
+      return false;
+    }}
+    return true;
   }});
 
+  const router = useRouter();
+  const {{ modal }} = router.query;
 
+  const handleLogout = () => {{
+    document.cookie = 'user_id=; Max-Age=0; path=/';
+    document.cookie = 'auth=; Max-Age=0; path=/';
+    document.cookie = 'username=; Max-Age=0; path=/';
+    document.cookie = 'type=; Max-Age=0; path=/'
+    router.push('/login');
+  }};
 
-
-
-
-  const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvRows.join("\\n"));
-
-
-
-  const link = document.createElement('a');
-  link.setAttribute('href', csvContent);
-  link.setAttribute('download', `${{filename}}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}};'''
-
-DIR__COMPONENTS__FILE__SEARCH_INPUT__TSX = '''import React from 'react';
-
-interface SearchInputProps {{
-  searchInput: string;
-  handleSearchInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSearchKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
-  searchError: string | null;
-}}
-
-const SearchInput: React.FC<SearchInputProps> = ({{
-  searchInput,
-  handleSearchInputChange,
-  handleSearchKeyPress,
-  searchError,
-}}) => {{
   return (
-      <input
-        type="text"
-        value={{searchInput}}
-        onChange={{handleSearchInputChange}}
-        onKeyPress={{handleSearchKeyPress}}
-        placeholder="SEARCH MODE (fetches fresh data) ..."
-        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
-      />
+    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col justify-between">
+      <div>
+        <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
+        <ul>
+          {{modals_array.map((item) => (
+            <li key={{item}} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
+              <Link href={{`/${{item}}`}}>
+                <span className="ps-1 cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
+              </Link>
+            </li>
+          ))}}
+        </ul>
+      </div>
+      <button
+        onClick={{handleLogout}}
+        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
+      >
+        Logout {{userName}} [{{userId}},{{userType}}]
+      </button>
+    </div>
   );
 }};
 
-export default SearchInput;'''
-
-DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''// src/components/crudUtils.tsx
-
-export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
-  setCreateModalOpen(true);
-}};
-
-export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) => {{
-  setCreateModalOpen(false);
-}};
-
-export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
-  try {{
-    //console.log(`${{apiHost}}read/${{modal}}/${{route}}`);
-    const response = await fetch(`${{apiHost}}read/${{modal}}/${{route}}`);
-    //console.log(response);
-    
-    const result = await response.json();
-    setData(result.data || []);
-  }} catch (error) {{
-    setData([]);
-  }}
-}};
-
-export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number, data: any[], setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
-  try {{
-    const response = await fetch(`${{apiHost}}delete/${{modal}}/${{id}}`, {{
-      method: 'DELETE',
-      headers: {{
-        'Content-Type': 'application/json',
-      }},
-      body: JSON.stringify({{ user_id: userId }}),
-    }});
-    const result = await response.json();
-    if (result.status === 'success') {{
-      setData(data.filter((row: any) => row[0] !== id));
-    }}
-  }} catch (error) {{
-    console.error('Error deleting data:', error);
-  }}
-}};
-
-export const handleEdit = (
-  row: {{ [key: string]: any }},
-  setEditRowData: React.Dispatch<React.SetStateAction<any[]>>, // Expect an array
-  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
-) => {{
-  setEditRowData([row]); // Wrap the row in an array
-  setEditModalOpen(true);
-}};
-
-export const closeEditModal = (
-  updatedData: any[] | null,
-  columns: string[],
-  setData: React.Dispatch<React.SetStateAction<any[]>>,
-  setEditModalOpen: React.Dispatch<React.SetStateAction<boolean>>
-) => {{
-  if (updatedData && updatedData.length > 0) {{
-    //console.log('56', updatedData);
-    const updatedRow = updatedData[0]; // Assuming updatedData contains an array with a single object
-
-    const updatedId = updatedRow.id; // Assuming the row object has an 'id' property
-    //console.log('60', updatedId);
-
-    setData(prevData => {{
-      const newData = prevData.map(row => {{
-        // Assuming `row` is an array and the first element is the id
-        if (row[0] === updatedId) {{
-          return columns.map(column => updatedRow[column] !== undefined ? updatedRow[column] : row[columns.indexOf(column)]);
-        }}
-        return row;
-      }});
-      //console.log('72', newData);
-      return newData;
-    }});
-  }}
-  setEditModalOpen(false);
-}};'''
-
-DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dateTime: string): string => {{
-  // Check if the input is a simple number
-  if (!isNaN(Number(dateTime))) {{
-    return dateTime;
-  }}
-
-  const date = new Date(dateTime);
-  if (isNaN(date.getTime())) {{
-    // Return the original value if the input is not a valid date string
-    return dateTime;
-  }}
-  
-  const year = date.getFullYear();
-  const month = ('0' + (date.getMonth() + 1)).slice(-2);
-  const day = ('0' + date.getDate()).slice(-2);
-  const hours = ('0' + date.getHours()).slice(-2);
-  const minutes = ('0' + date.getMinutes()).slice(-2);
-  const seconds = ('0' + date.getSeconds()).slice(-2);
-  
-  return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
-}};
-
-
-
-  export const isValidUrl = (url: string) => {{
-    try {{
-      new URL(url);
-      return true;
-    }} catch (_) {{
-      return false;
-    }}
-  }};'''
+export default Sidebar;'''
 
 DIR__COMPONENTS__FILE__QUERY_UTILS__TSX = '''export const handleQuerySubmit = async (
   apiHost: string,
@@ -655,750 +1404,6 @@ DIR__COMPONENTS__FILE__QUERY_UTILS__TSX = '''export const handleQuerySubmit = as
     }}
   }} catch (error) {{
     console.error('Error fetching query results:', error);
-    if (error instanceof Error) {{
-      setQueryError(error.message || 'Unknown error occurred');
-    }} else {{
-      setQueryError('Unknown error occurred');
-    }}
-  }}
-}};'''
-
-DIR__COMPONENTS__FILE__QUERY_INPUT__TSX = '''import React from 'react';
-
-interface QueryInputProps {{
-  queryInput: string;
-  handleQueryInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleQueryKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void;
-  queryError: string | null;
-}}
-
-const QueryInput: React.FC<QueryInputProps> = ({{
-  queryInput,
-  handleQueryInputChange,
-  handleQueryKeyPress,
-  queryError,
-}}) => {{
-  return (
-      <input
-        type="text"
-        value={{queryInput}}
-        onChange={{handleQueryInputChange}}
-        onKeyPress={{handleQueryKeyPress}}
-        placeholder="QUERY MODE (fetches fresh data) ..."
-        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mx-4 text-sm placeholder-yellow-100/50"
-      />
-  );
-}};
-
-export default QueryInput;'''
-
-DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect, useMemo, useCallback }} from 'react';
-import CreateModal from './CreateModal';
-import EditModal from './EditModal';
-import SearchInput from './SearchInput';
-import QueryInput from './QueryInput';
-import modalConfig from './modalConfig';
-import {{ handleCreate, closeCreateModal, fetchData, handleDelete, handleEdit, closeEditModal }} from './crudUtils';
-import {{ handleQuerySubmit }} from './queryUtils';
-import {{ handleSearchSubmit }} from './searchUtils';
-import {{ isValidUrl, formatDateTime }} from './formatUtils';
-import {{ downloadCSV }} from './downloadUtils';
-
-interface DynamicTableProps {{
-  apiHost: string;
-  modal: string;
-  columns: string[];
-  data: any[];
-}}
-
-const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, data: initialData }}) => {{
-  const [data, setData] = useState<any[]>(initialData);
-  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [editRowData, setEditRowData] = useState<any[]>([]);
-
-  const [inputMode, setInputMode] = useState<'query' | 'search'>('search');
-  const [queryInput, setQueryInput] = useState('');
-  const [useQueryInput, setUseQueryInput] = useState(false);
-  const [queryError, setQueryError] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [useSearchInput, setUseSearchInput] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-
-
-  const readRoutes = useMemo(() => {{
-    return modalConfig[modal]?.read_routes || [];
-  }}, [modal]) as string[];
-
-  useEffect(() => {{
-    if (readRoutes.length > 0) {{
-      setActiveTab(readRoutes[0]);
-    }}
-  }}, [readRoutes]);
-
-  useEffect(() => {{
-    if (activeTab) {{
-      fetchData(apiHost, modal, activeTab, setData);
-    }}
-  }}, [apiHost, modal, activeTab]);
-
-  const handleQueryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
-    setQueryInput(event.target.value);
-  }}, []);
-
-  const handleQueryKeyPress = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {{
-      if (event.key === 'Enter') {{
-        handleQuerySubmit(apiHost, modal, queryInput, setData, setQueryError);
-      }}
-    }},
-    [apiHost, modal, queryInput]
-  );
-
-  const handleSearchInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {{
-    setSearchInput(event.target.value);
-  }}, []);
-
-  const handleSearchKeyPress = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {{
-      if (event.key === 'Enter') {{
-        handleSearchSubmit(apiHost, modal, searchInput, setData, setSearchError);
-      }}
-    }},
-    [apiHost, modal, searchInput]
-  );
-
-  const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
-
-  return (
-    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
-      <div className="mb-4">
-        {{readRoutes.length > 0 && (
-          <div className="flex space-x-4">
-            {{readRoutes.map((route) => (
-              <button
-                key={{route}}
-                className={{`px-4 py-2 rounded ${{activeTab === route ? 'border-t border-x border-yellow-100/50 rounded-lg' : 'bg-black text-yellow-100/50'}}`}}
-                onClick={{() => setActiveTab(route)}}
-              >
-                {{route}}
-              </button>
-            ))}}
-          </div>
-        )}}
-      </div>
-      <div className="flex justify-between mb-4">
-        <div className="flex items-center w-full">
-          <label className="flex items-center cursor-pointer relative">
-            <select
-              value={{inputMode}}
-              onChange={{(e) => setInputMode(e.target.value as 'query' | 'search')}}
-              className="bg-black border border-yellow-100/30 text-yellow-100 p-2 rounded-lg text-sm pr-8 appearance-none"
-            >
-              <option value="search">Search</option>
-              <option value="query">Query</option>
-            </select>
-            <span className="absolute right-3 pointer-events-none text-yellow-100/50 text-sm">▼</span>
-          </label>
-
-          {{inputMode === 'query' ? (
-            <QueryInput
-              queryInput={{queryInput}}
-              handleQueryInputChange={{handleQueryInputChange}}
-              handleQueryKeyPress={{handleQueryKeyPress}}
-              queryError={{queryError}}
-            />
-          ) : (
-            <SearchInput
-              searchInput={{searchInput}}
-              handleSearchInputChange={{handleSearchInputChange}}
-              handleSearchKeyPress={{handleSearchKeyPress}}
-              searchError={{searchError}}
-            />
-          )}}
-        </div>
-
-        <button
-          onClick={{() => downloadCSV(data, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
-          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
-        >
-          CSV
-        </button>
-
-        {{modalConfig[modal]?.scopes.create && (
-          <button
-            onClick={{() => handleCreate(setCreateModalOpen)}}
-            className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
-          >
-            Create
-          </button>
-        )}}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-yellow-100/30">
-          <thead>
-            <tr>
-              {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
-                <th
-                  key={{`col-${{colIndex}}`}}
-                  className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
-                >
-                  {{col}}
-                </th>
-              ))}}
-              <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{data.map((row, rowIndex) => (
-              <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
-                {{columnIndices.map((colIndex, cellIndex) => {{
-                  const cellValue = row[colIndex];
-                  return (
-                    <td
-                      key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
-                      className="px-3 py-2 whitespace-nowrap text-sm"
-                    >
-                      {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
-                        <button
-                          onClick={{() => window.open(cellValue, '_blank')}}
-                          className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                        >
-                          Open URL
-                        </button>
-                      ) : (
-                        typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
-                      )}}
-                    </td>
-                  );
-                }})}}
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
-                  <button
-                    onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
-                    className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
-                  >
-                    Edit
-                  </button>
-                  {{modalConfig[modal]?.scopes.delete && (
-                    <button
-                      onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
-                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                    >
-                      Delete
-                    </button>
-                  )}}
-                </td>
-              </tr>
-            ))}}
-          </tbody>
-        </table>
-      </div>
-      {{isCreateModalOpen && (
-        <CreateModal
-          modalName={{modal}}
-          apiHost={{apiHost}}
-          columns={{columns}}
-          onClose={{() => closeCreateModal(setCreateModalOpen)}}
-        />
-      )}}
-      {{isEditModalOpen && editRowData && (
-        <EditModal
-          modalName={{modal}}
-          apiHost={{apiHost}}
-          columns={{columns}}
-          rowData={{editRowData}}
-          onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
-        />
-      )}}
-    </div>
-  );
-}};
-
-export default DynamicTable;'''
-
-DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
-import modalConfig from './modalConfig';
-import {{ validateField, open_ai_quality_checks }} from './validationUtils';
-
-interface EditModalProps {{
-  modalName: string;
-  apiHost: string;
-  columns: string[];
-  rowData: any[];
-  onClose: (updatedData: any[] | null) => void;
-}}
-
-const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, rowData, onClose }}) => {{
-  const [formData, setFormData] = useState<{{ [key: string]: any }}>({{}});
-  const [errors, setErrors] =useState<{{ [key: string]: string | null }}>({{}});
-  const [dynamicOptions, setDynamicOptions] = useState<{{ [key: string]: string[] }}>({{}});
-  const config = modalConfig[modalName];
-
-
-
-
-  useEffect(() => {{
-    const initialData = columns.reduce((acc, col, index) => {{
-      acc[col] = rowData[0][index]; // Assuming rowData is an array of arrays and we are interested in the first row
-      return acc;
-    }}, {{}} as {{ [key: string]: any }});
-    setFormData(initialData);
-  }}, [rowData, columns]);
-
-
-  const evalCondition = useCallback((condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
-      if (formData.hasOwnProperty(match)) {{
-        return `formData['${{match}}']`;
-      }}
-      return `'${{match}}'`;
-    }});
-    try {{
-      //console.log(`Evaluating condition: ${{conditionToEvaluate}}`);
-      const result = new Function('formData', `return ${{conditionToEvaluate}};`)(formData);
-      //console.log(`Condition result: ${{result}}`);
-      return result;
-    }} catch (e) {{
-      console.error('Error evaluating condition:', condition, e);
-      return false;
-    }}
-  }}, [formData]); // Include formData in dependencies
-
-  const updateDynamicOptions = useCallback(() => {{
-    const newDynamicOptions: {{ [key: string]: string[] }} = {{}};
-    if (config.conditional_options) {{
-      for (const [field, conditions] of Object.entries(config.conditional_options)) {{
-        for (const conditionObj of conditions) {{
-          if (evalCondition(conditionObj.condition)) {{
-            newDynamicOptions[field] = conditionObj.options;
-            break; // Stop checking other conditions if one matches
-          }}
-        }}
-      }}
-    }}
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
-    setDynamicOptions(newDynamicOptions);
-  }}, [config, evalCondition]); // Include config and evalCondition in dependencies
-
-  useEffect(() => {{
-    updateDynamicOptions();
-  }}, [updateDynamicOptions]);
-
-
-const getCookie = (name: string): string | undefined => {{
-const cookies = document.cookie.split(';').reduce((acc, cookie) => {{
-const [key, value] = cookie.trim().split('=');
-acc[key] = value;
-return acc;
-}}, {{}} as {{ [key: string]: string }});
-return cookies[name];
-
-}};
-
-
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {{
-    const {{ name, value }} = e.target;
-    setFormData((prevData) => ({{ ...prevData, [name]: value }}));
-    if (config.validation_rules && config.validation_rules[name]) {{
-      const error = validateField(name, value, config.validation_rules[name]);
-      setErrors((prevErrors) => ({{ ...prevErrors, [name]: error }}));
-    }}
-  }};
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
-    e.preventDefault();
-
-    let valid = true;
-    const newErrors: {{ [key: string]: string | null }} = {{}};
-
-    if (config.validation_rules) {{
-      for (const field of Object.keys(config.validation_rules)) {{
-        const error = validateField(field, formData[field], config.validation_rules[field]);
-        if (error) {{
-          valid = false;
-          newErrors[field] = error;
-        }}
-      }}
-    }}
-
-    if (config.ai_quality_checks) {{
-      for (const field of Object.keys(config.ai_quality_checks)) {{
-        const aiErrors = await open_ai_quality_checks(field, formData[field], config.ai_quality_checks[field]);
-        if (aiErrors.length > 0) {{
-          valid = false;
-          newErrors[field] = aiErrors.join(', ');
-        }}
-      }}
-    }}
-
-    setErrors(newErrors);
-
-    if (!valid) {{
-      alert('Please fix the validation errors.');
-      return;
-    }}
-
-    const updateData = columns.reduce((acc, col) => {{
-      acc[col] = formData[col];
-      return acc;
-    }}, {{}} as {{ [key: string]: any }});
-
-    const user_id = getCookie('user_id');
-
-    if (user_id) {{
-      updateData['user_id'] = user_id;
-    }} else {{
-      console.error('User ID not found in cookies');
-      onClose(null);
-      return;
-    }}
-
-    try {{
-	    //console.log('151', rowData[0][0], updateData);
-      const response = await fetch(`${{apiHost}}update/${{modalName}}/${{rowData[0][0]}}`, {{
-        method: 'PUT',
-        headers: {{
-          'Content-Type': 'application/json',
-        }},
-        body: JSON.stringify(updateData),
-      }});
-      const result = await response.json();
-      //console.log('160',result);
-      if (result.status === 'success') {{
-        alert('Record updated successfully');
-        onClose([formData]); // Pass updated data back to parent
-      }} else {{
-        console.error('Failed to update data:', result);
-        onClose(null);
-      }}
-    }} catch (error) {{
-      console.error('Error updating data:', error);
-      onClose(null);
-    }}
-  }};
-
-  const isUrl = (value: string): boolean => {{
-    try {{
-      new URL(value);
-      return true;
-    }} catch (_) {{
-      return false;
-    }}
-  }};
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
-        <h2 className="text-yellow-100/50 text-center mb-8">Edit {{modalName}}</h2>
-        <form onSubmit={{handleSubmit}}>
-          <div className="grid grid-cols-2 gap-4">
-            {{columns.map((col) => (
-              <div key={{col}} className="mb-2">
-                <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
-                {{config.scopes.update.includes(col) ? (
-                  dynamicOptions[col] ? (
-                    <select
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {{col}}
-                      </option>
-                      {{dynamicOptions[col].map((option: string) => (
-                        <option key={{option}} value={{option}}>
-                          {{option}}
-                        </option>
-                      ))}}
-                    </select>
-                  ) : config.options[col] ? (
-                    <select
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {{col}}
-                      </option>
-                      {{config.options[col]?.map((option: string) => (
-                        <option key={{option}} value={{option}}>
-                          {{option}}
-                        </option>
-                      ))}}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    />
-                  )
-                ) : (
-                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
-                    {{isUrl(formData[col]) ? (
-                      <button
-                        type="button"
-                        onClick={{() => window.open(formData[col], '_blank')}}
-                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
-                      >
-                        Open URL
-                      </button>
-                    ) : (
-                      formData[col]
-                    )}}
-                  </div>
-                )}}
-                {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
-              </div>
-            ))}}
-          </div>
-          <div className="flex justify-end mt-4">
-            <button
-              type="button"
-              onClick={{() => onClose(null)}}
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}};
-
-export default EditModal;'''
-
-DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX = '''// src/components/modalConfig.tsx
-
-interface Options {{
-  [key: string]: string[] | undefined; // Allows any string key with string array or undefined value
-}}
-
-interface ConditionalOption {{
-  condition: string;
-  options: string[];
-}}
-
-interface Scopes {{
-  create: boolean;
-  read: string[];
-  update: string[];
-  delete: boolean;
-}}
-
-interface ValidationRules {{
-  [key: string]: string[];
-}}
-
-interface AIQualityChecks {{
-  [key: string]: string[];
-}}
-
-interface ModalConfig {{
-  options: Options;
-  conditional_options?: {{
-    [key: string]: ConditionalOption[];
-  }};
-  scopes: Scopes;
-  validation_rules?: ValidationRules;
-  ai_quality_checks?: AIQualityChecks;
-  read_routes?: string[];
-}}
-
-interface ModalConfigMap {{
-  [key: string]: ModalConfig;
-}}
-
-
-
-
-
-const modalConfig: ModalConfigMap = {{
-  "users": {{
-    "options": {{
-      "type": [
-        "admin",
-        "normal"
-      ]
-    }},
-    "conditional_options": {{}},
-    "scopes": {{
-      "create": true,
-      "read": [
-        "id",
-        "username",
-        "password",
-        "type",
-        "created_at",
-        "updated_at"
-      ],
-      "update": [
-        "username",
-        "password",
-        "type"
-      ],
-      "delete": true
-    }},
-    "validation_rules": {{
-      "username": [
-        "REQUIRED"
-      ],
-      "password": [
-        "REQUIRED"
-      ]
-    }},
-    "read_routes": [
-      "default"
-    ]
-  }},
-  "social_media_escalations": {{
-    "options": {{
-      "forum": [
-        "Google_Reviews",
-        "LinkedIn",
-        "Twitter/X",
-        "Facebook",
-        "Instagram",
-        "YouTube",
-        "Other"
-      ],
-      "status": [
-        "Unresolved",
-        "Resolved_but_post_not_removed",
-        "Not_able_to_identify_poster"
-      ],
-      "issue": [
-        "Internet_supply_down",
-        "Slow_speed",
-        "Frequent_disconnect",
-        "Rude_behaviour_of_Partner",
-        "Booking_fee_refund",
-        "Trust issue",
-        "Other"
-      ]
-    }},
-    "conditional_options": {{
-      "sub_status": [
-        {{
-          "condition": "status == Unresolved",
-          "options": [
-            "Did_not_pick_up",
-            "Picked_up_yet_unresolved"
-          ]
-        }},
-        {{
-          "condition": "status == Resolved_but_post_not_removed",
-          "options": [
-            "Was_very_angry",
-            "Other"
-          ]
-        }}
-      ]
-    }},
-    "scopes": {{
-      "create": true,
-      "read": [
-        "id",
-        "url",
-        "forum",
-        "mobile",
-        "issue",
-        "status",
-        "sub_status",
-        "action_taken",
-        "follow_up_date",
-        "created_at"
-      ],
-      "update": [
-        "url",
-        "forum",
-        "mobile",
-        "issue",
-        "status",
-        "sub_status",
-        "action_taken",
-        "follow_up_date"
-      ],
-      "delete": true
-    }},
-    "validation_rules": {{
-      "url": [
-        "REQUIRED"
-      ],
-      "forum": [
-        "REQUIRED"
-      ],
-      "issue": [
-        "REQUIRED"
-      ],
-      "status": [
-        "REQUIRED"
-      ],
-      "sub_status": [
-        "REQUIRED"
-      ],
-      "action_taken": [
-        "REQUIRED"
-      ],
-      "follow_up_date": [
-        "REQUIRED",
-        "IS_AFTER_TODAY"
-      ]
-    }},
-    "ai_quality_checks": {{
-      "action_taken": [
-        "must describe a meaningful step taken to reach out to a customer and resolve a social media escalation"
-      ]
-    }},
-    "read_routes": [
-      "most-recent-500",
-      "todays-cases",
-      "yesterdays-cases"
-    ]
-  }}
-}};
-
-export default modalConfig;'''
-
-DIR__COMPONENTS__FILE__SEARCH_UTILS__TSX = '''export const handleSearchSubmit = async (
-  apiHost: string,
-  modal: string,
-  queryInput: string,
-  setData: React.Dispatch<React.SetStateAction<any[]>>,
-  setQueryError: React.Dispatch<React.SetStateAction<string | null>>
-) => {{
-  try {{
-    const response = await fetch(`${{apiHost}}search/${{modal}}`, {{
-      method: 'POST',
-      headers: {{
-        'Content-Type': 'application/json',
-      }},
-      body: JSON.stringify({{ search_string: queryInput.trim() }}),
-    }});
-    const result = await response.json();
-    if (response.ok) {{
-      setData(result.data);
-      setQueryError(null);
-    }} else {{
-      console.error('Error fetching search results:', result);
-      setQueryError(result.error || 'Unknown error occurred');
-    }}
-  }} catch (error) {{
-    console.error('Error fetching search results:', error);
     if (error instanceof Error) {{
       setQueryError(error.message || 'Unknown error occurred');
     }} else {{

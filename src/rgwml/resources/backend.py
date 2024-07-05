@@ -335,9 +335,8 @@ def search_entries(modal_name):
             response.status = 500
             return {{"error": str(e)}}
 
-@app.route('/update/<modal_name>/<entry_id>', method=['PUT','OPTIONS'])
+@app.route('/update/<modal_name>/<entry_id>', method=['PUT', 'OPTIONS'])
 def update_entry(modal_name, entry_id):
-
     if request.method == 'OPTIONS':
         return {{}}
 
@@ -348,33 +347,48 @@ def update_entry(modal_name, entry_id):
         return {{"error": f"Modal {{modal_name}} not found in modal_map"}}
 
     columns_str = modal_details.get('columns', '')
-    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'user_id']]
+    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'username']]
 
-    # Construct the SET clause with placeholders for SQL parameters
-    set_clause = ", ".join([f"{{col}} = %s" for col in columns])
-    values = [data.get(col) for col in columns]
+    set_clauses = []
+    for col in columns:
+        if col in data:  # Check if the column is in the data received
+            value = data[col]
+            if value is not None:
+                set_clauses.append(f"{{col}} = '{{value}}'")
+
+    # Ensure that user_id is included if present in the data
+    if 'user_id' in data:
+        value = data['user_id']
+        if value is not None:
+            set_clauses.append(f"user_id = '{{value}}'")
+
+    set_clause = ", ".join(set_clauses)
+    update_query = f"UPDATE {{modal_name}} SET {{set_clause}} WHERE id = {{entry_id}}"
+
 
     try:
         conn = pymysql.connect(**config)
         cursor = conn.cursor()
 
         # Fetch the old row for logging purposes
-        cursor.execute(f"SELECT * FROM {{modal_name}} WHERE id = %s", [entry_id])
+        cursor.execute(f"SELECT * FROM {{modal_name}} WHERE id = {{entry_id}}")
         old_row = cursor.fetchone()
         print(f"Old row: {{old_row}}")
 
         # Perform the update operation
-        cursor.execute(f"UPDATE {{modal_name}} SET {{set_clause}} WHERE id = %s", values + [entry_id])
+        cursor.execute(update_query)
         conn.commit()
 
-        log_operation(modal_name, data['user_id'], 'UPDATE', {{"old": old_row, "new": data}})
+        log_operation(modal_name, data.get('user_id'), 'UPDATE', {{"old": old_row, "new": data}})
 
         return {{"status": "success"}}
     except Exception as e:
         conn.rollback()
         print(f"Error updating entry: {{e}}")
         response.status = 500
-        return {{"status": "error", "message": str(e)}}
+        error = str(e)
+        message = f"error: {{error}}; query: {{update_query}}"
+        return {{"status": "error", "message": message}}
     finally:
         cursor.close()
         conn.close()
@@ -656,6 +670,12 @@ def run_tests(base_url, modal_map):
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
+
+    # Delete from users where username contains 'xxxxx'
+    user_query = "DELETE FROM users WHERE username LIKE '%%xxxxx%%'"
+    print(f"Delete query for users: {user_query}")
+    cursor.execute(user_query)
+
     for modal_name, details in modal_map.items():
         if modal_name == 'users':
             continue

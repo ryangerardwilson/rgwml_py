@@ -1,4 +1,6 @@
 export const validateField = (field: string, value: any, rules: string[]): string | null => {
+  const isRequired = rules.includes('REQUIRED');
+
   for (const rule of rules) {
     const [ruleName, ...params] = rule.split(':');
     switch (ruleName) {
@@ -19,6 +21,9 @@ export const validateField = (field: string, value: any, rules: string[]): strin
         }
         break;
       case 'IS_INDIAN_MOBILE_NUMBER':
+        if (!isRequired && !value) {
+          break; // Skip this rule if the field is not required and value is empty
+        }
         const uniqueDigits = new Set(value.split('')).size;
         if (!/^[6789]\d{9}$/.test(value) || uniqueDigits < 4) {
           return `${field} must be a valid Indian mobile number.`;

@@ -1167,7 +1167,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         """INSPECT::[d.pr()] Print."""
         if self.df is not None:
             print(self.df)
-            columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
+            columns_with_types = [f"{col} ({self.df[col].dtypes})" for col in self.df.columns]
+            #columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
             print("Columns:", columns_with_types)
         else:
             raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")

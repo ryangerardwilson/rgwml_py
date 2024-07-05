@@ -137,7 +137,7 @@ return cookies[name];
     }
 
     try {
-	    //console.log('151', rowData[0][0], updateData);
+	  //console.log('151', rowData[0][0], updateData);
       const response = await fetch(`${apiHost}update/${modalName}/${rowData[0][0]}`, {
         method: 'PUT',
         headers: {
