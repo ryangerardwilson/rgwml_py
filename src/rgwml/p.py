@@ -101,8 +101,9 @@ class p:
             with mysql.connector.connect(host=host, user=username, password=password, database=database) as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(query)
-                    rows = cursor.fetchall()
-                    columns = [desc[0] for desc in cursor.description]
+                    if cursor.description is not None:
+                        rows = cursor.fetchall()
+                        columns = [desc[0] for desc in cursor.description]
         elif db_type == 'clickhouse':
             host = db_preset['host']
             username = db_preset['username']
