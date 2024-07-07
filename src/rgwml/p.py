@@ -25,6 +25,7 @@ from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, MeanShift, 
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 import dask.dataframe as dd
+from openai import OpenAI
 
 class p:
     def __init__(self, df=None):
@@ -703,6 +704,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             insert_columns = [col.strip() for col in insert_columns]
 
+        # Handle NaN values by replacing them with None
+        data_to_insert = self.df[insert_columns].replace({np.nan: None}).values.tolist()
+
         # Connect to the database
         with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
@@ -720,8 +724,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
                 if print_query:
                     print(insert_query)
-                data = self.df[insert_columns].values.tolist()
-                cursor.executemany(insert_query, data)
+                cursor.executemany(insert_query, data_to_insert)
                 conn.commit()
 
             finally:
@@ -2483,3 +2486,233 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise ValueError("The specified column must exist in both DataFrames.")
         self.df = self.df[self.df[column_name].isin(other_p.df[column_name])]
         return self
+
+    def goaibc(self, job_name, model, columns_to_analyse, classification_options):
+        """OPENAI::[batch_id = d.oaibc('fruit_or_vegetable_classification','gpt-3.5-turbo','Column1, Column3','fruit, vegetable, other')] Get OpenAI Batch Classification. Returns a batch id"""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Prepare the batch input file
+        batch_input_data = []
+        for idx, row in self.df.iterrows():
+            row_data = {col: row[col] for col in columns_to_analyse.split(', ')}
+            prompt = f"Return a single classification response considering all the data provided below, labelling the entire dataset with one of the following categories: {classification_options}. Data: {row_data}"
+            request_data = {
+                "custom_id": f"request-{idx}",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": model,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": """You are a helpful assistant that returns a json classifying the user's input in this format: {"classification":"your_response"}."""},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 1000
+                }
+            }
+            batch_input_data.append(request_data)
+
+        #print(batch_input_data)
+
+        # Write the batch input data to a .jsonl file
+        batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
+        with open(batch_input_file_path, 'w') as batch_input_file:
+            for request in batch_input_data:
+                batch_input_file.write(json.dumps(request) + '\n')
+
+        # Upload the batch input file
+        batch_input_file = client.files.create(
+            file=open(batch_input_file_path, "rb"),
+            purpose="batch"
+        )
+
+        # Create the batch
+        batch_input_file_id = batch_input_file.id  # Corrected from ['id'] to .id
+        batch = client.batches.create(
+            input_file_id=batch_input_file_id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+            metadata={
+                "description": job_name
+            }
+        )
+        print(f"Batch ID for {job_name}: {batch.id}")
+
+        return batch.id
+
+    def oaibl(self):
+        """OPENAI::[d.oaibl()] OpenAI Batch list. Lists OpenAI batch jobs."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Collect batch statuses
+        batch_statuses = []
+        response = client.batches.list(limit=10)  # Adjust the limit as needed
+
+        for batch_info in response:
+            batch_statuses.append({
+                "batch_id": batch_info.id,
+                "status": batch_info.status,
+                "created_at": batch_info.created_at,
+                "completed_at": getattr(batch_info, 'completed_at', None),
+                "failed_at": getattr(batch_info, 'failed_at', None),
+                "expired_at": getattr(batch_info, 'expired_at', None)
+            })
+
+        # Create a DataFrame to display batch statuses
+        status_df = pd.DataFrame(batch_statuses)
+        print(status_df)
+
+        # Return self for method chaining
+        return self
+
+
+    def oaibc(self, batch_id):
+        """OPENAI::[d.oaibc('batch_id_to_cancel')] OpenAI batch cancel. Cancel a batch and print its status."""
+        
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Cancel the batch
+        client.batches.cancel(batch_id)
+        time.sleep(3)
+
+        # Retrieve and print the batch info
+        batch_info = client.batches.retrieve(batch_id)
+        batch_status = {
+            "batch_id": batch_info.id,
+            "status": batch_info.status,
+            "created_at": batch_info.created_at,
+            "completed_at": getattr(batch_info, 'completed_at', None),
+            "failed_at": getattr(batch_info, 'failed_at', None),
+            "expired_at": getattr(batch_info, 'expired_at', None)
+        }
+
+        # Create a DataFrame to display batch status
+        status_df = pd.DataFrame([batch_status])
+        print(status_df)
+
+        # Return self for method chaining
+        return self
+
+    def oaibs(self, batch_id):
+        """OPENAI::[d.oaibs('batch_id')] OpenAI Batch status. Checks the status of a specific OpenAI batch job."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Retrieve the batch info
+        batch_info = client.batches.retrieve(batch_id)
+
+        # Extract the status
+        status = batch_info.status
+
+        # Print the status
+        print(f"Batch Status: {status}")
+
+        # Return the status for method chaining or other use
+        return self
+
+    def goaibs(self, batch_id):
+        """OPENAI::[status = d.goaibs('batch_id')] OpenAI Batch get status. Returns the status of a specific OpenAI batch job."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Retrieve the batch info
+        batch_info = client.batches.retrieve(batch_id)
+
+        # Extract the status
+        status = batch_info.status
+
+        # Print the status
+        print(f"Batch Status: {status}")
+
+        # Return the status for method chaining or other use
+        return status
+
+

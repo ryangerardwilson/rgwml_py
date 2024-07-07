@@ -505,6 +505,16 @@ def test_dbuoi():
     d.fq('happy_sudo','SELECT * FROM test.test_table')
 
 
+def test_goaibc():
+    d = r.p()
+    d.frd(['item','value'],[['apple',100],['spinach',200],['vinegar',300]])
+    batch_id = d.goaibc('fruit_or_vegetable_classification','gpt-3.5-turbo','item','fruit, vegetable, other')
+    status = d.goaibs(batch_id)
+
+    d.oaibs(batch_id)
+    d.oaibc(batch_id)
+    d.oaibs(batch_id)
+    d.oaibl()
 
 # Call the test method
 #test_axlinr()
@@ -520,7 +530,7 @@ def test_dbuoi():
 #test_adbscancc()
 #test_pnfc()
 #test_pnfl()
-test_ser()
+#test_ser()
 #test_dg()
 #test_dg_2()
 #test_dg_3()
@@ -534,4 +544,4 @@ test_ser()
 #test_dbiu()
 #test_dbtai()
 #test_dbuoi()
-
+test_goaibc()

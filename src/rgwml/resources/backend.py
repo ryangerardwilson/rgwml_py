@@ -693,8 +693,8 @@ def cleanup_db(config, modal_map):
         cursor.execute(query)
 
         # Delete from modal logs table
-        log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
-        log_query = f"DELETE FROM {modal_name}_logs WHERE {log_conditions}"
+        #log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
+        log_query = f"DELETE FROM {modal_name}_logs WHERE operation_details LIKE '%xxxxx%'"
         print(f"Delete log query for modal {modal_name}: {log_query}")
         cursor.execute(log_query)
 
