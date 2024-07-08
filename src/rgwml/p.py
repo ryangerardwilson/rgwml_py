@@ -26,6 +26,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 import dask.dataframe as dd
 from openai import OpenAI
+from pprint import pprint
 
 class p:
     def __init__(self, df=None):
@@ -1118,22 +1119,26 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def fnr(self, n):
         """INSPECT::[d.fnr('n')] First n rows."""
         if self.df is not None:
-            first_n_rows = self.df.head(n).to_json(orient="records", indent=4)
-            print(first_n_rows)
+            first_n_rows = self.df.head(n).to_dict(orient="records")
+            for row in first_n_rows:
+                pprint(row, indent=4)
+                print()
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
 
     def lnr(self, n):
         """INSPECT::[d.lnr('n')] Last n rows."""
         if self.df is not None:
-            last_n_rows = self.df.tail(n).to_json(orient="records", indent=4)
-            print(last_n_rows)
+            last_n_rows = self.df.tail(n).to_dict(orient="records")
+            for row in last_n_rows:
+                pprint(row, indent=4)
+                print()
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
 
@@ -2682,7 +2687,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def goaibs(self, batch_id):
-        """OPENAI::[status = d.goaibs('batch_id')] OpenAI Batch get status. Returns the status of a specific OpenAI batch job."""
+        """OPENAI::[status, output_file_id = d.goaibs('batch_id')] OpenAI Batch get status. Returns the status of a specific OpenAI batch job."""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -2708,11 +2713,117 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         # Extract the status
         status = batch_info.status
+        output_file_id = batch_info.output_file_id
 
         # Print the status
         print(f"Batch Status: {status}")
+        print(f"Output file id: {output_file_id}")
 
         # Return the status for method chaining or other use
-        return status
+        return status, output_file_id
 
+    def oais(self, file_path, model, columns_to_analyse, classification_options, batch_column_name):
+        """OPENAI::[d.oais('path/to/save/file','gpt-3.5-turbo','Column7, Column9','Fruits, Vegetables','NewColumn')] OpenAI Sow. Create an OpenAI batch job and save the DataFrame as an H5 file with batch ID in metadata."""
+        batch_id = self.goaibc('sow', model, columns_to_analyse, classification_options)
 
+        h5_file_path = f"{file_path}.h5" if not file_path.endswith(".h5") else file_path
+        self.df.to_hdf(h5_file_path, key='df', mode='w', format='table', complib='blosc', complevel=9)
+
+        with pd.HDFStore(h5_file_path, mode='a') as store:
+            store.get_storer('df').attrs.metadata = {'batch_id': batch_id, 'batch_column_name': batch_column_name}
+
+        print(f"DataFrame with batch ID saved to {h5_file_path}")
+        return batch_id
+
+    def oaih(self, file_path):
+        """OPENAI::[d.oaih('path/to/your/sowed/saved/file')] OpenAI harvest. Open the H5 file, check the status of the batch job, and open the file accordingly."""
+
+        def download_output_file(output_file_id, open_ai_key):
+            client = OpenAI(api_key=open_ai_key)
+            
+            # Retrieve the file metadata
+            file_metadata = client.files.retrieve(output_file_id)
+            print(file_metadata)
+
+            # Retrieve the file content
+            response = client.files.content(output_file_id)
+            file_content = response.read()  # Read the content of the response
+
+            # Write the content to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                tmp_file.write(file_content)
+                tmp_file_path = tmp_file.name
+
+            return tmp_file_path
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+
+        with pd.HDFStore(file_path, mode='r') as store:
+            try:
+                storer = store.get_storer('df')
+                if not hasattr(storer.attrs, 'metadata'):
+                    print("No harvest meta data found")
+                    self.pr()
+                    return self
+
+                metadata = storer.attrs.metadata
+            except AttributeError:
+                print("No harvest meta data found")
+                return self
+
+            batch_id = metadata.get('batch_id')
+            batch_column_name = metadata.get('batch_column_name')
+
+            if not batch_id or not batch_column_name:
+                print("No harvest meta data found")
+                self.pr()
+                return self
+
+            self.df = store['df']
+
+        if not batch_id:
+            raise ValueError("No batch ID found in the file metadata.")
+
+        status, output_file_id = self.goaibs(batch_id)
+
+        if status == 'completed':
+            print(f"Batch job {batch_id} completed")
+            if output_file_id:
+                tmp_file_path = download_output_file(output_file_id, open_ai_key)
+                new_column_data = []
+                with open(tmp_file_path, 'r') as f:
+                    for line in f:
+                        result = json.loads(line)
+                        if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
+                            message_content = result['response']['body']['choices'][0]['message']['content']
+                            classification = json.loads(message_content)["classification"]
+                            new_column_data.append(classification)
+                        else:
+                            print(f"Skipping invalid result: {result}")
+                self.df[batch_column_name] = new_column_data
+
+                # Save the DataFrame
+                self.s(file_path)
+            else:
+                raise ValueError("No output file ID found for the completed batch.")
+        else:
+            print(f"Batch job {batch_id} status: {status}")
+
+        self.pr()
+        return self

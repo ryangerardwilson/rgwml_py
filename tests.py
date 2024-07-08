@@ -516,6 +516,16 @@ def test_goaibc():
     d.oaibs(batch_id)
     d.oaibl()
 
+def test_oais():
+    d = r.p()
+    d.frd(['item','value'],[['apple',100],['spinach',200],['vinegar',300]])
+    d.oais('/home/rgw/Desktop/test.h5','gpt-3.5-turbo','item','fruit, vegetable, other','ai_classification')
+
+def test_oaih():
+    d = r.p()
+    d.oaih('/home/rgw/Desktop/test.h5')
+
+
 # Call the test method
 #test_axlinr()
 #test_axlinr_2()
@@ -544,4 +554,6 @@ def test_goaibc():
 #test_dbiu()
 #test_dbtai()
 #test_dbuoi()
-test_goaibc()
+#test_goaibc()
+#test_oais()
+test_oaih()
