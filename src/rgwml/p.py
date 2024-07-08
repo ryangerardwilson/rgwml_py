@@ -248,7 +248,8 @@ class p:
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
 
-        pd.reset_option('all')
+        pd.reset_option('display.max_rows')
+        pd.reset_option('display.max_columns')
         gc.collect()
         return self
 
@@ -2723,7 +2724,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return status, output_file_id
 
     def oais(self, file_path, model, columns_to_analyse, classification_options, batch_column_name):
-        """OPENAI::[d.oais('path/to/save/file','gpt-3.5-turbo','Column7, Column9','Fruits, Vegetables','NewColumn')] OpenAI Sow. Create an OpenAI batch job and save the DataFrame as an H5 file with batch ID in metadata."""
+        """OPENAI::[d.oais('path/to/save/file','gpt-3.5-turbo','Column7, Column9','Fruits, Vegetables','NewColumnName')] OpenAI Sow. Create an OpenAI batch job and save the DataFrame as an H5 file with batch ID in metadata."""
         batch_id = self.goaibc('sow', model, columns_to_analyse, classification_options)
 
         h5_file_path = f"{file_path}.h5" if not file_path.endswith(".h5") else file_path
