@@ -526,6 +526,16 @@ def test_oaih():
     d.oaih('/home/rgw/Desktop/test.h5')
 
 
+def test_oaiatc():
+    d = r.p()
+    d.frd(['recording'],[
+        ['https://cloudphone.tatateleservices.com/file/recording?callId=1720456064.234573&type=rec&token=SEhNVXoxc24rSEdRRDFEZVorV2ZYK2xkd0ptdVd3a25DUkZ2b05aOVJWMHBLWHZjRHhZbHJHZjlVNHdMVGFBSTo6YWIxMjM0Y2Q1NnJ0eXl1dQ%3D%3D'],
+        ['https://cloudphone.tatateleservices.com/file/recording?callId=1720456143.234600&type=rec&token=dFFUQlN0MERtSXRsbmJRS3NiQ0hEcXNSYVFuU0FLRWt5WWk1c1llSzFGN0VHL3ArYUxxRThPaFhOd0ZkcUdZSzo6YWIxMjM0Y2Q1NnJ0eXl1dQ%3D%3D'],
+        ['https://cloudphone.tatateleservices.com/file/recording?callId=1720455766.234443&type=rec&token=VGNaZGovdTE5UFZmcnRzL1NrMlEvQ3FmbFUvRVRJdlRjaXovRzJnUnZ1VDhUajZuSGZZVWVvbEozN0I1b29OWjo6YWIxMjM0Y2Q1NnJ0eXl1dQ%3D%3D']
+    ])
+    d.oaiatc('recording','transcription',participants='agent, customer', classify=[{'emotion':'happy, unhappy, neutral'}, {'issue':'internet_issue, payment_issue, other_issue'}])
+
+
 # Call the test method
 #test_axlinr()
 #test_axlinr_2()
@@ -556,4 +566,5 @@ def test_oaih():
 #test_dbuoi()
 #test_goaibc()
 #test_oais()
-test_oaih()
+#test_oaih()
+test_oaiatc()

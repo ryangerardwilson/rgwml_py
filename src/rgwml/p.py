@@ -27,6 +27,11 @@ from sklearn.metrics import silhouette_score
 import dask.dataframe as dd
 from openai import OpenAI
 from pprint import pprint
+import requests
+from requests_html import HTMLSession
+import filetype
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 class p:
     def __init__(self, df=None):
@@ -2826,5 +2831,188 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             print(f"Batch job {batch_id} status: {status}")
 
+        self.pr()
+        return self
+
+    def oaiatc(self, url_column, transcription_column, participants=None, classify=None):
+        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name')]Method to append transcriptions to DataFrame based on URLs in a specified column."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+        session = HTMLSession()
+
+        def process_url(url):
+            try:
+                # Try to download the file directly
+                response = requests.get(url)
+                response.raise_for_status()
+
+                # Save the audio file to a temporary file
+                with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                    tmp_file.write(response.content)
+                    tmp_file_path = tmp_file.name
+
+                # Determine the file type using filetype
+                kind = filetype.guess(tmp_file_path)
+                if kind is None:
+                    # Check the Content-Type header as a fallback
+                    content_type = response.headers.get('Content-Type')
+                    if content_type:
+                        content_types = [ct.strip() for ct in content_type.split(',')]
+                        for ct in content_types:
+                            if ct.startswith('audio/'):
+                                extension = ct.split('/')[1].split(';')[0]
+                                if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                    kind = {'extension': extension}
+                                    break
+                    if kind is None:
+                        raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+
+            except requests.exceptions.RequestException:
+                # If direct download fails, try using requests_html
+                try:
+                    response = session.get(url)
+                    response.html.render()  # Render the page JavaScript
+
+                    # Find the download URL
+                    download_button = response.html.find('a', containing='Download', first=True)
+                    if not download_button:
+                        raise ValueError("Download button not found on the page")
+                    download_url = download_button.attrs['href']
+
+                    # Download the audio file
+                    response = session.get(download_url)
+                    response.raise_for_status()
+
+                    # Save the audio file to a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                        tmp_file.write(response.content)
+                        tmp_file_path = tmp_file.name
+
+                    # Determine the file type using filetype
+                    kind = filetype.guess(tmp_file_path)
+                    if kind is None:
+                        # Check the Content-Type header as a fallback
+                        content_type = response.headers.get('Content-Type')
+                        if content_type:
+                            content_types = [ct.strip() for ct in content_type.split(',')]
+                            for ct in content_types:
+                                if ct.startswith('audio/'):
+                                    extension = ct.split('/')[1].split(';')[0]
+                                    if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                        kind = {'extension': extension}
+                                        break
+                        if kind is None:
+                            raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+
+                except Exception as e:
+                    return None, None, {}, url, str(e)
+
+            # Renaming the file with the correct extension
+            new_tmp_file_path = f"{tmp_file_path}.{kind['extension']}"
+            os.rename(tmp_file_path, new_tmp_file_path)
+
+            # Transcribe the audio file
+            try:
+                with open(new_tmp_file_path, "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+
+                    # Use GPT-4o for improving the transcription
+                    improvement_response = client.chat.completions.create(
+                        model="gpt-4o",
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                            {"role": "user", "content": f"""THis is a transcription. Make it more legible by removing gibberish, in this format {{"improved_transcription":"your_response"}}: {transcription}"""}
+                        ]
+                    )
+                    improved_transcription_content = improvement_response.choices[0].message.content
+                    improved_transcription = json.loads(improved_transcription_content)["improved_transcription"]
+
+                    # Prepare participant details for the prompt if specified
+                    if participants:
+                        participant_details = participants.split(", ")
+                        participant_flow_format = ', '.join([f'{{"{p}":"dialogue text"}}' for p in participant_details])
+                        flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{participant_flow_format}]}}: {transcription}'
+                    else:
+                        flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{{"speaker_1":"dialogue text"}}, {{"speaker_2": "dialogue text"}}, {{"speaker_1":"dialogue text"}}, {{"speaker_2":"dialogue text"}}]}}: {transcription}'
+
+                    # Use GPT-4o for clarification
+                    flow_response = client.chat.completions.create(
+                        model="gpt-4o",
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                            {"role": "user", "content": flow_prompt}
+                        ]
+                    )
+                    flow_content = flow_response.choices[0].message.content
+                    flow = json.loads(flow_content)["flow"]
+
+                    # Classify the transcription if classification labels are provided
+                    labels_dict = {}
+                    if classify:
+                        for classification in classify:
+                            for column, labels in classification.items():
+                                label_response = client.chat.completions.create(
+                                    model="gpt-4o",
+                                    response_format={"type": "json_object"},
+                                    messages=[
+                                        {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                                        {"role": "user", "content": f"""Label the below transcription with one of these labels - {labels}: in this manner: {{"label": "your_response"}} """}
+                                    ]
+                                )
+                                label_content = label_response.choices[0].message.content
+                                label = json.loads(label_content)["label"]
+                                labels_dict[column] = label
+                    return improved_transcription, flow, labels_dict, url, None
+
+            except Exception as e:
+                return None, None, {}, url, str(e)
+
+        print("STARTED")
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(process_url, url): url for url in self.df[url_column]}
+            transcriptions = []
+            flows = []
+            all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
+            #all_labels = {classification.keys()[0]: [] for classification in classify} if classify else {}
+            with tqdm(total=len(futures), desc="Processing URLs") as pbar:
+                for future in as_completed(futures):
+                    improved_transcription, flow, labels_dict, url, error = future.result()
+                    if error:
+                        print(f"Failed to process {url}: {error}")
+                    transcriptions.append(improved_transcription)
+                    flows.append(flow)
+                    if classify:
+                        for column in all_labels:
+                            all_labels[column].append(labels_dict.get(column, None))
+                    pbar.update(1)
+
+        self.df[transcription_column] = transcriptions
+        self.df[f"{transcription_column}_flow"] = flows
+        if classify:
+            for column, labels in all_labels.items():
+                self.df[f"{transcription_column}_{column}"] = labels
         self.pr()
         return self
