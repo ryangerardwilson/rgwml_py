@@ -533,7 +533,14 @@ def test_oaiatc():
         ['https://cloudphone.tatateleservices.com/file/recording?callId=1720456143.234600&type=rec&token=dFFUQlN0MERtSXRsbmJRS3NiQ0hEcXNSYVFuU0FLRWt5WWk1c1llSzFGN0VHL3ArYUxxRThPaFhOd0ZkcUdZSzo6YWIxMjM0Y2Q1NnJ0eXl1dQ%3D%3D'],
         ['https://cloudphone.tatateleservices.com/file/recording?callId=1720455766.234443&type=rec&token=VGNaZGovdTE5UFZmcnRzL1NrMlEvQ3FmbFUvRVRJdlRjaXovRzJnUnZ1VDhUajZuSGZZVWVvbEozN0I1b29OWjo6YWIxMjM0Y2Q1NnJ0eXl1dQ%3D%3D']
     ])
-    d.oaiatc('recording','transcription',participants='agent, customer', classify=[{'emotion':'happy, unhappy, neutral'}, {'issue':'internet_issue, payment_issue, other_issue'}])
+    d.oaiatc('recording','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30)
+    d.fnr(3)
+
+def test_oaiatc_2():
+    d = r.p()
+    d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 ORDER BY id DESC LIMIT 10')
+    d.oaiatc('recording_url','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30)
+    d.fnr(3)
 
 
 # Call the test method
@@ -567,4 +574,5 @@ def test_oaiatc():
 #test_goaibc()
 #test_oais()
 #test_oaih()
-test_oaiatc()
+#test_oaiatc()
+test_oaiatc_2()

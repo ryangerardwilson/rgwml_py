@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.124"
+version = "0.0.126"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -42,7 +42,9 @@ dependencies = [
     "google-cloud-bigquery-storage",
     "openai",
     "filetype",
-    "tqdm"
+    "tqdm",
+    "lxml_html_clean",
+    "requests-html"
 ]
 dynamic = ["scripts"]
 

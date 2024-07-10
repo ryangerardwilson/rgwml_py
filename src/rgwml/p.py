@@ -28,10 +28,11 @@ import dask.dataframe as dd
 from openai import OpenAI
 from pprint import pprint
 import requests
-from requests_html import HTMLSession
+from requests_html import HTMLSession, AsyncHTMLSession
 import filetype
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+import asyncio
 
 class p:
     def __init__(self, df=None):
@@ -2834,8 +2835,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    def oaiatc(self, url_column, transcription_column, participants=None, classify=None):
-        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name')]Method to append transcriptions to DataFrame based on URLs in a specified column."""
+    def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o"):
+        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o")] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -2855,9 +2856,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         open_ai_key = load_key('open_ai_key')
         client = OpenAI(api_key=open_ai_key)
-        session = HTMLSession()
 
-        def process_url(url):
+        async def process_url(session, url):
             try:
                 # Try to download the file directly
                 response = requests.get(url)
@@ -2887,8 +2887,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             except requests.exceptions.RequestException:
                 # If direct download fails, try using requests_html
                 try:
-                    response = session.get(url)
-                    response.html.render()  # Render the page JavaScript
+                    response = await session.get(url)
+                    await response.html.arender()
 
                     # Find the download URL
                     download_button = response.html.find('a', containing='Download', first=True)
@@ -2897,7 +2897,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     download_url = download_button.attrs['href']
 
                     # Download the audio file
-                    response = session.get(download_url)
+                    response = await session.get(download_url)
                     response.raise_for_status()
 
                     # Save the audio file to a temporary file
@@ -2922,7 +2922,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                             raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
 
                 except Exception as e:
-                    return None, None, {}, url, str(e)
+                    return None, None, None, {}, url, str(e)
 
             # Renaming the file with the correct extension
             new_tmp_file_path = f"{tmp_file_path}.{kind['extension']}"
@@ -2932,7 +2932,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             try:
                 with open(new_tmp_file_path, "rb") as audio_file:
                     transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
+                        model=whisper_model,
                         file=audio_file,
                         response_format="text"
                     )
@@ -2943,7 +2943,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-                            {"role": "user", "content": f"""THis is a transcription. Make it more legible by removing gibberish, in this format {{"improved_transcription":"your_response"}}: {transcription}"""}
+                            {"role": "user", "content": f"""Make the below transcription more legible by removing gibberish, in this format {{"improved_transcription":"your_response"}}: \n\n{transcription}"""}
                         ]
                     )
                     improved_transcription_content = improvement_response.choices[0].message.content
@@ -2952,14 +2952,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     # Prepare participant details for the prompt if specified
                     if participants:
                         participant_details = participants.split(", ")
-                        participant_flow_format = ', '.join([f'{{"{p}":"dialogue text"}}' for p in participant_details])
+                        participant_flow_format = ', '.join([f'{{"{p}":"dialogue text in English"}}' for p in participant_details])
                         flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{participant_flow_format}]}}: {transcription}'
                     else:
-                        flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{{"speaker_1":"dialogue text"}}, {{"speaker_2": "dialogue text"}}, {{"speaker_1":"dialogue text"}}, {{"speaker_2":"dialogue text"}}]}}: {transcription}'
+                        flow_prompt = f'Translate the below transcriptions to English clearly delineating the participants and the flow, in this format {{"flow":[{{"speaker_1":"dialogue text in English"}}, {{"speaker_2": "dialogue text in English"}}, {{"speaker_1":"dialogue text in English"}}, {{"speaker_2":"dialogue text in English"}}]}}: \n\n{transcription}'
 
                     # Use GPT-4o for clarification
                     flow_response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model=json_mode_model,
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
@@ -2969,50 +2969,91 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     flow_content = flow_response.choices[0].message.content
                     flow = json.loads(flow_content)["flow"]
 
+                    # Generate a summary if summary_word_length is greater than 5
+                    summary = None
+                    if summary_word_length > 5:
+                        summary_response = client.chat.completions.create(
+                            model=json_mode_model,
+                            response_format={"type": "json_object"},
+                            messages=[
+                                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                                {"role": "user", "content": f"""Summarize the below conversation in less than {summary_word_length} words, in this format: {{"summary":"your response"}} \n\n{flow}"""}
+                            ]
+                        )
+                        summary_content = summary_response.choices[0].message.content
+                        summary = json.loads(summary_content)["summary"]
                     # Classify the transcription if classification labels are provided
                     labels_dict = {}
                     if classify:
                         for classification in classify:
                             for column, labels in classification.items():
                                 label_response = client.chat.completions.create(
-                                    model="gpt-4o",
+                                    model=json_mode_model,
                                     response_format={"type": "json_object"},
                                     messages=[
                                         {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-                                        {"role": "user", "content": f"""Label the below transcription with one of these labels - {labels}: in this manner: {{"label": "your_response"}} """}
+                                        {"role": "user", "content": f"""Label the below transcription with one of these labels - {labels}: in this manner: {{"label": "your_response"}} \n\n{flow}"""}
                                     ]
                                 )
                                 label_content = label_response.choices[0].message.content
                                 label = json.loads(label_content)["label"]
                                 labels_dict[column] = label
-                    return improved_transcription, flow, labels_dict, url, None
+                    return improved_transcription, flow, summary, labels_dict, url, None
 
             except Exception as e:
-                return None, None, {}, url, str(e)
+                return None, None, None, {}, url, str(e)
 
-        print("STARTED")
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(process_url, url): url for url in self.df[url_column]}
-            transcriptions = []
-            flows = []
-            all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
-            #all_labels = {classification.keys()[0]: [] for classification in classify} if classify else {}
-            with tqdm(total=len(futures), desc="Processing URLs") as pbar:
+        def process_chunk(urls):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
+            results = loop.run_until_complete(process_all_urls(session, urls))
+            loop.close()
+            return results
+
+        async def process_all_urls(session, urls):
+            results = []
+            for url in urls:
+                result = await process_url(session, url)
+                results.append(result)
+            return results
+
+        urls = self.df[url_column].tolist()
+        num_threads = min(4, len(urls))  # Adjust the number of threads as needed
+        chunks = np.array_split(urls, num_threads)
+
+        results = []
+        with tqdm(total=len(chunks), desc="Processing Chunks") as pbar:
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = [executor.submit(process_chunk, chunk) for chunk in chunks]
                 for future in as_completed(futures):
-                    improved_transcription, flow, labels_dict, url, error = future.result()
-                    if error:
-                        print(f"Failed to process {url}: {error}")
-                    transcriptions.append(improved_transcription)
-                    flows.append(flow)
-                    if classify:
-                        for column in all_labels:
-                            all_labels[column].append(labels_dict.get(column, None))
+                    results.extend(future.result())
                     pbar.update(1)
+
+        transcriptions = []
+        flows = []
+        summaries = []
+        all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
+        for result in results:
+            improved_transcription, flow, summary, labels_dict, url, error = result
+            if error:
+                print(f"Failed to process {url}: {error}")
+            transcriptions.append(improved_transcription)
+            flows.append(flow)
+            summaries.append(summary)
+            if classify:
+                for column in all_labels:
+                    all_labels[column].append(labels_dict.get(column, None))
 
         self.df[transcription_column] = transcriptions
         self.df[f"{transcription_column}_flow"] = flows
         if classify:
             for column, labels in all_labels.items():
                 self.df[f"{transcription_column}_{column}"] = labels
+        if summary_word_length > 5:
+            self.df[f"{transcription_column}_summary"] = summaries
+        time.sleep(3)
+        print()
+        self.oc(f'..., {transcription_column}')
         self.pr()
         return self
