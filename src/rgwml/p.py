@@ -48,6 +48,14 @@ class p:
         """UTILS::[d.gdf()] Get DataFrame."""
         return self.df
 
+    def lim(self, num_rows):
+        """TINKER::[d.lim(7)] Limit the DataFrame to a specified number of rows."""
+        if not isinstance(num_rows, int):
+            raise ValueError("The number of rows should be an integer.")
+        if self.df is not None:
+            self.df = self.df.head(num_rows)
+        self.pr()
+        return self
 
     def frd(self, headers, data):
         """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
@@ -585,7 +593,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
-
     def dbiu(self, db_preset_name, db_name, table_name, unique_columns, insert_columns=None, print_query=False):
         """DATABASE::[d.dbiu('preset_name', 'db_name', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""
 
@@ -628,6 +635,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             insert_columns = [col.strip() for col in insert_columns]
 
+        # Convert complex data types to string
+        for col in insert_columns:
+            self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+
         # Connect to the database
         with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
@@ -651,24 +662,32 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
                 unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
 
-                # Handle NaN values in the unique new data
+                # Handle NaN and None values in the unique new data
                 unique_new_data_df = unique_new_data_df.fillna('')
 
+                # Ensure data is a list of tuples
+                data = [tuple(row) for row in unique_new_data_df.values]
+
+                # Debugging: print the data to be inserted
+                #print("Data to be inserted:", data)
+
                 # Insert unique new data into the table
-                if not unique_new_data_df.empty:
+                if data:
                     cols = ", ".join(insert_columns)
                     insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
                     if print_query:
                         print(insert_query)
-                    data = unique_new_data_df.values.tolist()
                     cursor.executemany(insert_query, data)
                     conn.commit()
 
+            except mysql.connector.Error as err:
+                print(f"Error: {err}")
             finally:
                 cursor.close()
                 gc.collect()
 
         return self
+
 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
@@ -2499,6 +2518,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.df = self.df[self.df[column_name].isin(other_p.df[column_name])]
         return self
 
+    def madc(self, other_p, column_name):
+        """MASK::[d.madc(mask_p_instance, 'column7')] Mask against DataFrame converse, retaining only rows with uncommon column values. Only rows where for the mutual column 7, values do not exist in mask_p_instance, will be retained"""
+        if not isinstance(other_p, p):
+            raise ValueError("other_p should be an instance of the class p.")
+        if column_name not in self.df.columns or column_name not in other_p.df.columns:
+            raise ValueError("The specified column must exist in both DataFrames.")
+        self.df = self.df[~self.df[column_name].isin(other_p.df[column_name])]
+        return self
+
     def goaibc(self, job_name, model, columns_to_analyse, classification_options):
         """OPENAI::[batch_id = d.oaibc('fruit_or_vegetable_classification','gpt-3.5-turbo','Column1, Column3','fruit, vegetable, other')] Get OpenAI Batch Classification. Returns a batch id"""
 
@@ -3020,6 +3048,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         urls = self.df[url_column].tolist()
         num_threads = min(4, len(urls))  # Adjust the number of threads as needed
+        chunk_size = min(chunk_size, len(urls))
         chunks = np.array_split(urls, chunk_size)
 
         results = []
