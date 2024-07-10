@@ -539,7 +539,7 @@ def test_oaiatc():
 def test_oaiatc_2():
     d = r.p()
     d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 ORDER BY id DESC LIMIT 10')
-    d.oaiatc('recording_url','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30)
+    d.oaiatc('recording_url','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30, chunk_size=5)
     d.fnr(3)
 
 

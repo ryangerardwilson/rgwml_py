@@ -2835,8 +2835,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o"):
-        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o")] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40)"""
+    def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4):
+        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40), chunk_size (parallel processing of rows in chunks, default is 4)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -3020,7 +3020,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         urls = self.df[url_column].tolist()
         num_threads = min(4, len(urls))  # Adjust the number of threads as needed
-        chunks = np.array_split(urls, num_threads)
+        chunks = np.array_split(urls, chunk_size)
 
         results = []
         with tqdm(total=len(chunks), desc="Processing Chunks") as pbar:
