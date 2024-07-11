@@ -542,11 +542,17 @@ def test_oaiatc_2():
     d.oaiatc('recording_url','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30, chunk_size=5)
     d.fnr(3)
 
-def test_astc():
+def test_ltatc():
     d = r.p()
     d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 and actual_speak_time < 100 ORDER BY id DESC LIMIT 2')
-    d.astc('recording_url','transcription',classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}])
+    d.ltatc('recording_url','transcription',classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], openai_whisper_model_name='large-v3', classifications_model='roberta-large-mnli')
     d.fnr(3)
+
+def test_htatc():
+    d = r.p()
+    d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 and actual_speak_time < 100 ORDER BY id DESC LIMIT 1')
+    d.htatc('recording_url','transcription',participants='agent,customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30, openai_whisper_model_name='large-v3', json_mode_model='gpt-4o')
+    d.fnr(1)
 
 
 
@@ -583,4 +589,5 @@ def test_astc():
 #test_oaih()
 #test_oaiatc()
 #test_oaiatc_2()
-test_astc()
+#test_ltatc()
+test_htatc()

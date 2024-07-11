@@ -34,9 +34,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import asyncio
 import whisper
-from transformers import pipeline, logging
+#from transformers import pipeline, logging
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, logging
 import warnings
-
+import torch
 
 class p:
     def __init__(self, df=None):
@@ -2983,7 +2984,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-                            {"role": "user", "content": f"""Make the below transcription more legible by removing gibberish, in this format {{"improved_transcription":"your_response"}}: \n\n{transcription}"""}
+                            {"role": "user", "content": f"""The below text may have some jumbled words that may be due to either a typo or a machine translation error. Clean it up, in this format: {{"improved_transcription":"your_response"}}: \n\n{transcription}"""}
                         ]
                     )
                     improved_transcription_content = improvement_response.choices[0].message.content
@@ -3099,8 +3100,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    def hfatc(self, url_column, transcription_column, classify=None, classification_model='roberta-large-mnli'):
-        """HUGGING_FACE::[d.hfatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli')] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli)"""
+    def ltatc(self, url_column, transcription_column, classify=None, openai_whisper_model_name='base',classifications_model='roberta-large-mnli'):
+        """LOCAL_TRANSFORMERS::[d.ltatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], openai_whisper_model_name = 'base', classifications_model='roberta-large-mnli')] Hugging face append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -3118,20 +3119,22 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 config = json.load(f)
             return config.get(key_name)
 
-        def transcribe_audio(file_path, model_name="base"):
-            model = whisper.load_model(model_name)
-            result = model.transcribe(file_path, task='translate')
+        def transcribe_audio(file_path, openai_whisper_model_name):
+            #options = {"task": "translate"}
+            model = whisper.load_model(openai_whisper_model_name)
+            #result = model.transcribe(file_path, **options)
+            result = model.transcribe(file_path)
             return result["text"]
 
         def classify_text(text, labels):
-            classifier = pipeline("zero-shot-classification", model=classification_model)
+            classifier = pipeline("zero-shot-classification", model=classifications_model)
             result = classifier(text, candidate_labels=labels.split(", "))
             return result["labels"][0]
 
-        def transcribe_and_classify(temp_file_path, classify_labels=None, whisper_model="base"):
+        def transcribe_and_classify(temp_file_path, classify_labels=None):
             try:
                 # Transcribe the audio file
-                transcription = transcribe_audio(temp_file_path, whisper_model)
+                transcription = transcribe_audio(temp_file_path, openai_whisper_model_name)
 
                 labels_dict = {}
                 if classify_labels:
@@ -3279,6 +3282,278 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if classify:
             for column, labels in all_labels.items():
                 self.df[f"{transcription_column}_{column}"] = labels
+        print()
+        self.oc(f'..., {transcription_column}')
+        self.pr()
+        return self
+
+    # articipants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4
+
+    def htatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, openai_whisper_model_name='base', json_mode_model='gpt-4o'):
+        """HYBRID_TRANSFORMERS::[d.htatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent',classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, openai_whisper_model_name = 'base', json_mode_model='gpt-4o')] Hybrid transformer append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), json_mode_model (default is gpt-4o)"""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        def transcribe_audio(file_path, openai_whisper_model_name, client):
+            model = whisper.load_model(openai_whisper_model_name)
+            result = model.transcribe(file_path)
+            transcription = result["text"]
+
+            # Create the prompt for improved transcription
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                {"role": "user", "content": f"""The below text may have some jumbled words that may be due to either a typo or a machine translation error. Clean it up, in this format: {{"improved_transcription":"your_response"}}: \n\n{transcription}"""}
+            ]
+
+            # Request improved transcription from OpenAI API
+            improvement_response = client.chat.completions.create(
+                model=json_mode_model,
+                response_format={"type": "json_object"},
+                messages=messages
+            )
+            #print(improvement_response)
+
+            # Parse the response
+            improved_transcription_content = improvement_response.choices[0].message.content
+            improved_transcription = json.loads(improved_transcription_content)["improved_transcription"]
+
+            return improved_transcription
+
+        def classify_text(text, labels, client):
+
+            # Create the prompt
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                {"role": "user", "content": f"""Label the below transcription with one of these labels - {labels}: in this manner: {{"label": "your_response"}} \n\n{text}"""}
+            ]
+
+            # Request classification from OpenAI API
+            label_response = client.chat.completions.create(
+                model=json_mode_model,
+                response_format={"type": "json_object"},
+                messages=messages
+            )
+            #print(label_response)
+
+
+            label_content = label_response.choices[0].message.content
+            label = json.loads(label_content)["label"]
+
+
+            return label
+
+
+        def get_classifications(flow, classify, client, json_mode_model):
+            labels_dict = {}
+            if classify:
+                for classification in classify:
+                    for column, labels in classification.items():
+                        label = classify_text(flow, labels, client)
+                        labels_dict[column] = label
+            return labels_dict
+
+        def transcribe_and_classify(temp_file_path, classify_labels=None, client=None, json_mode_model=json_mode_model, summary_word_length=summary_word_length, participants=participants):
+            try:
+                # Transcribe the audio file
+                transcription = transcribe_audio(temp_file_path, openai_whisper_model_name, client)
+
+                labels_dict = {}
+                if classify_labels and client:
+                    labels_dict = get_classifications(transcription, classify_labels, client, json_mode_model)
+
+                # Generate summary
+                summary = None
+                if summary_word_length and summary_word_length > 5:
+                    summary_response = client.chat.completions.create(
+                        model=json_mode_model,
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                            {"role": "user", "content": f"""Summarize, in English, the below conversation in less than {summary_word_length} words, in this format: {{"summary":"your response"}} \n\n{transcription}"""}
+                        ]
+                    )
+                    summary_content = summary_response.choices[0].message.content
+                    summary = json.loads(summary_content)["summary"]
+
+                # Generate conversational flow
+                if participants:
+                    participant_details = participants.split(", ")
+                    participant_flow_format = ', '.join([f'{{"{p}":"dialogue text in English"}}' for p in participant_details])
+                    flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{participant_flow_format}]}}: {transcription}'
+                else:
+                    flow_prompt = f'Translate the below transcriptions to English clearly delineating the participants and the flow, in this format {{"flow":[{{"speaker_1":"dialogue text in English"}}, {{"speaker_2": "dialogue text in English"}}, {{"speaker_1":"dialogue text in English"}}, {{"speaker_2":"dialogue text in English"}}]}}: \n\n{transcription}'
+
+                flow_response = client.chat.completions.create(
+                    model=json_mode_model,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                        {"role": "user", "content": flow_prompt}
+                    ]
+                )
+                flow_content = flow_response.choices[0].message.content
+                flow = json.loads(flow_content)["flow"]
+
+                return transcription, labels_dict, summary, flow, None
+
+            except Exception as e:
+                return None, {}, None, None, str(e)
+
+        async def process_url(session, url, classify_labels):
+
+            # Suppress specific warnings
+            warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
+
+            # Suppress specific warnings from transformers
+            logging.set_verbosity_error()
+
+            open_ai_key = load_key('open_ai_key')
+            client = OpenAI(api_key=open_ai_key)
+
+            try:
+                # Try to download the file directly
+                response = requests.get(url)
+                response.raise_for_status()
+
+                # Save the audio file to a temporary file
+                with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                    tmp_file.write(response.content)
+                    tmp_file_path = tmp_file.name
+
+                # Determine the file type using filetype
+                kind = filetype.guess(tmp_file_path)
+                if kind is None:
+                    # Check the Content-Type header as a fallback
+                    content_type = response.headers.get('Content-Type')
+                    if content_type:
+                        content_types = [ct.strip() for ct in content_type.split(',')]
+                        for ct in content_types:
+                            if ct.startswith('audio/'):
+                                extension = ct.split('/')[1].split(';')[0]
+                                if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                    kind = {'extension': extension}
+                                    break
+                    if kind is None:
+                        raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+            except requests.exceptions.RequestException:
+                # If direct download fails, try using requests_html
+                try:
+                    response = await session.get(url)
+                    await response.html.arender()
+
+                    # Find the download URL
+                    download_button = response.html.find('a', containing='Download', first=True)
+                    if not download_button:
+                        raise ValueError("Download button not found on the page")
+                    download_url = download_button.attrs['href']
+
+                    # Download the audio file
+                    response = await session.get(download_url)
+                    response.raise_for_status()
+
+                    # Save the audio file to a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                        tmp_file.write(response.content)
+                        tmp_file_path = tmp_file.name
+
+                    # Determine the file type using filetype
+                    kind = filetype.guess(tmp_file_path)
+                    if kind is None:
+                        # Check the Content-Type header as a fallback
+                        content_type = response.headers.get('Content-Type')
+                        if content_type:
+                            content_types = [ct.strip() for ct in content_type.split(',')]
+                            for ct in content_types:
+                                if ct.startswith('audio/'):
+                                    extension = ct.split('/')[1].split(';')[0]
+                                    if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                        kind = {'extension': extension}
+                                        break
+                        if kind is None:
+                            raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+
+                except Exception as e:
+                    return None, {}, None, None, url, str(e)
+
+            # Renaming the file with the correct extension
+            new_tmp_file_path = f"{tmp_file_path}.{kind['extension']}"
+            os.rename(tmp_file_path, new_tmp_file_path)
+
+            # Transcribe and classify the audio file
+            try:
+                transcription, labels_dict, summary, flow, error = transcribe_and_classify(new_tmp_file_path, classify_labels, client)
+                if error:
+                    return None, {}, None, None, url, str(error)
+                return transcription, labels_dict, summary, flow, url, None
+
+            except Exception as e:
+                return None, {}, None, None, url, str(e)
+
+        async def process_all_urls(session, urls, classify):
+            results = []
+            for url in urls:
+                result = await process_url(session, url, classify)
+                results.append(result)
+            return results
+
+        def process_urls_sequentially(urls, classify):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
+            results = loop.run_until_complete(process_all_urls(session, urls, classify))
+            loop.close()
+            return results
+
+        urls = self.df[url_column].tolist()
+
+        results = []
+        with tqdm(total=len(urls), desc="Processing URLs") as pbar:
+            for url in urls:
+                try:
+                    result = process_urls_sequentially([url], classify)
+                    results.extend(result)
+                except Exception as e:
+                    print(f"Error processing URL {url}: {e}")
+                pbar.update(1)
+
+        transcriptions = []
+        flows = []
+        summaries = []
+        all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
+        for result in results:
+            #print(result)
+            transcription, labels_dict, summary, flow, url, error = result
+            if error:
+                print(f"Failed to process {url}: {error}")
+            transcriptions.append(transcription)
+            flows.append(flow)
+            summaries.append(summary)
+            if classify:
+                for column, labels in all_labels.items():
+                    labels.append(labels_dict.get(column, ''))
+
+        self.df[transcription_column] = transcriptions
+        self.df[f"{transcription_column}_flow"] = flows
+        if classify:
+            for column, labels in all_labels.items():
+                self.df[f"{transcription_column}_{column}"] = labels
+        if summary_word_length > 5:
+            self.df[f"{transcription_column}_summary"] = summaries
+        time.sleep(3)
         print()
         self.oc(f'..., {transcription_column}')
         self.pr()
