@@ -542,6 +542,13 @@ def test_oaiatc_2():
     d.oaiatc('recording_url','transcription',participants='agent, customer', classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], summary_word_length=30, chunk_size=5)
     d.fnr(3)
 
+def test_astc():
+    d = r.p()
+    d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 and actual_speak_time < 100 ORDER BY id DESC LIMIT 2')
+    d.astc('recording_url','transcription',classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], chunk_size=5)
+    d.fnr(3)
+
+
 
 # Call the test method
 #test_axlinr()
@@ -575,4 +582,5 @@ def test_oaiatc_2():
 #test_oais()
 #test_oaih()
 #test_oaiatc()
-test_oaiatc_2()
+#test_oaiatc_2()
+test_astc()

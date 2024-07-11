@@ -33,6 +33,9 @@ import filetype
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import asyncio
+import whisper
+from transformers import pipeline, logging
+import warnings
 
 class p:
     def __init__(self, df=None):
@@ -3082,6 +3085,188 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if summary_word_length > 5:
             self.df[f"{transcription_column}_summary"] = summaries
         time.sleep(3)
+        print()
+        self.oc(f'..., {transcription_column}')
+        self.pr()
+        return self
+
+    def astc(self, url_column, transcription_column, classify=None, classification_model='roberta-large-mnli', chunk_size=4):
+        """OPENAI::[d.astc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli', chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli), chunk_size (parallel processing of rows in chunks, default is 4)"""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        def transcribe_audio(file_path, model_name="base"):
+            model = whisper.load_model(model_name)
+            result = model.transcribe(file_path, task='translate')
+            return result["text"]
+
+       
+        def classify_text(text, labels):
+            classifier = pipeline("zero-shot-classification", model=classification_model)
+            result = classifier(text, candidate_labels=labels.split(", "))
+            return result["labels"][0]
+
+        def transcribe_and_classify(temp_file_path, classify_labels=None, whisper_model="base"):
+            try:
+                # Transcribe the audio file
+                transcription = transcribe_audio(temp_file_path, whisper_model)
+
+                labels_dict = {}
+                if classify_labels:
+                    for classification in classify_labels:
+                        for column, labels in classification.items():
+                            label = classify_text(transcription, labels)
+                            labels_dict[column] = label
+
+                return transcription, labels_dict, None
+
+            except Exception as e:
+                return None, {}, str(e)
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        async def process_url(session, url, classify_labels):
+
+            logging.set_verbosity_error()
+            warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
+            try:
+                # Try to download the file directly
+                response = requests.get(url)
+                response.raise_for_status()
+
+                # Save the audio file to a temporary file
+                with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                    tmp_file.write(response.content)
+                    tmp_file_path = tmp_file.name
+
+                # Determine the file type using filetype
+                kind = filetype.guess(tmp_file_path)
+                if kind is None:
+                    # Check the Content-Type header as a fallback
+                    content_type = response.headers.get('Content-Type')
+                    if content_type:
+                        content_types = [ct.strip() for ct in content_type.split(',')]
+                        for ct in content_types:
+                            if ct.startswith('audio/'):
+                                extension = ct.split('/')[1].split(';')[0]
+                                if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                    kind = {'extension': extension}
+                                    break
+                    if kind is None:
+                        raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+            except requests.exceptions.RequestException:
+                # If direct download fails, try using requests_html
+                try:
+                    response = await session.get(url)
+                    await response.html.arender()
+
+                    # Find the download URL
+                    download_button = response.html.find('a', containing='Download', first=True)
+                    if not download_button:
+                        raise ValueError("Download button not found on the page")
+                    download_url = download_button.attrs['href']
+
+                    # Download the audio file
+                    response = await session.get(download_url)
+                    response.raise_for_status()
+
+                    # Save the audio file to a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                        tmp_file.write(response.content)
+                        tmp_file_path = tmp_file.name
+
+                    # Determine the file type using filetype
+                    kind = filetype.guess(tmp_file_path)
+                    if kind is None:
+                        # Check the Content-Type header as a fallback
+                        content_type = response.headers.get('Content-Type')
+                        if content_type:
+                            content_types = [ct.strip() for ct in content_type.split(',')]
+                            for ct in content_types:
+                                if ct.startswith('audio/'):
+                                    extension = ct.split('/')[1].split(';')[0]
+                                    if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
+                                        kind = {'extension': extension}
+                                        break
+                        if kind is None:
+                            raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
+
+                except Exception as e:
+                    return None, {}, url, str(e)
+
+            # Renaming the file with the correct extension
+            new_tmp_file_path = f"{tmp_file_path}.{kind['extension']}"
+            os.rename(tmp_file_path, new_tmp_file_path)
+
+            # Transcribe and classify the audio file
+            try:
+                transcription, labels_dict, error = transcribe_and_classify(new_tmp_file_path, classify_labels)
+                if error:
+                    return None, {}, url, error
+                return transcription, labels_dict, url, None
+
+            except Exception as e:
+                return None, {}, url, str(e)
+
+        def process_chunk(urls):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
+            results = loop.run_until_complete(process_all_urls(session, urls))
+            loop.close()
+            return results
+
+        async def process_all_urls(session, urls):
+            results = []
+            for url in urls:
+                result = await process_url(session, url, classify)
+                results.append(result)
+            return results
+
+        urls = self.df[url_column].tolist()
+        num_threads = min(4, len(urls))  # Adjust the number of threads as needed
+        chunk_size = min(chunk_size, len(urls))
+        chunks = np.array_split(urls, chunk_size)
+
+        results = []
+        with tqdm(total=len(chunks), desc="Processing Chunks") as pbar:
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = [executor.submit(process_chunk, chunk) for chunk in chunks]
+                for future in as_completed(futures):
+                    results.extend(future.result())
+                    pbar.update(1)
+
+        transcriptions = []
+        flows = []
+        all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
+        for result in results:
+            transcription, labels_dict, url, error = result
+            if error:
+                print(f"Failed to process {url}: {error}")
+            transcriptions.append(transcription)
+            if classify:
+                for column in all_labels:
+                    all_labels[column].append(labels_dict.get(column, None))
+
+        self.df[transcription_column] = transcriptions
+        if classify:
+            for column, labels in all_labels.items():
+                self.df[f"{transcription_column}_{column}"] = labels
         print()
         self.oc(f'..., {transcription_column}')
         self.pr()
