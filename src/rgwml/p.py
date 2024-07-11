@@ -3100,7 +3100,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def hfatc(self, url_column, transcription_column, classify=None, classification_model='roberta-large-mnli'):
-        """HUGGING_FACE::[d.hfatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli')] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli), chunk_size (parallel processing of rows in chunks, default is 4)"""
+        """HUGGING_FACE::[d.hfatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli')] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
