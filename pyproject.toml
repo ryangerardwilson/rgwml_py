@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.132"
+version = "0.0.139"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -48,7 +48,6 @@ dependencies = [
     "torch",
     "transformers",
     "openai-whisper",
-    "imageio[ffmpeg]"
 ]
 
 dynamic = ["scripts"]

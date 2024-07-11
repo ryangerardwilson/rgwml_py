@@ -545,7 +545,7 @@ def test_oaiatc_2():
 def test_astc():
     d = r.p()
     d.fq('happy','SELECT recording_url FROM tata_sajal_events WHERE actual_speak_time > 60 and actual_speak_time < 100 ORDER BY id DESC LIMIT 2')
-    d.astc('recording_url','transcription',classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}], chunk_size=5)
+    d.astc('recording_url','transcription',classify=[{'emotion':'very_happy, happy, neutral, unhappy, very_unhappy'}, {'issue':'internet_issue, payment_issue, other_issue'}])
     d.fnr(3)
 
 

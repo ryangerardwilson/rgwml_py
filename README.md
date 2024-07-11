@@ -7,6 +7,8 @@ RGWML
 1. Install
 ----------
     
+    sudo apt update
+    sudo apt install ffmpeg
     pip3 install --upgrade rgwml
 
 2. Import & Load Data

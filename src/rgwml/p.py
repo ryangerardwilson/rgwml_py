@@ -37,6 +37,7 @@ import whisper
 from transformers import pipeline, logging
 import warnings
 
+
 class p:
     def __init__(self, df=None):
         """Initialize the EP class with an empty DataFrame."""
@@ -1565,7 +1566,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
 
 
-
+    def asc(self, new_col_name, static_value):
+        """APPEND::[d.asc('new_column_name', static_value)] Append static column. Append a column with a static value for all rows."""
+        if self.df is not None:
+            self.df[new_col_name] = static_value
+            self.pr()
+        else:
+            raise ValueError("No DataFrame to append a static value column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
 
 
     def abc(self, condition, new_col_name):
@@ -3090,8 +3099,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    def astc(self, url_column, transcription_column, classify=None, classification_model='roberta-large-mnli', chunk_size=4):
-        """OPENAI::[d.astc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli', chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli), chunk_size (parallel processing of rows in chunks, default is 4)"""
+    def hfatc(self, url_column, transcription_column, classify=None, classification_model='roberta-large-mnli'):
+        """HUGGING_FACE::[d.hfatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], classification_model='roberta-large-mnli')] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli), chunk_size (parallel processing of rows in chunks, default is 4)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -3114,7 +3123,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             result = model.transcribe(file_path, task='translate')
             return result["text"]
 
-       
         def classify_text(text, labels):
             classifier = pipeline("zero-shot-classification", model=classification_model)
             result = classifier(text, candidate_labels=labels.split(", "))
@@ -3141,9 +3149,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         client = OpenAI(api_key=open_ai_key)
 
         async def process_url(session, url, classify_labels):
+            # Ensure ffmpeg is available
+            #iio_ffmpeg.get_ffmpeg_version()
 
-            logging.set_verbosity_error()
+            # Suppress specific warnings
             warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
+
+            # Suppress specific warnings from transformers
+            logging.set_verbosity_error()
+
             try:
                 # Try to download the file directly
                 response = requests.get(url)
@@ -3223,36 +3237,34 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             except Exception as e:
                 return None, {}, url, str(e)
 
-        def process_chunk(urls):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
-            results = loop.run_until_complete(process_all_urls(session, urls))
-            loop.close()
-            return results
-
-        async def process_all_urls(session, urls):
+        async def process_all_urls(session, urls, classify):
             results = []
             for url in urls:
                 result = await process_url(session, url, classify)
                 results.append(result)
             return results
 
+        def process_urls_sequentially(urls, classify):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
+            results = loop.run_until_complete(process_all_urls(session, urls, classify))
+            loop.close()
+            return results
+
         urls = self.df[url_column].tolist()
-        num_threads = min(4, len(urls))  # Adjust the number of threads as needed
-        chunk_size = min(chunk_size, len(urls))
-        chunks = np.array_split(urls, chunk_size)
 
         results = []
-        with tqdm(total=len(chunks), desc="Processing Chunks") as pbar:
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                futures = [executor.submit(process_chunk, chunk) for chunk in chunks]
-                for future in as_completed(futures):
-                    results.extend(future.result())
-                    pbar.update(1)
+        with tqdm(total=len(urls), desc="Processing URLs") as pbar:
+            for url in urls:
+                try:
+                    result = process_urls_sequentially([url], classify)
+                    results.extend(result)
+                except Exception as e:
+                    print(f"Error processing URL {url}: {e}")
+                pbar.update(1)
 
         transcriptions = []
-        flows = []
         all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
         for result in results:
             transcription, labels_dict, url, error = result
