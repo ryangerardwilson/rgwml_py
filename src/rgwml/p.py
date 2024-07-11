@@ -3101,7 +3101,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def ltatc(self, url_column, transcription_column, classify=None, openai_whisper_model_name='base',classifications_model='roberta-large-mnli'):
-        """LOCAL_TRANSFORMERS::[d.ltatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], openai_whisper_model_name = 'base', classifications_model='roberta-large-mnli')] Hugging face append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), classification_model (default is roberta-large-mnli, other options: facebook/bart-large-mnli)"""
+        """LOCAL_TRANSFORMERS::[d.ltatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], openai_whisper_model_name = 'base', classifications_model='roberta-large-mnli')] Local transformer append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), classifications_model (default is roberta-large-mnli, other hugging face options: facebook/bart-large-mnli)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
