@@ -3287,7 +3287,70 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    # articipants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4
+    def ltacc(self, column_to_analyze, classify, model='roberta-large-mnli'):
+        """LOCAL_TRANSFORMERS::[d.ltacc('text_column_to_analyze', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], model='roberta-large-mnli')] Local transformer append classification columns. Method to classify text in a specified column. Optional params: classifications_model (default is roberta-large-mnli, other hugging face options: facebook/bart-large-mnli)
+        """
+
+        def classify_text(text, labels):
+            classifier = pipeline("zero-shot-classification", model=model)
+            result = classifier(text, candidate_labels=labels.split(", "))
+            return result["labels"][0]
+
+        logging.set_verbosity_error()
+        texts = self.df[column_to_analyze].tolist()
+
+        classifications = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
+
+        with tqdm(total=len(texts), desc="Classifying Texts") as pbar:
+            for text in texts:
+                labels_dict = {}
+                if classify:
+                    for classification in classify:
+                        for column, labels in classification.items():
+                            label = classify_text(text, labels)
+                            labels_dict[column] = label
+
+                for column in classifications:
+                    classifications[column].append(labels_dict.get(column, None))
+
+                pbar.update(1)
+
+        if classify:
+            for column, labels in classifications.items():
+                self.df[f"{column_to_analyze}_{column}"] = labels
+
+        print()
+        self.pr()
+        return self
+
+
+    def ltaecc(self, column_to_analyze):
+        """LOCAL_TRANSFORMERS::[d.ltaecc('text_column_to_analyze')] Local transformer append emotion classification columns. Method to classify emotions in a specified column."""
+        
+        classifier = pipeline("text-classification", model='bhadresh-savani/distilbert-base-uncased-emotion', top_k=None)
+        
+        def classify_emotion(text):
+            prediction = classifier(text)
+            return prediction[0]
+        
+        texts = self.df[column_to_analyze].tolist()
+        
+        emotion_labels = ['sadness', 'joy', 'love', 'anger', 'fear', 'surprise']
+        emotion_scores = {label: [] for label in emotion_labels}
+        
+        with tqdm(total=len(texts), desc="Classifying Emotions") as pbar:
+            for text in texts:
+                scores = classify_emotion(text)
+                for score in scores:
+                    emotion_scores[score['label']].append(score['score'])
+                pbar.update(1)
+        
+        for label, scores in emotion_scores.items():
+            self.df[f"{column_to_analyze}_{label}"] = scores
+        
+        print()
+        self.pr()
+        return self
 
     def htatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, openai_whisper_model_name='base', json_mode_model='gpt-4o'):
         """HYBRID_TRANSFORMERS::[d.htatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent',classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, openai_whisper_model_name = 'base', json_mode_model='gpt-4o')] Hybrid transformer append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), json_mode_model (default is gpt-4o)"""

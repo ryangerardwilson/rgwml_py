@@ -555,6 +555,49 @@ def test_htatc():
     d.fnr(1)
 
 
+def test_ltacc():
+    d = r.p()
+    d.frd(['text'],[['how dare you'],['thank you so much'],['what time is it']])
+    d.ltacc('text', classify=[{'emotion':'happy, unhappy, neutral'},{'statement':'assertion, question, response'}], model='cardiffnlp/twitter-roberta-base-emotion')
+
+def test_ltaecc():
+    d = r.p()
+
+    stress_text = """
+
+[{"customer": "Sir, I am having issues with my '
+                           'internet."}, {"agent": "I understand, sir. Have '
+                           'you tried restarting your router?"}, {"customer": '
+                           '"Yes, I have turned it off and back on, but it\'s '
+                           'not working."}, {"agent": "Is there any red light '
+                           'showing on the router?"}, {"customer": "No, '
+                           'everything seems normal on the router, but I still '
+                           'can\'t connect to the internet."}, {"agent": "Are '
+                           'you able to see the Wi-Fi name on your device?"}, '
+                           '{"customer": "No, the Wi-Fi name is not '
+                           'appearing."}, {"agent": "Could you try moving '
+                           'closer to the router and see if it helps?"}, '
+                           '{"customer": "I have already tried that. The '
+                           'signal is still weak."}, {"agent": "Let me check '
+                           'from our end and see if there\'s any issue."}, '
+                           '{"agent": "Sir, according to our system, your '
+                           'internet connection should be active. Please turn '
+                           'off the router for two minutes and then try '
+                           'again."}, {"customer": "Alright, I will do that '
+                           'now."}, {"customer": "I turned it off and on '
+                           'again, but it\'s still not working."}, {"agent": '
+                           '"Alright sir, we might need to send a technician '
+                           'to check the issue on-site."}, {"customer": "That '
+                           'would be great. Thank you."}, {"agent": "You\'re '
+                           'welcome, sir. A technician will visit you '
+                           'shortly."}, {"customer": "Thank you. Goodbye."}, '
+                           '{"agent": "Goodbye, sir."}]
+
+    """
+
+    d.frd(['text'],[['how dare you'],['thank you so much'],['what time is it'],[stress_text]])
+    d.ltaecc('text').lnr(1)
+
 
 # Call the test method
 #test_axlinr()
@@ -590,4 +633,6 @@ def test_htatc():
 #test_oaiatc()
 #test_oaiatc_2()
 #test_ltatc()
-test_htatc()
+#test_htatc()
+#test_ltacc()
+test_ltaecc()
