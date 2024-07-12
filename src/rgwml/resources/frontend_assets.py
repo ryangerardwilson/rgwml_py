@@ -41,7 +41,8 @@ export default function RootLayout({{
 
 DIR__APP__FILE__GLOBALS__CSS = '''@tailwind base;
 @tailwind components;
-@tailwind utilities;'''
+@tailwind utilities;
+@import '../styles/scrollbar.css';'''
 
 DIR__COMPONENTS__FILE__EDIT_MODAL__TSX = '''import React, {{ useState, useCallback, useEffect }} from 'react';
 import modalConfig from './modalConfig';
@@ -214,95 +215,97 @@ return cookies[name];
     }}
   }};
 
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
-        <h2 className="text-yellow-100/50 text-center mb-8">Edit {{modalName}}</h2>
-        <form onSubmit={{handleSubmit}}>
-          <div className="grid grid-cols-2 gap-4">
-            {{columns.map((col) => (
-              <div key={{col}} className="mb-2">
-                <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
-                {{config.scopes.update.includes(col) ? (
-                  dynamicOptions[col] ? (
-                    <select
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {{col}}
+return (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 py-4">
+    <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4 max-h-screen overflow-y-auto">
+      <h2 className="text-yellow-100/50 text-center mb-8 text-2xl">Edit {{modalName}}</h2>
+      <form onSubmit={{handleSubmit}}>
+        <div className="grid grid-cols-2 gap-4">
+          {{columns.map((col) => (
+            <div key={{col}} className="mb-2">
+              <label className="block text-yellow-100/50 ms-1 text-sm">{{col}}</label>
+              {{config.scopes.update.includes(col) ? (
+                dynamicOptions[col] ? (
+                  <select
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  >
+                    <option value="" disabled>
+                      Select {{col}}
+                    </option>
+                    {{dynamicOptions[col].map((option: string) => (
+                      <option key={{option}} value={{option}}>
+                        {{option}}
                       </option>
-                      {{dynamicOptions[col].map((option: string) => (
-                        <option key={{option}} value={{option}}>
-                          {{option}}
-                        </option>
-                      ))}}
-                    </select>
-                  ) : config.options[col] ? (
-                    <select
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {{col}}
+                    ))}}
+                  </select>
+                ) : config.options[col] ? (
+                  <select
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  >
+                    <option value="" disabled>
+                      Select {{col}}
+                    </option>
+                    {{config.options[col]?.map((option: string) => (
+                      <option key={{option}} value={{option}}>
+                        {{option}}
                       </option>
-                      {{config.options[col]?.map((option: string) => (
-                        <option key={{option}} value={{option}}>
-                          {{option}}
-                        </option>
-                      ))}}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      name={{col}}
-                      value={{formData[col] || ''}}
-                      onChange={{handleChange}}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    />
-                  )
+                    ))}}
+                  </select>
                 ) : (
-                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
-                    {{isUrl(formData[col]) ? (
-                      <button
-                        type="button"
-                        onClick={{() => window.open(formData[col], '_blank')}}
-                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
-                      >
-                        Open URL
-                      </button>
-                    ) : (
-                      formData[col]
-                    )}}
-                  </div>
-                )}}
-                {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
-              </div>
-            ))}}
-          </div>
-          <div className="flex justify-end mt-4">
-            <button
-              type="button"
-              onClick={{() => onClose(null)}}
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
+                  <input
+                    type="text"
+                    name={{col}}
+                    value={{formData[col] || ''}}
+                    onChange={{handleChange}}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  />
+                )
+              ) : (
+                <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
+                  {{isUrl(formData[col]) ? (
+                    <button
+                      type="button"
+                      onClick={{() => window.open(formData[col], '_blank')}}
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
+                    >
+                      Open URL
+                    </button>
+                  ) : (
+                    formData[col]
+                  )}}
+                </div>
+              )}}
+              {{errors[col] && <p className="text-red-500">{{errors[col]}}</p>}}
+            </div>
+          ))}}
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={{() => onClose(null)}}
+            className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
+          >
+            Save
+          </button>
+        </div>
+      </form>
     </div>
-  );
+  </div>
+);
+
+
 }};
 
 export default EditModal;'''
@@ -531,148 +534,157 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
 
   const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
 
-  return (
-    <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
-      <div className="mb-4">
-        {{readRoutes.length > 0 && (
-          <div className="flex space-x-4">
-            {{readRoutes.map((route) => (
-              <button
-                key={{route}}
-                className={{`px-4 py-2 rounded ${{activeTab === route ? 'border-t border-x border-yellow-100/50 rounded-lg' : 'bg-black text-yellow-100/50'}}`}}
-                onClick={{() => setActiveTab(route)}}
-              >
-                {{route}}
-              </button>
-            ))}}
-          </div>
-        )}}
-      </div>
-      <div className="flex justify-between mb-4">
-        <div className="flex items-center w-full">
-          <label className="flex items-center cursor-pointer relative">
-            <select
-              value={{inputMode}}
-              onChange={{(e) => setInputMode(e.target.value as 'query' | 'search')}}
-              className="bg-black border border-yellow-100/30 text-yellow-100 p-2 rounded-lg text-sm pr-8 appearance-none"
+return (
+  <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
+    <div className="mb-4">
+      {{readRoutes.length > 0 && (
+        <div className="flex space-x-4">
+          {{readRoutes.map((route) => (
+            <button
+              key={{route}}
+              className={{`px-4 py-2 rounded ${{activeTab === route ? 'border-t border-x border-yellow-100/50 rounded-lg' : 'bg-black text-yellow-100/50'}}`}}
+              onClick={{() => setActiveTab(route)}}
             >
-              <option value="search">Search</option>
-              <option value="query">Query</option>
-            </select>
-            <span className="absolute right-3 pointer-events-none text-yellow-100/50 text-sm">▼</span>
-          </label>
-
-          {{inputMode === 'query' ? (
-            <QueryInput
-              queryInput={{queryInput}}
-              handleQueryInputChange={{handleQueryInputChange}}
-              handleQueryKeyPress={{handleQueryKeyPress}}
-              queryError={{queryError}}
-            />
-          ) : (
-            <SearchInput
-              searchInput={{searchInput}}
-              handleSearchInputChange={{handleSearchInputChange}}
-              handleSearchKeyPress={{handleSearchKeyPress}}
-              searchError={{searchError}}
-            />
-          )}}
+              {{route}}
+            </button>
+          ))}}
         </div>
-
-        <button
-          onClick={{() => downloadCSV(data, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
-          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
-        >
-          CSV
-        </button>
-
-        {{modalConfig[modal]?.scopes.create && (
-          <button
-            onClick={{() => handleCreate(setCreateModalOpen)}}
-            className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
-          >
-            Create
-          </button>
-        )}}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-yellow-100/30">
-          <thead>
-            <tr>
-              {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
-                <th
-                  key={{`col-${{colIndex}}`}}
-                  className="px-3 py-3 text-left text-xs font-medium text-yellow-100 tracking-wider"
-                >
-                  {{col}}
-                </th>
-              ))}}
-              <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{data.map((row, rowIndex) => (
-              <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
-                {{columnIndices.map((colIndex, cellIndex) => {{
-                  const cellValue = row[colIndex];
-                  return (
-                    <td
-                      key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
-                      className="px-3 py-2 whitespace-nowrap text-sm"
-                    >
-                      {{typeof cellValue === 'string' && isValidUrl(cellValue) ? (
-                        <button
-                          onClick={{() => window.open(cellValue, '_blank')}}
-                          className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                        >
-                          Open URL
-                        </button>
-                      ) : (
-                        typeof cellValue === 'string' && !isNaN(Date.parse(cellValue)) ? formatDateTime(cellValue) : cellValue
-                      )}}
-                    </td>
-                  );
-                }})}}
-                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-300">
-                  <button
-                    onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
-                    className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
-                  >
-                    Edit
-                  </button>
-                  {{modalConfig[modal]?.scopes.delete && (
-                    <button
-                      onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
-                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
-                    >
-                      Delete
-                    </button>
-                  )}}
-                </td>
-              </tr>
-            ))}}
-          </tbody>
-        </table>
-      </div>
-      {{isCreateModalOpen && (
-        <CreateModal
-          modalName={{modal}}
-          apiHost={{apiHost}}
-          columns={{columns}}
-          onClose={{() => closeCreateModal(setCreateModalOpen)}}
-        />
-      )}}
-      {{isEditModalOpen && editRowData && (
-        <EditModal
-          modalName={{modal}}
-          apiHost={{apiHost}}
-          columns={{columns}}
-          rowData={{editRowData}}
-          onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
-        />
       )}}
     </div>
-  );
+    <div className="flex justify-between mb-4">
+      <div className="flex items-center w-full">
+        <label className="flex items-center cursor-pointer relative">
+          <select
+            value={{inputMode}}
+            onChange={{(e) => setInputMode(e.target.value as 'query' | 'search')}}
+            className="bg-black border border-yellow-100/30 text-yellow-100 p-2 rounded-lg text-sm pr-8 appearance-none"
+          >
+            <option value="search">Search</option>
+            <option value="query">Query</option>
+          </select>
+          <span className="absolute right-3 pointer-events-none text-yellow-100/50 text-sm">▼</span>
+        </label>
+
+        {{inputMode === 'query' ? (
+          <QueryInput
+            queryInput={{queryInput}}
+            handleQueryInputChange={{handleQueryInputChange}}
+            handleQueryKeyPress={{handleQueryKeyPress}}
+            queryError={{queryError}}
+          />
+        ) : (
+          <SearchInput
+            searchInput={{searchInput}}
+            handleSearchInputChange={{handleSearchInputChange}}
+            handleSearchKeyPress={{handleSearchKeyPress}}
+            searchError={{searchError}}
+          />
+        )}}
+      </div>
+
+      <button
+        onClick={{() => downloadCSV(data, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
+        className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+      >
+        CSV
+      </button>
+
+      {{modalConfig[modal]?.scopes.create && (
+        <button
+          onClick={{() => handleCreate(setCreateModalOpen)}}
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 rounded-lg text-sm"
+        >
+          Create
+        </button>
+      )}}
+    </div>
+    <div className="overflow-x-auto">
+      <table className="table-fixed min-w-full divide-y divide-yellow-100/30">
+        <thead>
+          <tr>
+            <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
+            {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
+              <th
+                key={{`col-${{colIndex}}`}}
+                className="px-3 py-3 text-left text-xs font-medium text-yellow-100 w-96"
+              >
+                {{col}}
+              </th>
+            ))}}
+          </tr>
+        </thead>
+        <tbody>
+          {{data.map((row, rowIndex) => (
+            <tr key={{`row-${{rowIndex}}`}} className="bg-black text-yellow-100/70 hover:bg-yellow-100/80 hover:text-black">
+              <td className="px-3 py-2 break-words text-sm text-gray-300 min-w-48">
+                <button
+                  onClick={{() => handleEdit(row, setEditRowData, setEditModalOpen)}}
+                  className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
+                >
+                  Edit
+                </button>
+                {{modalConfig[modal]?.scopes.delete && (
+                  <button
+                    onClick={{() => handleDelete(apiHost, modal, row[0], row[1], data, setData)}}
+                    className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                  >
+                    Delete
+                  </button>
+                )}}
+              </td>
+              {{columnIndices.map((colIndex, cellIndex) => {{
+                const cellValue = row[colIndex];
+                const truncatedValue = typeof cellValue === 'string' && cellValue.length > 250
+                                      ? `${{cellValue.slice(0, 250)}}...`
+                                      : cellValue;
+                const isLongCellValue = typeof cellValue === 'string' && cellValue.length > 15;
+
+                return (
+                  <td
+                    key={{`cell-${{rowIndex}}-${{cellIndex}}`}}
+                    className={{`px-3 py-2 break-words text-sm ${{isLongCellValue ? 'min-w-96' : ''}}`}}
+                  >
+                    {{typeof truncatedValue === 'string' && isValidUrl(truncatedValue) ? (
+                      <button
+                        onClick={{() => window.open(truncatedValue, '_blank')}}
+                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg"
+                      >
+                        Open URL
+                      </button>
+                    ) : (
+                      typeof truncatedValue === 'string' && !isNaN(Date.parse(truncatedValue)) ? formatDateTime(truncatedValue) : truncatedValue
+                    )}}
+                  </td>
+                );
+              }})}}
+            </tr>
+          ))}}
+        </tbody>
+      </table>
+    </div>
+    {{isCreateModalOpen && (
+      <CreateModal
+        modalName={{modal}}
+        apiHost={{apiHost}}
+        columns={{columns}}
+        onClose={{() => closeCreateModal(setCreateModalOpen)}}
+      />
+    )}}
+    {{isEditModalOpen && editRowData && (
+      <EditModal
+        modalName={{modal}}
+        apiHost={{apiHost}}
+        columns={{columns}}
+        rowData={{editRowData}}
+        onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
+      />
+    )}}
+  </div>
+);
+
+
+
+
 }};
 
 export default DynamicTable;'''
@@ -1090,8 +1102,8 @@ return cookies[name];
   const filteredColumns = config.scopes.create ? columns.filter(column => !['id', 'created_at', 'updated_at', 'user_id'].includes(column)) : [];
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 py-4">
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4 max-h-screen overflow-y-auto">
         <h2 className="text-yellow-100/50 text-center mb-8">Create New {{modalName.charAt(0).toUpperCase() + modalName.slice(1)}}</h2>
         <form onSubmit={{handleSubmit}}>
           <div className="grid grid-cols-2 gap-4">
@@ -1165,6 +1177,7 @@ return cookies[name];
       </div>
     </div>
   );
+
 }};
 
 export default CreateModal;'''
@@ -1323,18 +1336,14 @@ const parseCookies = () => {{
   }}, {{}} as {{ [key: string]: string }});
 }};
 
-
 const Sidebar: React.FC = () => {{
   const cookies = parseCookies();
   const userType = cookies.type;
   const userName = cookies.username;
   const userId = cookies.user_id;
-  
 
-  // Get the modals from the configuration
   const modals = Object.keys(modalConfig);
 
-  // Create the modals_array and conditionally remove "users" if the user type is not "admin" or "sudo"
   const modals_array = modals.filter(modal => {{
     if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {{
       return false;
@@ -1360,8 +1369,8 @@ const Sidebar: React.FC = () => {{
         <ul>
           {{modals_array.map((item) => (
             <li key={{item}} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
-              <Link href={{`/${{item}}`}}>
-                <span className="ps-1 cursor-pointer">{{item.charAt(0).toUpperCase() + item.slice(1)}}</span>
+              <Link href={{`/${{item}}`}} className="block w-full h-full ps-1 cursor-pointer">
+                {{item.charAt(0) + item.slice(1)}}
               </Link>
             </li>
           ))}}
@@ -1369,7 +1378,7 @@ const Sidebar: React.FC = () => {{
       </div>
       <button
         onClick={{handleLogout}}
-        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
+        className="text-sm mb-1 p-3 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
       >
         Logout {{userName}} [{{userId}},{{userType}}]
       </button>
@@ -1569,7 +1578,7 @@ const ModalPage: React.FC = () => {{
   return (
     <div className="flex">
       <Sidebar />
-      <div className="bg-black min-h-screen flex-1 p-8">
+      <div className="bg-black min-h-screen flex-1 p-8 overflow-x-auto">
         <div className="container mx-auto">
           <h1 className="text-yellow-100/50 mr-2 text-right">
             {{(modal as string)}} table
@@ -1589,6 +1598,34 @@ const ModalPage: React.FC = () => {{
 }};
 
 export default ModalPage;'''
+
+DIR__STYLES__FILE__SCROLLBAR__CSS = '''/* styles/scrollbar.css */
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {{
+  width: 12px;
+  height: 12px;
+}}
+
+::-webkit-scrollbar-thumb {{
+  background-color: #fef9c3; /* Yellow */
+  border-radius: 6px;
+  border: 3px solid #000000; /* Black border */
+}}
+
+::-webkit-scrollbar-thumb:hover {{
+  background-color: #fde047; /* Darker yellow on hover */
+}}
+
+::-webkit-scrollbar-track {{
+  background-color: #000000; /* Black */
+  border-radius: 6px;
+}}
+
+body {{
+  scrollbar-color: #fef9c3 #000000; /* Yellow thumb and black track for Firefox */
+  scrollbar-width: thin;
+}}'''
 
 ROOT__FILE__MIDDLEWARE__TSX = '''import {{ NextResponse }} from 'next/server';
 import type {{ NextRequest }} from 'next/server';

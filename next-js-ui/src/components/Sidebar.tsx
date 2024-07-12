@@ -11,18 +11,14 @@ const parseCookies = () => {
   }, {} as { [key: string]: string });
 };
 
-
 const Sidebar: React.FC = () => {
   const cookies = parseCookies();
   const userType = cookies.type;
   const userName = cookies.username;
   const userId = cookies.user_id;
-  
 
-  // Get the modals from the configuration
   const modals = Object.keys(modalConfig);
 
-  // Create the modals_array and conditionally remove "users" if the user type is not "admin" or "sudo"
   const modals_array = modals.filter(modal => {
     if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {
       return false;
@@ -48,8 +44,8 @@ const Sidebar: React.FC = () => {
         <ul>
           {modals_array.map((item) => (
             <li key={item} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
-              <Link href={`/${item}`}>
-                <span className="ps-1 cursor-pointer">{item.charAt(0).toUpperCase() + item.slice(1)}</span>
+              <Link href={`/${item}`} className="block w-full h-full ps-1 cursor-pointer">
+                {item.charAt(0) + item.slice(1)}
               </Link>
             </li>
           ))}
@@ -57,7 +53,7 @@ const Sidebar: React.FC = () => {
       </div>
       <button
         onClick={handleLogout}
-        className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
+        className="text-sm mb-1 p-3 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black"
       >
         Logout {userName} [{userId},{userType}]
       </button>
@@ -66,5 +62,4 @@ const Sidebar: React.FC = () => {
 };
 
 export default Sidebar;
-
 

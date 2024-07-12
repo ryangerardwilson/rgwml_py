@@ -342,12 +342,14 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
     os.makedirs(src_dir, exist_ok=True)
     os.makedirs(os.path.join(src_dir, 'pages'), exist_ok=True)
     os.makedirs(os.path.join(src_dir, 'components'), exist_ok=True)
+    os.makedirs(os.path.join(src_dir, 'styles'), exist_ok=True)
 
     # Dictionary mapping variable names to file paths
     file_mapping = {
         "DIR__APP__FILE__PAGE__TSX": os.path.join(src_dir, "app/page.tsx"),
         "DIR__APP__FILE__LAYOUT__TSX": os.path.join(src_dir, "app/layout.tsx"),
         "DIR__APP__FILE__GLOBALS__CSS": os.path.join(src_dir, "app/globals.css"),
+        "DIR__STYLES__FILE__SCROLLBAR__CSS": os.path.join(src_dir, "styles/scrollbar.css"),
         "DIR__COMPONENTS__FILE__CREATE_MODAL__TSX": os.path.join(src_dir, "components/CreateModal.tsx"),
         "DIR__COMPONENTS__FILE__EDIT_MODAL__TSX": os.path.join(src_dir, "components/EditModal.tsx"),
         "DIR__COMPONENTS__FILE__SIDEBAR__TSX": os.path.join(src_dir, "components/Sidebar.tsx"),

@@ -163,8 +163,8 @@ return cookies[name];
   const filteredColumns = config.scopes.create ? columns.filter(column => !['id', 'created_at', 'updated_at', 'user_id'].includes(column)) : [];
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 py-4">
+      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4 max-h-screen overflow-y-auto">
         <h2 className="text-yellow-100/50 text-center mb-8">Create New {modalName.charAt(0).toUpperCase() + modalName.slice(1)}</h2>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-4">
@@ -238,6 +238,7 @@ return cookies[name];
       </div>
     </div>
   );
+
 };
 
 export default CreateModal;

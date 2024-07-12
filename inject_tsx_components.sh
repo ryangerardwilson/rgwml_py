@@ -58,6 +58,7 @@ process_dir() {
 process_dir "$src_dir/app" "DIR__APP"
 process_dir "$src_dir/components" "DIR__COMPONENTS"
 process_dir "$src_dir/pages" "DIR__PAGES"
+process_dir "$src_dir/styles" "DIR__STYLES"
 
 # Process the middleware.tsx file in the root of the src directory
 middleware_file="$src_dir/middleware.tsx"

@@ -169,95 +169,97 @@ return cookies[name];
     }
   };
 
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4">
-        <h2 className="text-yellow-100/50 text-center mb-8">Edit {modalName}</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4">
-            {columns.map((col) => (
-              <div key={col} className="mb-2">
-                <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
-                {config.scopes.update.includes(col) ? (
-                  dynamicOptions[col] ? (
-                    <select
-                      name={col}
-                      value={formData[col] || ''}
-                      onChange={handleChange}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {col}
+return (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 py-4">
+    <div className="bg-black border border-yellow-100/30 p-6 rounded-lg w-3/4 max-h-screen overflow-y-auto">
+      <h2 className="text-yellow-100/50 text-center mb-8 text-2xl">Edit {modalName}</h2>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-2 gap-4">
+          {columns.map((col) => (
+            <div key={col} className="mb-2">
+              <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
+              {config.scopes.update.includes(col) ? (
+                dynamicOptions[col] ? (
+                  <select
+                    name={col}
+                    value={formData[col] || ''}
+                    onChange={handleChange}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  >
+                    <option value="" disabled>
+                      Select {col}
+                    </option>
+                    {dynamicOptions[col].map((option: string) => (
+                      <option key={option} value={option}>
+                        {option}
                       </option>
-                      {dynamicOptions[col].map((option: string) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : config.options[col] ? (
-                    <select
-                      name={col}
-                      value={formData[col] || ''}
-                      onChange={handleChange}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    >
-                      <option value="" disabled>
-                        Select {col}
+                    ))}
+                  </select>
+                ) : config.options[col] ? (
+                  <select
+                    name={col}
+                    value={formData[col] || ''}
+                    onChange={handleChange}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  >
+                    <option value="" disabled>
+                      Select {col}
+                    </option>
+                    {config.options[col]?.map((option: string) => (
+                      <option key={option} value={option}>
+                        {option}
                       </option>
-                      {config.options[col]?.map((option: string) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      name={col}
-                      value={formData[col] || ''}
-                      onChange={handleChange}
-                      className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    />
-                  )
+                    ))}
+                  </select>
                 ) : (
-                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
-                    {isUrl(formData[col]) ? (
-                      <button
-                        type="button"
-                        onClick={() => window.open(formData[col], '_blank')}
-                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
-                      >
-                        Open URL
-                      </button>
-                    ) : (
-                      formData[col]
-                    )}
-                  </div>
-                )}
-                {errors[col] && <p className="text-red-500">{errors[col]}</p>}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-end mt-4">
-            <button
-              type="button"
-              onClick={() => onClose(null)}
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
+                  <input
+                    type="text"
+                    name={col}
+                    value={formData[col] || ''}
+                    onChange={handleChange}
+                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+                  />
+                )
+              ) : (
+                <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
+                  {isUrl(formData[col]) ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(formData[col], '_blank')}
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
+                    >
+                      Open URL
+                    </button>
+                  ) : (
+                    formData[col]
+                  )}
+                </div>
+              )}
+              {errors[col] && <p className="text-red-500">{errors[col]}</p>}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={() => onClose(null)}
+            className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black mr-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="bg-black hover:bg-yellow-100/70 text-yellow-100/50 hover:text-black py-1 px-4 rounded-lg text-sm border border-yellow-100/30 hover:border-black"
+          >
+            Save
+          </button>
+        </div>
+      </form>
     </div>
-  );
+  </div>
+);
+
+
 };
 
 export default EditModal;

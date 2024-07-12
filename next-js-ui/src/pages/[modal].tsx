@@ -51,7 +51,7 @@ const ModalPage: React.FC = () => {
   return (
     <div className="flex">
       <Sidebar />
-      <div className="bg-black min-h-screen flex-1 p-8">
+      <div className="bg-black min-h-screen flex-1 p-8 overflow-x-auto">
         <div className="container mx-auto">
           <h1 className="text-yellow-100/50 mr-2 text-right">
             {(modal as string)} table
