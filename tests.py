@@ -558,7 +558,7 @@ def test_htatc():
 def test_ltacc():
     d = r.p()
     d.frd(['text'],[['how dare you'],['thank you so much'],['what time is it']])
-    d.ltacc('text', classify=[{'emotion':'happy, unhappy, neutral'},{'statement':'assertion, question, response'}], model='cardiffnlp/twitter-roberta-base-emotion')
+    d.ltacc('text', classify=[{'emotion':'happy, unhappy, neutral'},{'statement':'assertion, question, response'}], model='roberta-large-mnli')
 
 def test_ltaecc():
     d = r.p()

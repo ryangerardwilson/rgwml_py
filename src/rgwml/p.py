@@ -35,9 +35,10 @@ from tqdm import tqdm
 import asyncio
 import whisper
 #from transformers import pipeline, logging
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, logging
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, logging, AutoTokenizer
 import warnings
 import torch
+import re
 
 class p:
     def __init__(self, df=None):
@@ -2994,7 +2995,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     if participants:
                         participant_details = participants.split(", ")
                         participant_flow_format = ', '.join([f'{{"{p}":"dialogue text in English"}}' for p in participant_details])
-                        flow_prompt = f'This is a transcription. Translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{participant_flow_format}]}}: {transcription}'
+                        flow_prompt = f'The below text may have some jumbled words that may be due to either a typo or a machine translation error. Clean it up, and translate it to English clearly delineating the participants and the flow, in this format {{"flow":[{participant_flow_format}]}}: {transcription}'
                     else:
                         flow_prompt = f'Translate the below transcriptions to English clearly delineating the participants and the flow, in this format {{"flow":[{{"speaker_1":"dialogue text in English"}}, {{"speaker_2": "dialogue text in English"}}, {{"speaker_1":"dialogue text in English"}}, {{"speaker_2":"dialogue text in English"}}]}}: \n\n{transcription}'
 
@@ -3323,31 +3324,43 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-
     def ltaecc(self, column_to_analyze):
         """LOCAL_TRANSFORMERS::[d.ltaecc('text_column_to_analyze')] Local transformer append emotion classification columns. Method to classify emotions in a specified column."""
-        
-        classifier = pipeline("text-classification", model='bhadresh-savani/distilbert-base-uncased-emotion', top_k=None)
-        
+
+        model_name = 'bhadresh-savani/distilbert-base-uncased-emotion'
+        classifier = pipeline("text-classification", model=model_name, top_k=None)
+
+        def preprocess_text(text):
+            # Remove all special characters except for full stops
+            cleaned_text = re.sub(r'[^a-zA-Z0-9\s\.]', '', text)
+            # Truncate to the first 1000 characters
+            truncated_text = cleaned_text[:1000]
+            return truncated_text
+
         def classify_emotion(text):
-            prediction = classifier(text)
-            return prediction[0]
-        
+            # Preprocess the text
+            cleaned_text = preprocess_text(text)
+            # Classify the emotion
+            predictions = classifier(cleaned_text)
+            return predictions[0]
+
         texts = self.df[column_to_analyze].tolist()
-        
+
         emotion_labels = ['sadness', 'joy', 'love', 'anger', 'fear', 'surprise']
         emotion_scores = {label: [] for label in emotion_labels}
-        
+
         with tqdm(total=len(texts), desc="Classifying Emotions") as pbar:
             for text in texts:
-                scores = classify_emotion(text)
+                text_string = f"{text}"
+                scores = classify_emotion(text_string)
+                #print(scores)  # For debugging
                 for score in scores:
                     emotion_scores[score['label']].append(score['score'])
                 pbar.update(1)
-        
+
         for label, scores in emotion_scores.items():
             self.df[f"{column_to_analyze}_{label}"] = scores
-        
+
         print()
         self.pr()
         return self
