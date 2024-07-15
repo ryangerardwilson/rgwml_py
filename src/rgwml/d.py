@@ -138,7 +138,7 @@ class d:
             print(f"DataFrame saved to {full_path}")
         elif full_path.lower().endswith('.h5'):
             # For Dask, converting to Pandas DataFrame for HDF5 saving
-            dask_df.compute().to_hdf(full_path, key='df', mode='w', format='table')
+            self.df.compute().to_hdf(full_path, key='df', mode='w', format='table')
             #pandas_df = self.df.compute()
             #pandas_df.to_hdf(full_path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {full_path}")

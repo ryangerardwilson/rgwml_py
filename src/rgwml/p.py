@@ -1591,14 +1591,40 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
     def arc(self, ranges, target_col, new_col_name):
-        """APPEND::[d.arc('0,500,1000,2000,5000,10000,100000,1000000', 'column_to_be_analyzed', 'new_column_name')] Append ranged classification column."""
+        """APPEND::[d.arc('0,0.01,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1', 'column_to_be_analyzed', 'new_column_name')] Append ranged classification column."""
+
+        def pad_number(number, integer_length, decimal_length=0, decimal=False):
+            """Pad number to have a consistent length for integer and decimal parts."""
+            if decimal:
+                str_number = f"{number:.{decimal_length}f}"
+                integer_part, decimal_part = str_number.split('.')
+                padded_integer_part = integer_part.zfill(integer_length)
+                return f"{padded_integer_part}.{decimal_part}"
+            else:
+                return str(int(number)).zfill(integer_length)
+        
         if self.df is not None:
-            range_list = [int(r) for r in ranges.split(',')]
-            max_length = len(str(max(range_list)))
-            labels = [f"{str(range_list[i]).zfill(max_length)} to {str(range_list[i+1]).zfill(max_length)}" for i in range(len(range_list) - 1)]
-            self.df[new_col_name] = pd.cut(self.df[target_col], bins=range_list, labels=labels, right=False)
+            # Check if any range value contains decimals
+            range_list = ranges.split(',')
+            has_decimals = any('.' in r for r in range_list)
+
+            if has_decimals:
+                # Convert all range values to floats if any have decimals
+                range_list = [float(r) for r in range_list]
+                max_decimal_length = max(len(str(r).split('.')[1]) for r in range_list if '.' in str(r))
+                max_integer_length = max(len(str(int(float(r)))) for r in range_list)
+                labels = [f"{pad_number(range_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(range_list[i+1], max_integer_length, max_decimal_length, decimal=True)}" for i in range(len(range_list) - 1)]
+            else:
+                # Keep range values as integers if none have decimals
+                range_list = [int(r) for r in range_list]
+                max_integer_length = max(len(str(r)) for r in range_list)
+                labels = [f"{pad_number(range_list[i], max_integer_length)} to {pad_number(range_list[i+1], max_integer_length)}" for i in range(len(range_list) - 1)]
+
+            # Ensure the target column is numeric
+            self.df[target_col] = pd.to_numeric(self.df[target_col], errors='coerce')
+            # Apply pd.cut
+            self.df[new_col_name] = pd.cut(self.df[target_col], bins=range_list, labels=labels, right=False, include_lowest=True)
             self.pr()
         else:
             raise ValueError("No DataFrame to append a ranged classification column. Please load a file first using the frm or frml method.")
@@ -1607,9 +1633,36 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def apc(self, percentiles, target_col, new_col_name):
         """APPEND::[d.apc('0,25,50,75,100', 'column_to_be_analyzed', 'new_column_name')] Append percentile classification column."""
+
+        def pad_number(number, integer_length, decimal_length=0, decimal=False):
+            """Pad number to have a consistent length for integer and decimal parts."""
+            if decimal:
+                str_number = f"{number:.{decimal_length}f}"
+                integer_part, decimal_part = str_number.split('.')
+                padded_integer_part = integer_part.zfill(integer_length)
+                return f"{padded_integer_part}.{decimal_part}"
+            else:
+                return str(int(number)).zfill(integer_length)
+        
         if self.df is not None:
-            percentiles_list = [int(p) for p in percentiles.split(',')]
-            labels = [f"{percentiles_list[i]} to {percentiles_list[i+1]}" for i in range(len(percentiles_list) - 1)]
+            # Check if any percentile value contains decimals
+            percentiles_list = percentiles.split(',')
+            has_decimals = any('.' in p for p in percentiles_list)
+
+            if has_decimals:
+                # Convert all percentile values to floats if any have decimals
+                percentiles_list = [float(p) for p in percentiles_list]
+                max_decimal_length = max(len(str(p).split('.')[1]) for p in percentiles_list if '.' in str(p))
+                max_integer_length = max(len(str(int(float(p)))) for p in percentiles_list)
+                labels = [f"{pad_number(percentiles_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(percentiles_list[i+1], max_integer_length, max_decimal_length, decimal=True)} ({i})" for i in range(len(percentiles_list) - 1)]
+            else:
+                # Keep percentile values as integers if none have decimals
+                percentiles_list = [int(p) for p in percentiles_list]
+                max_integer_length = max(len(str(p)) for p in percentiles_list)
+                labels = [f"{pad_number(percentiles_list[i], max_integer_length)} to {pad_number(percentiles_list[i+1], max_integer_length)}" for i in range(len(percentiles_list) - 1)]
+
+            # Ensure the target column is numeric
+            self.df[target_col] = pd.to_numeric(self.df[target_col], errors='coerce')
             quantiles = [self.df[target_col].quantile(p / 100) for p in percentiles_list]
             self.df[new_col_name] = pd.cut(self.df[target_col], bins=quantiles, labels=labels, include_lowest=True)
             self.pr()
@@ -1617,6 +1670,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise ValueError("No DataFrame to append a percentile classification column. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
+
+
+
 
     def ardc(self, date_ranges, target_col, new_col_name):
         """APPEND::[d.ardc('2024-01-01,2024-02-01,2024-03-01', 'date_column', 'new_date_classification')] Append ranged date classification column."""
