@@ -2577,6 +2577,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if not isinstance(columns_to_retain, list):
             raise ValueError("columns_to_retain should be a list of column names.")
         self.df = self.df[columns_to_retain]
+        self.pr()
         return self
 
     def mad(self, other_p, column_name):
@@ -2586,6 +2587,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if column_name not in self.df.columns or column_name not in other_p.df.columns:
             raise ValueError("The specified column must exist in both DataFrames.")
         self.df = self.df[self.df[column_name].isin(other_p.df[column_name])]
+        self.pr()
         return self
 
     def madc(self, other_p, column_name):
@@ -2595,6 +2597,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if column_name not in self.df.columns or column_name not in other_p.df.columns:
             raise ValueError("The specified column must exist in both DataFrames.")
         self.df = self.df[~self.df[column_name].isin(other_p.df[column_name])]
+        self.pr()
         return self
 
     def goaibc(self, job_name, model, columns_to_analyse, classification_options):
