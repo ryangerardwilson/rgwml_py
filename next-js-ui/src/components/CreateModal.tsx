@@ -23,7 +23,6 @@ const CreateModal: React.FC<CreateModalProps> = ({ modalName, apiHost, columns, 
     setFormData(initialData);
   }, [columns]);
 
-
   const evalCondition = useCallback((condition: string) => {
     const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {
       if (formData.hasOwnProperty(match)) {
@@ -32,15 +31,13 @@ const CreateModal: React.FC<CreateModalProps> = ({ modalName, apiHost, columns, 
       return `'${match}'`;
     });
     try {
-      //console.log(`Evaluating condition: ${conditionToEvaluate}`);
       const result = new Function('formData', `return ${conditionToEvaluate};`)(formData);
-      //console.log(`Condition result: ${result}`);
       return result;
     } catch (e) {
       console.error('Error evaluating condition:', condition, e);
       return false;
     }
-  }, [formData]); // Include formData in dependencies
+  }, [formData]);
 
   const updateDynamicOptions = useCallback(() => {
     const newDynamicOptions: { [key: string]: string[] } = {};
@@ -54,30 +51,40 @@ const CreateModal: React.FC<CreateModalProps> = ({ modalName, apiHost, columns, 
         }
       }
     }
-    //console.log("Dynamic Options Updated:", newDynamicOptions);
     setDynamicOptions(newDynamicOptions);
-  }, [config, evalCondition]); // Include evalCondition in dependencies
+  }, [config, evalCondition]);
 
   useEffect(() => {
     updateDynamicOptions();
   }, [updateDynamicOptions]);
 
-
-
-const getCookie = (name: string): string | undefined => {
-const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-const [key, value] = cookie.trim().split('=');
-acc[key] = value;
-return acc;
-}, {} as { [key: string]: string });
-return cookies[name];
-};
-
-
+  const getCookie = (name: string): string | undefined => {
+    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as { [key: string]: string });
+    return cookies[name];
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({ ...prevData, [name]: value }));
+    const { name, value, type } = e.target;
+
+    setFormData((prevData) => {
+      if (type === 'checkbox') {
+        if (e.target instanceof HTMLInputElement) {
+          const checked = e.target.checked;
+          const currentValues = prevData[name] ? prevData[name].split(';') : [];
+          const updatedValues = checked
+            ? [...currentValues, value]
+            : currentValues.filter((item: string) => item !== value);
+          return { ...prevData, [name]: updatedValues.join(';') };
+        }
+      } else {
+        return { ...prevData, [name]: value };
+      }
+    });
+
     if (config.validation_rules && config.validation_rules[name]) {
       const error = validateField(name, value, config.validation_rules[name]);
       setErrors((prevErrors) => ({ ...prevErrors, [name]: error }));
@@ -156,6 +163,78 @@ return cookies[name];
     return config.conditional_options[field].some((conditionObj: any) => evalCondition(conditionObj.condition));
   };
 
+  const renderField = (col: string) => {
+    const orTypeOptions = Object.entries(config.options).find(([key]) => key.startsWith(`${col}[OR]`));
+    const xorTypeOptions = Object.entries(config.options).find(([key]) => key.startsWith(`${col}[XOR]`));
+
+    if (orTypeOptions) {
+      return (
+        <div className="flex flex-col space-y-2">
+          {orTypeOptions[1]?.map((option: string) => (
+            <label key={option} className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                name={col}
+                value={option}
+                checked={formData[col]?.split(';').includes(option) || false}
+                onChange={handleChange}
+                className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
+              />
+              <span className="ml-3 text-yellow-100/50">{option}</span>
+            </label>
+          ))}
+        </div>
+      );
+    } else if (xorTypeOptions) {
+      return (
+        <select
+          name={col}
+          value={formData[col] || ''}
+          onChange={handleChange}
+          className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+        >
+          <option value="" disabled>
+            Select {col}
+          </option>
+          {xorTypeOptions[1]?.map((option: string) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    } else if (dynamicOptions[col]) {
+      return (
+        <select
+          name={col}
+          value={formData[col] || ''}
+          onChange={handleChange}
+          className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+        >
+          <option value="" disabled>
+            Select {col}
+          </option>
+          {dynamicOptions[col]?.map((option: string) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    } else {
+      return (
+        <input
+          type="text"
+          name={col}
+          value={formData[col] || ''}
+          onChange={handleChange}
+          className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
+          disabled={!isFieldEnabled(col)}
+        />
+      );
+    }
+  };
+
   if (!config) {
     return <div>Loading...</div>;
   }
@@ -171,50 +250,7 @@ return cookies[name];
             {filteredColumns.map((col) => (
               <div key={col} className="mb-2">
                 <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
-                {dynamicOptions[col] ? (
-                  <select
-                    name={col}
-                    value={formData[col] || ''}
-                    onChange={handleChange}
-                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    disabled={!isFieldEnabled(col)}
-                  >
-                    <option value="" disabled>
-                      Select {col}
-                    </option>
-                    {dynamicOptions[col].map((option: string) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : config.options[col] ? (
-                  <select
-                    name={col}
-                    value={formData[col] || ''}
-                    onChange={handleChange}
-                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    disabled={!isFieldEnabled(col)}
-                  >
-                    <option value="" disabled>
-                      Select {col}
-                    </option>
-                    {config.options[col]?.map((option: string) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    name={col}
-                    value={formData[col] || ''}
-                    onChange={handleChange}
-                    className="bg-black text-yellow-100/50 px-3 py-2 rounded-lg border border-yellow-100/30 w-full text-sm"
-                    disabled={!isFieldEnabled(col)}
-                  />
-                )}
+                {renderField(col)}
                 {errors[col] && <p className="text-red-500">{errors[col]}</p>}
               </div>
             ))}
@@ -238,7 +274,6 @@ return cookies[name];
       </div>
     </div>
   );
-
 };
 
 export default CreateModal;

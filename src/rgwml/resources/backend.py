@@ -338,6 +338,8 @@ def search_entries(modal_name):
 @app.route('/update/<modal_name>/<entry_id>', method=['PUT', 'OPTIONS'])
 def update_entry(modal_name, entry_id):
     if request.method == 'OPTIONS':
+        response.headers['Access-Control-Allow-Methods'] = 'PUT, OPTIONS'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return {{}}
 
     data = request.json
@@ -350,48 +352,58 @@ def update_entry(modal_name, entry_id):
     columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'username']]
 
     set_clauses = []
+    params = []
+
     for col in columns:
         if col in data:  # Check if the column is in the data received
             value = data[col]
             if value is not None:
-                set_clauses.append(f"{{col}} = '{{value}}'")
+                set_clauses.append(f"`{{col}}`=%s")  # use parameterized queries
+                params.append(value)
 
     # Ensure that user_id is included if present in the data
     if 'user_id' in data:
         value = data['user_id']
         if value is not None:
-            set_clauses.append(f"user_id = '{{value}}'")
+            set_clauses.append("`user_id`=%s")
+            params.append(value)
 
     set_clause = ", ".join(set_clauses)
-    update_query = f"UPDATE {{modal_name}} SET {{set_clause}} WHERE id = {{entry_id}}"
+    update_query = f"UPDATE `{{modal_name}}` SET {{set_clause}} WHERE id = %s"
+    params.append(entry_id)
 
+    conn = None
+    cursor = None
 
     try:
         conn = pymysql.connect(**config)
         cursor = conn.cursor()
 
         # Fetch the old row for logging purposes
-        cursor.execute(f"SELECT * FROM {{modal_name}} WHERE id = {{entry_id}}")
+        cursor.execute(f"SELECT * FROM `{{modal_name}}` WHERE id = %s", (entry_id,))
         old_row = cursor.fetchone()
         print(f"Old row: {{old_row}}")
 
         # Perform the update operation
-        cursor.execute(update_query)
+        cursor.execute(update_query, params)
         conn.commit()
 
         log_operation(modal_name, data.get('user_id'), 'UPDATE', {{"old": old_row, "new": data}})
 
         return {{"status": "success"}}
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         print(f"Error updating entry: {{e}}")
         response.status = 500
         error = str(e)
         message = f"error: {{error}}; query: {{update_query}}"
         return {{"status": "error", "message": message}}
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @app.route('/delete/<modal_name>/<entry_id>', method=['OPTIONS', 'DELETE'])
 def delete_entry(modal_name, entry_id):

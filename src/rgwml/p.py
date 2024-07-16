@@ -1756,28 +1756,48 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def uj(self, other):
         """JOINS::[d.uj(d2)] Union join."""
-        if not isinstance(other, p):
-            raise TypeError("The 'other' parameter must be an instance of the p class")
+        if not isinstance(other, type(self)):
+            raise TypeError("The 'other' parameter must be an instance of the same class")
+        
+        # Debug before operation
+        print(f"self.df before join: {type(self.df)}, columns: {self.df.columns.tolist()}")
+        print(f"other.df before join: {type(other.df)}, columns: {other.df.columns.tolist()}")
+        print("self.df before join\n", self.df.head())
+        print("other.df before join\n", other.df.head())
 
         if self.df is None and other.df is None:
             raise ValueError("Both instances must contain a DataFrame or be empty")
-
+        
         if self.df is None or self.df.empty:
             self.df = other.df
         elif other.df is None or other.df.empty:
             pass  # self.df remains unchanged
         else:
-            # Ensure both DataFrames have the same columns
+            # Ensure both DataFrames have the same columns before concat
             if set(self.df.columns) != set(other.df.columns):
                 raise ValueError("Both DataFrames must have the same columns for a union join")
-
-            # Perform the union join using an in-place operation
-            self.df = pd.concat([self.df, other.df], ignore_index=True)
-            self.df.drop_duplicates(inplace=True)
-
+            
+            try:
+                # Perform the union join using concat and drop_duplicates
+                # Including debug print
+                print("Attempting concat...")
+                self.df = pd.concat([self.df, other.df], ignore_index=True)
+                print("After concat\n", self.df.head())
+                
+                # Ensure no lists are being set as the index or within the data
+                self.df.index = range(len(self.df))
+                self.df.drop_duplicates(inplace=True)
+            except Exception as e:
+                print(f"An error occurred during union join: {e}")
+        
+        # Debug after operation
+        print(f"self.df after join: {type(self.df)}")
+        print(self.df.head())
+        
         self.pr()
         gc.collect()
         return self
+
 
     def buj(self, other):
         """JOINS::[d.buj(d2)] Bag union join (does not drop duplicates)."""
@@ -1861,13 +1881,48 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def cs(self, columns):
-        """TINKER::[d.cs(['Column1', 'Column2'])] Cascade sort by specified columns."""
+        """TINKER::[d.cs(['Column1::ASC', 'Column2::DESC'])] Cascade sort by specified columns and order."""
+        
+        # Initialize lists to hold column names and sort orders
+        col_names = []
+        asc_order = []
+        
+        # Parse each column string to get the column names and orders
+        for col in columns:
+            if "::" in col:
+                name, order = col.split("::")
+                col_names.append(name)
+                asc_order.append(order.upper() == "ASC")
+            else:
+                # Default to ascending if no order is specified
+                col_names.append(col)
+                asc_order.append(True)
+        
+        # Debug prints to inspect parsed inputs
+        print("Column Names after parsing:", col_names)
+        print("Ascending Order after parsing:", asc_order)
+        
         if self.df is not None:
-            self.df = self.df.sort_values(by=columns)
+            try:
+                # Check if all parsed columns are in the DataFrame
+                print("DataFrame columns:", self.df.columns)
+                for name in col_names:
+                    if name not in self.df.columns:
+                        raise ValueError(f"Column {name} not found in DataFrame")
+
+                print("Before Sorting - self.df type:", type(self.df))
+                print(self.df.head())
+                self.df = self.df.sort_values(by=col_names, ascending=asc_order)
+                print("After Sorting - self.df:")
+                print(self.df.head())
+            except Exception as e:
+                print(f"An error occurred during sorting: {e}")
             self.pr()
         else:
             print("DataFrame is not initialized.")
+        
         return self
+
 
     def axl(self, ratio_str):
         """PREDICT::[d.axl('70:20:10')] Append XGB training labels based on a ratio string."""

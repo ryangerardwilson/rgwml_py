@@ -46,7 +46,7 @@ interface ModalConfigMap {
 const modalConfig: ModalConfigMap = {
   "users": {
     "options": {
-      "type": [
+      "type[XOR]": [
         "admin",
         "normal"
       ]
@@ -83,7 +83,7 @@ const modalConfig: ModalConfigMap = {
   },
   "social_media_escalations": {
     "options": {
-      "forum": [
+      "forum[XOR]": [
         "Google_Reviews",
         "LinkedIn",
         "Twitter/X",
@@ -92,12 +92,12 @@ const modalConfig: ModalConfigMap = {
         "YouTube",
         "Other"
       ],
-      "status": [
+      "status[XOR]": [
         "Unresolved",
         "Resolved_but_post_not_removed",
         "Not_able_to_identify_poster"
       ],
-      "issue": [
+      "issue[XOR]": [
         "Internet_supply_down",
         "Slow_speed",
         "Frequent_disconnect",

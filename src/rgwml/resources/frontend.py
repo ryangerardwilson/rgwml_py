@@ -279,7 +279,7 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
     modal_frontend_config = {
         "users": {
             "options": {
-                "type": ["admin", "normal"]
+                "type[XOR]": ["admin", "normal"]
             },
             "conditional_options": {},
             "scopes": {
