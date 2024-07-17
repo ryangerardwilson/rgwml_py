@@ -1277,63 +1277,69 @@ const SearchInput: React.FC<SearchInputProps> = ({{
 export default SearchInput;'''
 
 DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (field: string, value: any, rules: string[]): string | null => {{
-  const isRequired = rules.includes('REQUIRED');
+    const isRequired = rules.includes('REQUIRED');
 
-  for (const rule of rules) {{
-    const [ruleName, ...params] = rule.split(':');
-    switch (ruleName) {{
-      case 'REQUIRED':
-        if (!value) {{
-          return `${{field}} is required.`;
+    for (const rule of rules) {{
+        const [ruleName, ...params] = rule.split(':');
+        switch (ruleName) {{
+            case 'REQUIRED':
+                if (!value) {{
+                    return `${{field}} is required.`;
+                }}
+                break;
+            case 'CHAR_LENGTH':
+                const length = parseInt(params[0], 10);
+                if (value.length !== length) {{
+                    return `${{field}} must be ${{length}} characters long.`;
+                }}
+                break;
+            case 'IS_NUMERICALLY_PARSEABLE':
+                if (isNaN(Number(value))) {{
+                    return `${{field}} must be numerically parseable.`;
+                }}
+                break;
+            case 'IS_INDIAN_MOBILE_NUMBER':
+                if (!isRequired && !value) {{
+                    break; // Skip this rule if the field is not required and value is empty
+                }}
+                const uniqueDigits = new Set(value.split('')).size;
+                if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
+                    return `${{field}} must be a valid Indian mobile number.`;
+                }}
+                break;
+            case 'IS_YYYY-MM-DD':
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                    return `${{field}} must be in YYYY-MM-DD format.`;
+                }}
+                break;
+            case 'IS_AFTER_TODAY':
+                if (!isRequired && !value) {{
+                    break; // Skip this rule if the field is not required and value is empty
+                }}
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                    return `${{field}} must be in YYYY-MM-DD format.`;
+                }}
+                if (new Date(value) <= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
+                    return `${{field}} must be a date after today.`;
+                }}
+                break;
+            case 'IS_BEFORE_TODAY':
+                if (!isRequired && !value) {{
+                    break; // Skip this rule if the field is not required and value is empty
+                }}
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                    return `${{field}} must be in YYYY-MM-DD format.`;
+                }}
+                if (new Date(value) >= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
+                    return `${{field}} must be a date before today.`;
+                }}
+                break;
+            // Add more validation rules as needed
+            default:
+                break;
         }}
-        break;
-      case 'CHAR_LENGTH':
-        const length = parseInt(params[0], 10);
-        if (value.length !== length) {{
-          return `${{field}} must be ${{length}} characters long.`;
-        }}
-        break;
-      case 'IS_NUMERICALLY_PARSEABLE':
-        if (isNaN(Number(value))) {{
-          return `${{field}} must be numerically parseable.`;
-        }}
-        break;
-      case 'IS_INDIAN_MOBILE_NUMBER':
-        if (!isRequired && !value) {{
-          break; // Skip this rule if the field is not required and value is empty
-        }}
-        const uniqueDigits = new Set(value.split('')).size;
-        if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
-          return `${{field}} must be a valid Indian mobile number.`;
-        }}
-        break;
-      case 'IS_YYYY-MM-DD':
-        if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
-          return `${{field}} must be in YYYY-MM-DD format.`;
-        }}
-        break;
-      case 'IS_AFTER_TODAY':
-        if (!isRequired && !value) {{
-          break; // Skip this rule if the field is not required and value is empty
-        }}
-        if (new Date(value) <= new Date()) {{
-          return `${{field}} must be a date after today.`;
-        }}
-        break;
-      case 'IS_BEFORE_TODAY':
-        if (!isRequired && !value) {{
-          break; // Skip this rule if the field is not required and value is empty
-        }}
-        if (new Date(value) >= new Date()) {{
-          return `${{field}} must be a date before today.`;
-        }}
-        break;
-      // Add more validation rules as needed
-      default:
-        break;
     }}
-  }}
-  return null;
+    return null;
 }};
 
 const OPEN_AI_KEY = process.env.NEXT_PUBLIC_OPEN_AI_KEY;
