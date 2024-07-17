@@ -1313,11 +1313,17 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
         }}
         break;
       case 'IS_AFTER_TODAY':
+        if (!isRequired && !value) {{
+          break; // Skip this rule if the field is not required and value is empty
+        }}
         if (new Date(value) <= new Date()) {{
           return `${{field}} must be a date after today.`;
         }}
         break;
       case 'IS_BEFORE_TODAY':
+        if (!isRequired && !value) {{
+          break; // Skip this rule if the field is not required and value is empty
+        }}
         if (new Date(value) >= new Date()) {{
           return `${{field}} must be a date before today.`;
         }}
