@@ -1882,11 +1882,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def cs(self, columns):
         """TINKER::[d.cs(['Column1::ASC', 'Column2::DESC'])] Cascade sort by specified columns and order."""
-        
+
         # Initialize lists to hold column names and sort orders
         col_names = []
         asc_order = []
-        
+
         # Parse each column string to get the column names and orders
         for col in columns:
             if "::" in col:
@@ -1897,30 +1897,30 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 # Default to ascending if no order is specified
                 col_names.append(col)
                 asc_order.append(True)
-        
+
         # Debug prints to inspect parsed inputs
-        print("Column Names after parsing:", col_names)
-        print("Ascending Order after parsing:", asc_order)
-        
+        #print("Column Names after parsing:", col_names)
+        #print("Ascending Order after parsing:", asc_order)
+
         if self.df is not None:
             try:
                 # Check if all parsed columns are in the DataFrame
-                print("DataFrame columns:", self.df.columns)
+                #print("DataFrame columns:", self.df.columns.tolist())
                 for name in col_names:
                     if name not in self.df.columns:
                         raise ValueError(f"Column {name} not found in DataFrame")
 
-                print("Before Sorting - self.df type:", type(self.df))
-                print(self.df.head())
+                #print("Before Sorting - self.df type:", type(self.df))
+                #print(self.df.head())
                 self.df = self.df.sort_values(by=col_names, ascending=asc_order)
-                print("After Sorting - self.df:")
-                print(self.df.head())
+                #print("After Sorting - self.df:")
+                #print(self.df.head())
             except Exception as e:
                 print(f"An error occurred during sorting: {e}")
             self.pr()
         else:
             print("DataFrame is not initialized.")
-        
+
         return self
 
 
