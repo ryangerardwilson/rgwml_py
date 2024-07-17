@@ -342,9 +342,9 @@ Instantiate this class by crm = r.f()
     modal_frontend_config = {
         "social_media_escalations": {
             "options": {
-                "forum": ["playstore", "google_review", "freshdesk", "mail_to_management", "facebook", "instagram", "twitter","linkedin","other"],
-                "reach_out_method": ["post", "comment", "dm","other"],
-                "action_taken": ["no_customer_detail_found", "resolved", "post_removed_and_resolved", "other"]
+                "forum[XOR]": ["playstore", "google_review", "freshdesk", "mail_to_management", "facebook", "instagram", "twitter","linkedin","other"],
+                "reach_out_method[XOR]": ["post", "comment", "dm","other"],
+                "action_taken[XOR]": ["no_customer_detail_found", "resolved", "post_removed_and_resolved", "other"]
             },
             "scopes": {
                 "create": True,
@@ -364,8 +364,8 @@ Instantiate this class by crm = r.f()
         },
         "welcome_calls": {
             "options": {
-                "disposition": ["wc_completed", "dnp", "asked_to_call_back", "call_disconnected_in_between"],
-                "issue": ["no_issue", "internet_issue", "misbehave", "not_proper_install", "other_issue"]
+                "disposition[XOR]": ["wc_completed", "dnp", "asked_to_call_back", "call_disconnected_in_between"],
+                "issue[XOR]": ["no_issue", "internet_issue", "misbehave", "not_proper_install", "other_issue"]
             },
             "conditional_options": {
                 "sub_issue": [
