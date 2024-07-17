@@ -42,7 +42,7 @@ import re
 
 class p:
     def __init__(self, df=None):
-        """Initialize the EP class with an empty DataFrame."""
+        """Initialize the p class with an empty DataFrame."""
         self.df = df
 
     def cl(self):
@@ -53,6 +53,42 @@ class p:
     def gdf(self):
         """UTILS::[d.gdf()] Get DataFrame."""
         return self.df
+
+
+    def ncl(self, column_names, column_type, irregular_value_treatment):
+        """CLEAN::[d.ncl('Column7, Column9', column_type='INTEGER', irregular_value_treatment='NAN')] Numeric clean. Cleans the numeric column based on the specified treatments. column_type (can be INTEGER or FLOAT), irregular_value_treatment (can be NAN, TO_ZERO_ or MEAN)"""
+
+        # Split the column names and strip any extra whitespace
+        column_names = [name.strip() for name in column_names.split(',')]
+
+        for column_name in column_names:
+            if column_name not in self.df.columns:
+                raise ValueError(f"Column '{column_name}' does not exist in the DataFrame.")
+
+            if column_type not in ['INTEGER', 'FLOAT']:
+                raise ValueError("column_type must be 'INTEGER' or 'FLOAT'.")
+
+            if irregular_value_treatment not in ['NAN', 'TO_ZERO', 'MEAN']:
+                raise ValueError("irregular_value_treatment must be 'NAN', 'TO_ZERO', or 'MEAN'.")
+
+            # Convert column type
+            if column_type == 'INTEGER':
+                self.df[column_name] = pd.to_numeric(self.df[column_name], errors='coerce').astype(pd.Int64Dtype())
+            elif column_type == 'FLOAT':
+                self.df[column_name] = pd.to_numeric(self.df[column_name], errors='coerce').astype(float)
+
+            # Handle irregular values
+            if irregular_value_treatment == 'NAN':
+                pass  # Already converted to NaN
+            elif irregular_value_treatment == 'TO_ZERO':
+                self.df[column_name] = self.df[column_name].fillna(0)
+            elif irregular_value_treatment == 'MEAN':
+                mean_value = self.df[column_name].mean()
+                self.df[column_name] = self.df[column_name].fillna(mean_value)
+
+        self.pr()
+        return self
+
 
     def lim(self, num_rows):
         """TINKER::[d.lim(7)] Limit the DataFrame to a specified number of rows."""
@@ -134,8 +170,38 @@ class p:
 
             client = ClickHouseClient(host=host, user=username, password=password, database=database)
             rows = client.execute(query)
-            columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
-            columns = [row[0] for row in client.execute(columns_query)]
+           
+            """ 
+            if 'FROM' in query.upper():
+                table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
+                columns_query = f"DESCRIBE TABLE {table_name}"
+                columns = [row[0] for row in client.execute(columns_query)]
+            else:
+                columns = []
+            """
+
+            if 'FROM' in query.upper():
+                table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
+                columns_query = f"DESCRIBE TABLE {table_name}"
+                columns = [row[0] for row in client.execute(columns_query)]
+            else:
+                # Default handling for queries that are not table-oriented
+                if query.upper().startswith('SHOW TABLES'):
+                    columns = ['name']
+                elif query.upper().startswith('SHOW DATABASES'):
+                    columns = ['name']
+                else:
+                    columns = [f'column_{i+1}' for i in range(len(rows[0]))]
+
+            df = pd.DataFrame(rows, columns=columns)
+            self.df = df
+            self.pr()
+            gc.collect()
+            return self
+
+                
+            #columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+            #columns = [row[0] for row in client.execute(columns_query)]
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
@@ -244,11 +310,30 @@ class p:
 
             client = ClickHouseClient(host=host, user=username, password=password, database=database)
             rows = client.execute(query)
+            
             if rows:
+                """
                 columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
                 columns = [row[0] for row in client.execute(columns_query)]
                 df = pd.DataFrame(rows, columns=columns)
                 print(df)
+                """
+                if 'FROM' in query.upper():
+                    table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
+                    columns_query = f"DESCRIBE TABLE {table_name}"
+                    columns = [row[0] for row in client.execute(columns_query)]
+                else:
+                    # Default handling for queries that are not table-oriented
+                    if query.upper().startswith('SHOW TABLES'):
+                        columns = ['name']
+                    elif query.upper().startswith('SHOW DATABASES'):
+                        columns = ['name']
+                    else:
+                        columns = [f'column_{i+1}' for i in range(len(rows[0]))]
+
+                df = pd.DataFrame(rows, columns=columns)
+                print(df)
+
 
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
