@@ -12,7 +12,8 @@ import copy
 import gc
 import mysql.connector
 import tempfile
-from clickhouse_driver import Client as ClickHouseClient
+#from clickhouse_driver import Client as ClickHouseClient
+import clickhouse_connect
 from google.cloud import bigquery
 from google.oauth2 import service_account
 import pandas_gbq
@@ -166,33 +167,14 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            database = db_preset.get('database', '')
+            #database = db_preset.get('database', '')
 
-            client = ClickHouseClient(host=host, user=username, password=password, database=database)
-            rows = client.execute(query)
+            #client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
+            data = client.query(query)
+            rows = data.result_rows
+            columns = data.column_names
            
-            """ 
-            if 'FROM' in query.upper():
-                table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
-                columns_query = f"DESCRIBE TABLE {table_name}"
-                columns = [row[0] for row in client.execute(columns_query)]
-            else:
-                columns = []
-            """
-
-            if 'FROM' in query.upper():
-                table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
-                columns_query = f"DESCRIBE TABLE {table_name}"
-                columns = [row[0] for row in client.execute(columns_query)]
-            else:
-                # Default handling for queries that are not table-oriented
-                if query.upper().startswith('SHOW TABLES'):
-                    columns = ['name']
-                elif query.upper().startswith('SHOW DATABASES'):
-                    columns = ['name']
-                else:
-                    columns = [f'column_{i+1}' for i in range(len(rows[0]))]
-
             df = pd.DataFrame(rows, columns=columns)
             self.df = df
             self.pr()
@@ -306,23 +288,16 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            database = db_preset.get('database', '')
+            #database = db_preset.get('database', '')
 
-            client = ClickHouseClient(host=host, user=username, password=password, database=database)
-            rows = client.execute(query)
+            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
+            data = client.query(query)
+            rows = data.result_rows
+            columns = data.column_names
             
+
             if rows:
-                """
-                columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
-                columns = [row[0] for row in client.execute(columns_query)]
-                df = pd.DataFrame(rows, columns=columns)
-                print(df)
-                """
-                if 'FROM' in query.upper():
-                    table_name = query.upper().split('FROM')[1].strip().split(' ')[0]
-                    columns_query = f"DESCRIBE TABLE {table_name}"
-                    columns = [row[0] for row in client.execute(columns_query)]
-                else:
+                if 'FROM' not in query.upper():
                     # Default handling for queries that are not table-oriented
                     if query.upper().startswith('SHOW TABLES'):
                         columns = ['name']
