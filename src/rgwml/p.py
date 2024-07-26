@@ -57,7 +57,7 @@ class p:
 
 
     def ncl(self, column_names, column_type, irregular_value_treatment):
-        """CLEAN::[d.ncl('Column7, Column9', column_type='INTEGER', irregular_value_treatment='NAN')] Numeric clean. Cleans the numeric column based on the specified treatments. column_type (can be INTEGER or FLOAT), irregular_value_treatment (can be NAN, TO_ZERO_ or MEAN)"""
+        """CLEAN::[d.ncl('Column7, Column9', column_type='INTEGER', irregular_value_treatment='NAN')] Numeric clean. Cleans the numeric column based on the specified treatments. column_type (can be INTEGER or FLOAT), irregular_value_treatment (can be NAN, TO_ZERO or MEAN)"""
 
         # Split the column names and strip any extra whitespace
         column_names = [name.strip() for name in column_names.split(',')]
@@ -106,7 +106,43 @@ class p:
             self.df = pd.DataFrame(data, columns=headers)
         else:
             raise ValueError("Data should be an array of arrays.")
+        self.pr()
         return self
+
+    def dd(self):
+        """CLEAN::[d.ddrf('Column1, Column7')] Drop duplicates retaining the first occurrence based on the specified columns."""
+        if self.df is not None:
+            # Drop duplicates keeping the first occurrence
+            self.df = self.df.drop_duplicates(keep='first')
+            self.pr()
+            return self
+        else:
+            raise ValueError("DataFrame is not initialized.")
+
+
+    def ddrf(self, columns):
+        """CLEAN::[d.ddrf('Column1, Column7')] Drop duplicates retaining the first occurrence based on the specified columns."""
+        if self.df is not None:
+            # Split the string into column names
+            columns_list = [col.strip() for col in columns.split(',')]
+            # Drop duplicates keeping the first occurrence
+            self.df = self.df.drop_duplicates(subset=columns_list, keep='first')
+            self.pr()
+            return self
+        else:
+            raise ValueError("DataFrame is not initialized.")
+    
+    def ddrl(self, columns):
+        """CLEAN::[d.ddrl('Column1, Column7')] Drop duplicates retaining the last occurrence based on the specified columns."""
+        if self.df is not None:
+            # Split the string into column names
+            columns_list = [col.strip() for col in columns.split(',')]
+            # Drop duplicates keeping the last occurrence
+            self.df = self.df.drop_duplicates(subset=columns_list, keep='last')
+            self.pr()
+            return self
+        else:
+            raise ValueError("DataFrame is not initialized.")
 
     def fq(self, db_preset_name, query):
         """LOAD::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
