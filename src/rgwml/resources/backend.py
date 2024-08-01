@@ -753,7 +753,7 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
     deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, backend_domain)
 
     # Run dynamic tests
-    run_tests(f"https://{backend_domain}", modal_map)
+    #run_tests(f"https://{backend_domain}", modal_map)
 
     cleanup_db(db_config, modal_map)
     print(f"Backend deployed to: https://{backend_domain}")

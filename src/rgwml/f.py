@@ -7,8 +7,8 @@ class f:
     def __init__(self):
         pass
 
-    def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_domain, open_ai_json_mode_model):
-        """Usage: Deployment.ser(project_name, new_db_name, db_preset_name, vm_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_domain, open_ai_json_mode_model)"""
+    def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version, deploy_backend, deploy_web, deploy_flutter):
+        """Usage: Deployment.ser(project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -50,6 +50,7 @@ class f:
 
         # Load VM config
         vm_preset = load_config(vm_preset_name, 'vm_presets')
+        cloud_storage_preset = load_config(cloud_storage_preset_name, 'cloud_storage_presets')
         instance = f"{vm_preset['ssh_user']}@{vm_preset['host']}"
 
         # Load keys
@@ -58,9 +59,10 @@ class f:
         vercel_key = load_key('vercel_token')
 
         # Deploy backend
-        backend_main(project_name, new_db_name, db_config, modal_backend_config, vm_preset['ssh_key_path'], instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_preset['host'])
+        if deploy_backend:
+            backend_main(project_name, new_db_name, db_config, modal_backend_config, vm_preset['ssh_key_path'], instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_preset['host'])
 
         # Deploy frontend
         modals = ','.join(modal_backend_config['modals'].keys())
-        frontend_main(project_name, frontend_local_deploy_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_backend_config, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key)
+        frontend_main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_backend_config, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_preset['credential_path'], version, deploy_web, deploy_flutter)
 

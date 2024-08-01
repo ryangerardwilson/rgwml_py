@@ -3,6 +3,8 @@ import os
 import shutil
 import json
 import requests
+from google.cloud import storage
+import google.auth
 
 # Import the generated frontend assets
 from .frontend_assets import *
@@ -58,11 +60,12 @@ def remove_src_directory(project_path):
     if os.path.exists(src_dir):
         shutil.rmtree(src_dir)  # Remove the entire src directory
 
-def create_env_file(project_path, api_host, open_ai_key, open_ai_json_mode_model):
+def create_env_file(project_path, api_host, open_ai_key, open_ai_json_mode_model, apk_url):
     env_content = f"""
 NEXT_PUBLIC_API_HOST={api_host}
 NEXT_PUBLIC_OPEN_AI_KEY={open_ai_key}
 NEXT_PUBLIC_OPEN_AI_JSON_MODE_MODEL={open_ai_json_mode_model}
+NEXT_PUBLIC_APK_URL={apk_url}
 """
     with open(os.path.join(project_path, '.env'), 'w') as f:
         f.write(env_content)
@@ -267,7 +270,7 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
     deploy_with_vercel()
 
 
-def main(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key):
+def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url):
 
     modal_backend_config['modals']['users'] = {
         "columns": "username,password,type",
@@ -335,7 +338,7 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
     create_nextjs_project(project_path, use_src)
     remove_src_directory(project_path)
     configure_tailwind(use_src)
-    create_env_file(project_path, api_host, open_ai_key, open_ai_json_mode_model)
+    create_env_file(project_path, api_host, open_ai_key, open_ai_json_mode_model, apk_url)
 
     # Recreate the src directory and necessary subdirectories
     src_dir = os.path.join(project_path, 'src')
@@ -422,3 +425,398 @@ def main(project_name, frontend_local_deploy_path, host, backend_domain, fronten
         NETLIFY_TOKEN=netlify_key,
         domain_name=frontend_domain,
     )
+
+def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, version):
+
+    def create_public_bucket_if_not_exists_and_upload_version(project_name, cloud_storage_credential_path, version):
+        # Authenticate using the selected credentials file
+        client = storage.Client.from_service_account_json(cloud_storage_credential_path)
+        bucket_name = project_name
+
+        # Attempt to create the bucket
+        try:
+            buckets = list(client.list_buckets())
+            bucket_names = [bucket.name for bucket in buckets]
+
+            if bucket_name not in bucket_names:
+                bucket = client.bucket(bucket_name)
+                bucket.create(location="us")
+
+                # Make the bucket publicly accessible
+                bucket.make_public(recursive=True, future=True)
+
+                print(f"Bucket '{bucket_name}' created and made public.")
+            else:
+                bucket = client.bucket(bucket_name)
+                print(f"Bucket '{bucket_name}' already exists.")
+            
+            # Define the content of the VERSION.json file
+            version_info = {
+                "version": version,
+                "apk_url": f"https://storage.googleapis.com/{bucket_name}/app-release.apk"
+            }
+
+            # Convert the version_info dictionary to a JSON string
+            version_info_json = json.dumps(version_info)
+
+            # Upload the VERSION.json file to the bucket
+            blob = bucket.blob('VERSION.json')
+            blob.upload_from_string(version_info_json, content_type='application/json')
+
+            print(f"VERSION.json file uploaded to bucket '{bucket_name}'.")
+
+            # Return the publicly accessible URL of the JSON file
+            version_url = f"https://storage.googleapis.com/{bucket_name}/VERSION.json"
+            return version_url
+
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            return None
+
+
+    def remove_existing_directory(path):
+        if os.path.exists(path):
+            shutil.rmtree(path)
+            print(f"Removed existing directory and all its contents from {path}.")
+        else:
+            print(f"No existing directory found at {path}; proceeding with creation.")
+
+    def create_flutter_project(project_path):
+        project = os.path.basename(project_path)
+        command = ['flutter', 'create', '--project-name', project, project_path]
+        subprocess.run(command, check=True)
+        print(f"Flutter project '{project}' created at {project_path}.")
+
+    def update_pubspec_yaml(project_path):
+        pubspec_path = os.path.join(project_path, 'pubspec.yaml')
+        with open(pubspec_path, 'r') as file:
+            lines = file.readlines()
+
+        # Check if the packages already exist in pubspec.yaml
+        has_rgml_fl = any('rgwml_fl: ^0.0.31' in line for line in lines)
+        has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
+
+        # Add the necessary dependencies if they don't exist
+        if not has_rgml_fl:
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.31\n')
+        if not has_flutter_launcher_icons:
+            lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
+
+        # Add the flutter_launcher_icons configuration
+        flutter_launcher_config = """
+flutter_icons:
+  android: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+"""
+        lines.append(flutter_launcher_config)
+
+        with open(pubspec_path, 'w') as file:
+            file.writelines(lines)
+        print(f"Updated {pubspec_path} with necessary configurations.")
+
+    def create_assets_directory(project_path):
+        assets_icon_path = os.path.join(project_path, 'assets/icon')
+        os.makedirs(assets_icon_path, exist_ok=True)
+        icon_url = 'https://storage.googleapis.com/rgw-general-public/rgwml-assets/icon.png'
+        response = requests.get(icon_url)
+        with open(os.path.join(assets_icon_path, 'icon.png'), 'wb') as file:
+            file.write(response.content)
+        print(f"Downloaded icon and placed it in {assets_icon_path}.")
+
+    def update_android_manifest(project_path, project_name):
+        android_manifest_path = os.path.join(project_path, 'android/app/src/main/AndroidManifest.xml')
+        with open(android_manifest_path, 'r') as file:
+            lines = file.readlines()
+
+        # Add the necessary permissions
+        permissions = [
+            '<uses-permission android:name="android.permission.INTERNET"/>',
+            '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>',
+            '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>',
+            '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>',
+            '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>'
+        ]
+        
+        for line in permissions:
+            if line not in lines:
+                lines.insert(1, line + '\n')
+        project = os.path.basename(project_path)
+        # Replace the app name with the project_name
+        for i in range(len(lines)):
+            if 'android:label=' in lines[i]:
+                lines[i] = lines[i].replace(f'android:label="{project}"', f'android:label="{project_name}"')
+
+        with open(android_manifest_path, 'w') as file:
+            file.writelines(lines)
+        print(f"Updated AndroidManifest.xml with necessary permissions and project name '{project_name}'.")
+
+    def update_flutter_settings_gradle_version(project_path):
+        settings_gradle_path = os.path.join(project_path, 'android/settings.gradle')
+
+        new_content = """pluginManagement {
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    id "com.android.application" version "7.3.0" apply false
+    id "org.jetbrains.kotlin.android" version "1.9.0" apply false
+}
+
+include ":app"
+        """  # Ensure this block has the exact format you need
+
+        with open(settings_gradle_path, 'w') as file:
+            file.write(new_content.strip())
+
+        print(f"Updated settings.gradle to use the specified content.")
+
+
+    def add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_backend_config, non_user_modal_frontend_config):
+        def convert_to_dart_bool(value):
+            return 'true' if value else 'false'
+
+        def convert_read_routes(read_routes):
+            return [list(route.keys())[0] for route in read_routes]
+
+        def convert_conditional_options(conditional_options):
+            result = {}
+            for key, value in conditional_options.items():
+                result[key] = [
+                    f'ConditionalOption(condition: "{co["condition"]}", options: {json.dumps(co["options"])})'
+                    for co in value
+                ]
+            return result
+
+        modal_config_entries = []
+        for modal_name, modal_data in non_user_modal_frontend_config.items():
+            backend_modal = modal_backend_config["modals"].get(modal_name, {})
+            read_routes = convert_read_routes(backend_modal.get("read_routes", []))
+
+            options = json.dumps(modal_data.get("options", {}), indent=4)
+            conditional_options = convert_conditional_options(modal_data.get("conditional_options", {}))
+            
+            # Convert dictionary to Dart map literal
+            conditional_options_str = '{' + ', '.join(f'"{key}": [{", ".join(value)}]' for key, value in conditional_options.items()) + '}'
+            
+            scopes_create = convert_to_dart_bool(modal_data.get("scopes", {}).get("create", False))
+            scopes_read = json.dumps(modal_data.get("scopes", {}).get("read", []))
+            scopes_update = json.dumps(modal_data.get("scopes", {}).get("update", []))
+            scopes_delete = convert_to_dart_bool(modal_data.get("scopes", {}).get("delete", False))
+            validation_rules = json.dumps(modal_data.get("validation_rules", {}), indent=4)
+            ai_quality_checks = json.dumps(modal_data.get("ai_quality_checks", {}), indent=4)
+
+            modal_config_entry = f"""
+        "{modal_name}": ModalConfig(
+            options: Options({options}),
+            conditionalOptions: {conditional_options_str},
+            scopes: Scopes(
+                create: {scopes_create},
+                read: {scopes_read},
+                update: {scopes_update},
+                delete: {scopes_delete},
+            ),
+            validationRules: {validation_rules},
+            aiQualityChecks: {ai_quality_checks},
+            readRoutes: {json.dumps(read_routes)},
+        ),
+            """
+            modal_config_entries.append(modal_config_entry)
+
+        modal_config_entries_str = '\n'.join(modal_config_entries)
+
+        main_dart_content = f"""import 'package:rgwml_fl/rgwml_fl.dart';
+
+    void main() {{
+      final modalConfig = ModalConfigMap({{
+        {modal_config_entries_str}
+      }});
+
+      runApp(MyApp(modalConfig: modalConfig));
+    }}
+        """
+        main_dart_path = os.path.join(frontend_flutter_app_path, 'lib', 'main.dart')
+
+        if not os.path.exists(os.path.join(frontend_flutter_app_path, 'lib')):
+            os.makedirs(os.path.join(frontend_flutter_app_path, 'lib'))
+
+        with open(main_dart_path, 'w') as f:
+            f.write(main_dart_content)
+
+        print(f"Generated main.dart at {main_dart_path}")
+
+
+
+    def add_my_app_class_to_main_dart(frontend_flutter_app_path, version, project_name, version_url, backend_domain, open_ai_json_mode_model, open_ai_key):
+        my_app_class = f"""
+class MyApp extends StatelessWidget {{
+  final ModalConfigMap modalConfig;
+
+  static const String currentVersion = "{version}";
+
+  MyApp({{super.key, required this.modalConfig}});
+
+  @override
+  Widget build(BuildContext context) {{
+    return MaterialApp(
+      title: '{project_name}',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: CRMDashboard(
+        title: '{project_name} Dashboard',
+        versionUrl: '{version_url}',
+        currentVersion: currentVersion,
+        apiHost: 'https://{backend_domain}/',
+        modalConfig: modalConfig,
+        openAiJsonModeModel: '{open_ai_json_mode_model}',
+        openAiApiKey: '{open_ai_key}'
+      ),
+    );
+  }}
+}}
+        """
+
+        main_dart_path = os.path.join(frontend_flutter_app_path, 'lib', 'main.dart')
+
+        with open(main_dart_path, 'a') as f:  # Append to the existing main.dart
+            f.write(my_app_class)
+
+        print(f"Appended MyApp class to main.dart at {main_dart_path}")
+
+    def run_flutter_launcher_icons_commands(frontend_flutter_app_path):
+        os.chdir(frontend_flutter_app_path)
+        
+        result = subprocess.run(['flutter', 'pub', 'get'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("Successfully ran 'flutter pub get'")
+        else:
+            print(f"Error running 'flutter pub get': {result.stderr}")
+            
+        result = subprocess.run(['flutter', 'pub', 'run', 'flutter_launcher_icons'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("Successfully ran 'flutter pub run flutter_launcher_icons'")
+        else:
+            print(f"Error running 'flutter pub run flutter_launcher_icons': {result.stderr}")
+
+
+
+    #print(project_name, frontend_local_deploy_path, host, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model)
+    variables = {
+        "project_name": project_name,
+        "frontend_flutter_app_path": frontend_flutter_app_path,
+        "backend_domain": backend_domain,
+        "modals": modals,
+        "modal_backend_config": modal_backend_config,
+        "non_user_modal_frontend_config": non_user_modal_frontend_config,
+        "open_ai_key": open_ai_key,
+        "open_ai_json_mode_model": open_ai_json_mode_model,
+        "cloud_storage_credential_path": cloud_storage_credential_path,
+        "version": version
+    }
+
+    for name, value in variables.items():
+        print(f"{name}: {value}")
+        print()
+
+    def build_and_upload_release_apk_and_update_version(project_name, cloud_storage_credential_path, frontend_flutter_app_path, version):
+        try:
+            # Step 1: Build the release APK
+            print("Building the release APK...")
+            subprocess.run(
+                ['flutter', 'build', 'apk', '--release'], 
+                cwd=frontend_flutter_app_path, 
+                check=True
+            )
+            print("Release APK built successfully.")
+            
+            # Path to the generated APK file
+            apk_path = f"{frontend_flutter_app_path}/build/app/outputs/flutter-apk/app-release.apk"
+            apk_blob_name = "app-release.apk"
+            
+            # Step 2: Upload the release APK to the bucket
+            print("Uploading the release APK to the bucket...")
+            client = storage.Client.from_service_account_json(cloud_storage_credential_path)
+            bucket = client.bucket(project_name)
+            
+            blob = bucket.blob(apk_blob_name)
+            blob.upload_from_filename(apk_path)
+            
+            # Make the blob public
+            blob.make_public()
+            
+            apk_url = f"https://storage.googleapis.com/{project_name}/{apk_blob_name}"
+            print(f"Release APK uploaded to '{apk_url}'.")
+            
+            # Step 3: Update the VERSION.json with the new APK URL
+            print("Updating VERSION.json with new APK URL...")
+            version_blob = bucket.blob('VERSION.json')
+            
+            version_info_json = version_blob.download_as_text()
+            version_info = json.loads(version_info_json)
+            
+            version_info["apk_url"] = apk_url
+            
+            updated_version_info_json = json.dumps(version_info)
+            version_blob.upload_from_string(updated_version_info_json, content_type='application/json')
+            
+            print(f"VERSION.json updated with new APK URL in bucket '{project_name}'.")
+            return apk_url
+            
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while building the release APK: {str(e)}")
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+
+
+
+    # STEP 1: Create a GCS bucket by the project_name, to store the APK that would eventually be created along with the version.json file
+    version_url = create_public_bucket_if_not_exists_and_upload_version(project_name, cloud_storage_credential_path, version)
+
+    # STEP 2: Create skeleton of theflutter project at the absolute path frontend_flutter_app_path (the name of the flutter project is specified in the abolsute path), with:
+    remove_existing_directory(frontend_flutter_app_path)
+    create_flutter_project(frontend_flutter_app_path)
+    update_pubspec_yaml(frontend_flutter_app_path)
+    create_assets_directory(frontend_flutter_app_path)
+    update_android_manifest(frontend_flutter_app_path, project_name)
+    update_flutter_settings_gradle_version(frontend_flutter_app_path)
+
+    # STEP 3: Build the main.dart file
+    add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_backend_config, non_user_modal_frontend_config)
+    add_my_app_class_to_main_dart(frontend_flutter_app_path, version, project_name, version_url, backend_domain, open_ai_json_mode_model, open_ai_key)
+    run_flutter_launcher_icons_commands(frontend_flutter_app_path)
+
+    # STEP 4: Build and upload the APK
+    apk_url = build_and_upload_release_apk_and_update_version(project_name, cloud_storage_credential_path, frontend_flutter_app_path, version)
+    return apk_url
+
+
+def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, version, deploy_web, deploy_flutter):
+
+
+    if deploy_flutter:
+        apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, version)
+        print(apk_url)
+        create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
+
+    if deploy_web:
+        apk_url = f"https://storage.googleapis.com/{project_name}/app-release.apk"
+        create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
+
+

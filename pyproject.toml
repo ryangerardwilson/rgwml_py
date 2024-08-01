@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.162"
+version = "0.0.163"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -40,6 +40,7 @@ dependencies = [
     "paramiko",
     "tables",
     "google-cloud-bigquery-storage",
+    "google-cloud-storage",
     "openai",
     "filetype",
     "tqdm",
