@@ -426,12 +426,12 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         domain_name=frontend_domain,
     )
 
-def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, version):
+def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
 
-    def create_public_bucket_if_not_exists_and_upload_version(project_name, cloud_storage_credential_path, version):
+    def create_public_bucket_if_not_exists_and_upload_version(cloud_storage_credential_path, cloud_storage_bucket_name, version):
         # Authenticate using the selected credentials file
         client = storage.Client.from_service_account_json(cloud_storage_credential_path)
-        bucket_name = project_name
+        bucket_name = cloud_storage_bucket_name
 
         # Attempt to create the bucket
         try:
@@ -728,6 +728,7 @@ class MyApp extends StatelessWidget {{
         "open_ai_key": open_ai_key,
         "open_ai_json_mode_model": open_ai_json_mode_model,
         "cloud_storage_credential_path": cloud_storage_credential_path,
+        "cloud_storage_bucket_name": cloud_storage_bucket_name,
         "version": version
     }
 
@@ -735,7 +736,7 @@ class MyApp extends StatelessWidget {{
         print(f"{name}: {value}")
         print()
 
-    def build_and_upload_release_apk_and_update_version(project_name, cloud_storage_credential_path, frontend_flutter_app_path, version):
+    def build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version):
         try:
             # Step 1: Build the release APK
             print("Building the release APK...")
@@ -753,7 +754,7 @@ class MyApp extends StatelessWidget {{
             # Step 2: Upload the release APK to the bucket
             print("Uploading the release APK to the bucket...")
             client = storage.Client.from_service_account_json(cloud_storage_credential_path)
-            bucket = client.bucket(project_name)
+            bucket = client.bucket(cloud_storage_bucket_name)
             
             blob = bucket.blob(apk_blob_name)
             blob.upload_from_filename(apk_path)
@@ -761,7 +762,7 @@ class MyApp extends StatelessWidget {{
             # Make the blob public
             blob.make_public()
             
-            apk_url = f"https://storage.googleapis.com/{project_name}/{apk_blob_name}"
+            apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/{apk_blob_name}"
             print(f"Release APK uploaded to '{apk_url}'.")
             
             # Step 3: Update the VERSION.json with the new APK URL
@@ -787,7 +788,7 @@ class MyApp extends StatelessWidget {{
 
 
     # STEP 1: Create a GCS bucket by the project_name, to store the APK that would eventually be created along with the version.json file
-    version_url = create_public_bucket_if_not_exists_and_upload_version(project_name, cloud_storage_credential_path, version)
+    version_url = create_public_bucket_if_not_exists_and_upload_version(cloud_storage_credential_path, cloud_storage_bucket_name, version)
 
     # STEP 2: Create skeleton of theflutter project at the absolute path frontend_flutter_app_path (the name of the flutter project is specified in the abolsute path), with:
     remove_existing_directory(frontend_flutter_app_path)
@@ -803,20 +804,19 @@ class MyApp extends StatelessWidget {{
     run_flutter_launcher_icons_commands(frontend_flutter_app_path)
 
     # STEP 4: Build and upload the APK
-    apk_url = build_and_upload_release_apk_and_update_version(project_name, cloud_storage_credential_path, frontend_flutter_app_path, version)
+    apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
     return apk_url
 
 
-def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, version, deploy_web, deploy_flutter):
+def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, cloud_storage_bucket_name, version, deploy_web, deploy_flutter):
 
 
     if deploy_flutter:
-        apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, version)
+        apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
         print(apk_url)
-        create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
     if deploy_web:
-        apk_url = f"https://storage.googleapis.com/{project_name}/app-release.apk"
+        apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
         create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
 

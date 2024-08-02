@@ -7,8 +7,8 @@ class f:
     def __init__(self):
         pass
 
-    def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version, deploy_backend, deploy_web, deploy_flutter):
-        """Usage: Deployment.ser(project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version)"""
+    def ser(self, project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, cloud_storage_bucket_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version, deploy_backend, deploy_web, deploy_flutter):
+        """Usage: Deployment.ser(project_name, new_db_name, db_preset_name, vm_preset_name, cloud_storage_preset_name, cloud_storage_bucket_name, modal_backend_config, modal_frontend_config, backend_vm_deploy_path, backend_domain, frontend_local_deploy_path, frontend_flutter_app_path, frontend_domain, open_ai_json_mode_model, version, deploy_backend, deploy_web, deploy_flutter)"""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -64,5 +64,5 @@ class f:
 
         # Deploy frontend
         modals = ','.join(modal_backend_config['modals'].keys())
-        frontend_main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_backend_config, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_preset['credential_path'], version, deploy_web, deploy_flutter)
+        frontend_main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, vm_preset['host'], backend_domain, frontend_domain, modals, modal_backend_config, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_preset['credential_path'], cloud_storage_bucket_name, version, deploy_web, deploy_flutter)
 

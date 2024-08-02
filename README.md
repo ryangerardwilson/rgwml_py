@@ -301,7 +301,20 @@ Instantiate this class by crm = r.f()
 
     """
     ENVIRONMENT SETUP
-    1. Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager/current)
+    1. Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager). Typical steps would include the below. However, make sure the restart your terminals before you verify the installations.
+
+        # installs nvm (Node Version Manager)
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+        # download and install Node.js (you may need to restart the terminal)
+        nvm install 20
+
+        # verifies the right Node.js version is in the environment
+        node -v # should print `v20.16.0`
+
+        # verifies the right npm version is in the environment
+        npm -v # should print `10.8.1`
+
     2. Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
 
     BACKEND CONFIG
@@ -346,6 +359,7 @@ Instantiate this class by crm = r.f()
                 "reach_out_method[XOR]": ["post", "comment", "dm","other"],
                 "action_taken[XOR]": ["no_customer_detail_found", "resolved", "post_removed_and_resolved", "other"]
             },
+            "conditional_options": {},
             "scopes": {
                 "create": True,
                 "read": ["username","id","url","post_text","post_author","star_rating","forum","mobile","ai_sentiment","ai_category","ai_author_type","reach_out_method","action_taken","comment","follow_up_date","created_at","updated_at"],
@@ -360,7 +374,8 @@ Instantiate this class by crm = r.f()
                 "action_taken": ["REQUIRED"],
                 "mobile": ["IS_INDIAN_MOBILE_NUMBER"],
                 "follow_up_date": ["IS_AFTER_TODAY"]
-            }
+            },
+            "ai_quality_checks": {},
         },
         "welcome_calls": {
             "options": {
@@ -410,19 +425,28 @@ Instantiate this class by crm = r.f()
         }
     }
 
-
     crm = r.f()
     crm.ser(
         project_name= project_name,
-        new_db_name= db_name,
+        new_db_name= db_name,                                           # A new db will be created if this does not already exist
         db_preset_name='your_rgwml_mysql_db_preset_name',
         vm_preset_name='your_server_preset_name',
+        cloud_storage_preset_name='your_cloud_storage_preset_name',
+        cloud_storage_bucket_name='your_cloud_storage_bucket_name',     # A new bucket will be created if this does not already exist
         modal_backend_config=modal_backend_config,
         modal_frontend_config=modal_frontend_config,
         backend_vm_deploy_path='/path/to/deploy/on/your/vm',
         backend_domain='your.backend-domain.com',
-        frontend_local_deploy_path='/path/on/your/local/machine/to/forge/frontend/assets',
+        frontend_local_deploy_path='/path/on/your/local/machine/to/build/nextjs/web/app',
+        frontend_flutter_app_path='/path/on/your/local/machine/to/build/flutter/web/app',
         frontend_domain='your.frontend-domain.com',
-        open_ai_json_mode_model='gpt-3.5-turbo'
+        open_ai_json_mode_model='gpt-4o-mini',
+        version='0.0.1',
+        deploy_backend=True,
+        deploy_web=True,
+        deploy_flutter=True
     )
+
+
+
 
