@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import modalConfig from './modalConfig';
 import { validateField, open_ai_quality_checks } from './validationUtils';
 
@@ -11,6 +12,7 @@ interface EditModalProps {
 }
 
 const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowData, onClose }) => {
+  const router = useRouter(); // Use router
   const [formData, setFormData] = useState<{ [key: string]: any }>({});
   const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
   const [dynamicOptions, setDynamicOptions] = useState<{ [key: string]: string[] }>({});
@@ -147,9 +149,11 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
         },
         body: JSON.stringify(updateData),
       });
+
       const result = await response.json();
       if (result.status === 'success') {
         alert('Record updated successfully');
+        router.reload(); // Refresh the page after a successful edit
         onClose([formData]); // Pass updated data back to parent
       } else {
         console.error('Failed to update data:', result);
@@ -247,26 +251,11 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
         <h2 className="text-yellow-100/50 text-center mb-8 text-2xl">Edit {modalName}</h2>
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-4">
-            {columns.map((col) => (
+            {/* Fields within the update scope */}
+            {columns.filter(col => config.scopes.update.includes(col)).map(col => (
               <div key={col} className="mb-2">
                 <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
-                {config.scopes.update.includes(col) ? (
-                  renderField(col)
-                ) : (
-                  <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
-                    {isUrl(formData[col]) ? (
-                      <button
-                        type="button"
-                        onClick={() => window.open(formData[col], '_blank')}
-                        className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
-                      >
-                        Open URL
-                      </button>
-                    ) : (
-                      formData[col]
-                    )}
-                  </div>
-                )}
+                {renderField(col)}
                 {errors[col] && <p className="text-red-500">{errors[col]}</p>}
               </div>
             ))}
@@ -286,6 +275,28 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
               Save
             </button>
           </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            {/* Remaining fields */}
+            {columns.filter(col => !config.scopes.update.includes(col)).map(col => (
+              <div key={col} className="mb-2">
+                <label className="block text-yellow-100/50 ms-1 text-sm">{col}</label>
+                <div className="bg-black text-yellow-100/30 border border-yellow-100/10 px-3 py-2 rounded-lg w-full">
+                  {isUrl(formData[col]) ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(formData[col], '_blank')}
+                      className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black px-2 rounded-lg"
+                    >
+                      Open URL
+                    </button>
+                  ) : (
+                    formData[col]
+                  )}
+                </div>
+                {errors[col] && <p className="text-red-500">{errors[col]}</p>}
+              </div>
+            ))}
+          </div>
         </form>
       </div>
     </div>
@@ -293,4 +304,11 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
 };
 
 export default EditModal;
+
+
+
+
+
+
+
 

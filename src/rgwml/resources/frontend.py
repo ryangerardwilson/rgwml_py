@@ -295,6 +295,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
                 "username": ["REQUIRED"],
                 "password": ["REQUIRED"]
             },
+            "ai_quality_checks": {},
         }
     }
 

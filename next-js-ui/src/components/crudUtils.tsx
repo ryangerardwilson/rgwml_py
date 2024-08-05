@@ -21,7 +21,7 @@ export const fetchData = async (apiHost: string, modal: string, route: string, s
   }
 };
 
-export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number, data: any[], setData: React.Dispatch<React.SetStateAction<any[]>>) => {
+export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number) => {
   try {
     const response = await fetch(`${apiHost}delete/${modal}/${id}`, {
       method: 'DELETE',
@@ -31,13 +31,17 @@ export const handleDelete = async (apiHost: string, modal: string, id: number, u
       body: JSON.stringify({ user_id: userId }),
     });
     const result = await response.json();
+    /*
     if (result.status === 'success') {
       setData(data.filter((row: any) => row[0] !== id));
     }
+    */
   } catch (error) {
     console.error('Error deleting data:', error);
   }
 };
+
+
 
 export const handleEdit = (
   row: { [key: string]: any },

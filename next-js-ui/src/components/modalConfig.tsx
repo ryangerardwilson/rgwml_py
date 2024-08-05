@@ -30,14 +30,15 @@ interface ModalConfig {
     [key: string]: ConditionalOption[];
   };
   scopes: Scopes;
-  validation_rules?: ValidationRules;
-  ai_quality_checks?: AIQualityChecks;
-  read_routes?: string[];
+  validation_rules: ValidationRules;
+  ai_quality_checks: AIQualityChecks;
+  read_routes: string[];
 }
 
 interface ModalConfigMap {
   [key: string]: ModalConfig;
 }
+
 
 const modalConfig: ModalConfigMap = {
   "users": {
