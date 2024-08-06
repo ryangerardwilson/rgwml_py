@@ -1854,7 +1854,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         """JOINS::[d.uj(d2)] Union join."""
         if not isinstance(other, type(self)):
             raise TypeError("The 'other' parameter must be an instance of the same class")
-        
+       
         # Debug before operation
         print(f"self.df before join: {type(self.df)}, columns: {self.df.columns.tolist()}")
         print(f"other.df before join: {type(other.df)}, columns: {other.df.columns.tolist()}")
