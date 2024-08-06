@@ -286,55 +286,6 @@ def query_entries(modal_name):
         response.status = 500
         return {{"error": str(e)}}
 
-
-
-@app.route('/search/<modal_name>', method=['OPTIONS', 'POST'])
-def search_entries(modal_name):
-    if request.method == 'OPTIONS':
-        response.headers['Allow'] = 'OPTIONS, POST'
-        return {{}}
-
-    if request.method == 'POST':
-        data = request.json
-        if not data or 'search_string' not in data:
-            response.status = 400
-            return {{"error": "search_string is required in the request body"}}
-
-        search_string = data['search_string']
-        try:
-            conn = pymysql.connect(**config)
-            cursor = conn.cursor()
-
-            # Retrieve column names of the table
-            cursor.execute(f"SHOW COLUMNS FROM {{modal_name}}")
-            columns = [row[0] for row in cursor.fetchall()]
-
-            # Construct the WHERE clause to search across all columns
-            where_clause = " OR ".join([f"{{col}} LIKE '%{{search_string}}%'" for col in columns])
-            query = f"SELECT * FROM {{modal_name}} WHERE {{where_clause}}"
-
-            cursor.execute(query)
-            result = cursor.fetchall()
-            column_names = [desc[0] for desc in cursor.description]
-            cursor.close()
-            conn.close()
-
-            # Serialize datetime objects
-            serialized_result = []
-            for row in result:
-                serialized_row = []
-                for item in row:
-                    if isinstance(item, datetime):
-                        serialized_row.append(item.isoformat())
-                    else:
-                        serialized_row.append(item)
-                serialized_result.append(serialized_row)
-
-            return {{"columns": column_names, "data": serialized_result}}
-        except Exception as e:
-            response.status = 500
-            return {{"error": str(e)}}
-
 @app.route('/update/<modal_name>/<entry_id>', method=['PUT', 'OPTIONS'])
 def update_entry(modal_name, entry_id):
     if request.method == 'OPTIONS':
@@ -648,17 +599,6 @@ def run_tests(base_url, modal_map):
         ], capture_output=True, text=True)
         print("READ Query Entries Response:", query_response.stdout)
         print("READ Query Entries Response (stderr):", query_response.stderr)
-
-        # Search entries
-        search_conditions = " OR ".join([f"{col} LIKE '%%xxxxx%%'" for col in columns_list if col != 'user_id'])
-        search_data = {"search_string": "xxxxx"}
-        print(f"Search data for modal {modal}: {search_data}")
-        search_response = subprocess.run([
-            'curl', '-X', 'POST', f"{base_url}/search/{modal}",
-            '-H', "Content-Type: application/json",
-            '-d', json.dumps(search_data)
-        ], capture_output=True, text=True)
-        print("READ Search Entries Response:", search_response.stdout)
 
         # Update entry
         updated_data = {col: "xxxxx_updated" for col in columns_list}

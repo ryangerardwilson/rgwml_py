@@ -12,6 +12,7 @@ interface ConditionalOption {
 interface Scopes {
   create: boolean;
   read: string[];
+  read_summary: string[];
   update: string[];
   delete: boolean;
 }

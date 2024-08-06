@@ -288,6 +288,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
             "scopes": {
                 "create": True,
                 "read": ["id","username","password","type", "created_at","updated_at"],
+                "read_summary": ["id","username","password","type"],
                 "update": ["username","password","type"],
                 "delete": True
             },
@@ -494,12 +495,12 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             lines = file.readlines()
 
         # Check if the packages already exist in pubspec.yaml
-        has_rgml_fl = any('rgwml_fl: ^0.0.39' in line for line in lines)
+        has_rgml_fl = any('rgwml_fl: ^0.0.41' in line for line in lines)
         has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
 
         # Add the necessary dependencies if they don't exist
         if not has_rgml_fl:
-            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.39\n')
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.41\n')
         if not has_flutter_launcher_icons:
             lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
 
@@ -618,6 +619,7 @@ include ":app"
             
             scopes_create = convert_to_dart_bool(modal_data.get("scopes", {}).get("create", False))
             scopes_read = json.dumps(modal_data.get("scopes", {}).get("read", []))
+            scopes_read_summary = json.dumps(modal_data.get("scopes", {}).get("read_summary", []))
             scopes_update = json.dumps(modal_data.get("scopes", {}).get("update", []))
             scopes_delete = convert_to_dart_bool(modal_data.get("scopes", {}).get("delete", False))
             validation_rules = json.dumps(modal_data.get("validation_rules", {}), indent=4)
@@ -630,6 +632,7 @@ include ":app"
             scopes: Scopes(
                 create: {scopes_create},
                 read: {scopes_read},
+                read_summary: {scopes_read_summary},
                 update: {scopes_update},
                 delete: {scopes_delete},
             ),

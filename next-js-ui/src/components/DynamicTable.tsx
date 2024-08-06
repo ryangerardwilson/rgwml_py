@@ -57,7 +57,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
     }
   }, [data]);
 
-  const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
+  const columnIndices = modalConfig[modal].scopes.read_summary.map((col: string) => columns.indexOf(col)) || [];
 
   const copyToClipboard = (row: any, columnNames: string[]) => {
     const rowString = columnNames.map((col, index) => `${col}: ${row[index]}`).join('\n');
@@ -94,7 +94,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
           />
         </div>
         <button
-          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mx-4 rounded-lg text-sm"
           onClick={() => downloadCSV(filteredData, modalConfig[modal]?.scopes.read, `${modal}_data`)}
         >
           CSV
@@ -119,7 +119,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
           <thead className="bg-black sticky top-0">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-              {modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
+              {modalConfig[modal].scopes.read_summary.map((col: string, colIndex: number) => (
                 <th
                   key={`col-${colIndex}`}
                   className="px-3 py-3 text-left text-xs font-medium text-yellow-100 w-96"

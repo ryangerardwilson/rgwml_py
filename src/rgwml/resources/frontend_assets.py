@@ -558,7 +558,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
     }}
   }}, [data]);
 
-  const columnIndices = modalConfig[modal]?.scopes.read.map((col: string) => columns.indexOf(col)) || [];
+  const columnIndices = modalConfig[modal].scopes.read_summary.map((col: string) => columns.indexOf(col)) || [];
 
   const copyToClipboard = (row: any, columnNames: string[]) => {{
     const rowString = columnNames.map((col, index) => `${{col}}: ${{row[index]}}`).join('\\n');
@@ -595,7 +595,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
           />
         </div>
         <button
-          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mr-4 rounded-lg text-sm"
+          className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mx-4 rounded-lg text-sm"
           onClick={{() => downloadCSV(filteredData, modalConfig[modal]?.scopes.read, `${{modal}}_data`)}}
         >
           CSV
@@ -620,7 +620,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
           <thead className="bg-black sticky top-0">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-              {{modalConfig[modal]?.scopes.read.map((col: string, colIndex: number) => (
+              {{modalConfig[modal].scopes.read_summary.map((col: string, colIndex: number) => (
                 <th
                   key={{`col-${{colIndex}}`}}
                   className="px-3 py-3 text-left text-xs font-medium text-yellow-100 w-96"
@@ -723,6 +723,7 @@ interface ConditionalOption {{
 interface Scopes {{
   create: boolean;
   read: string[];
+  read_summary: string[];
   update: string[];
   delete: boolean;
 }}
@@ -1489,7 +1490,7 @@ const SearchInput: React.FC<SearchInputProps> = ({{
         value={{searchInput}}
         onChange={{handleSearchInputChange}}
         placeholder="SEARCH MODE (fetches fresh data) ..."
-        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full mr-4 text-sm placeholder-yellow-100/50"
+        className="bg-black border border-yellow-100/30 text-yellow-100 px-4 py-2 rounded-lg w-full text-sm placeholder-yellow-100/50"
       />
       {{searchError && <div className="text-red-500 mt-2 text-sm">{{searchError}}</div>}}
     </div>
