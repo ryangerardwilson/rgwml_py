@@ -270,66 +270,12 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
     deploy_with_vercel()
 
 
-def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url):
+def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url):
 
-    modal_backend_config['modals']['users'] = {
-        "columns": "username,password,type",
-        "read_routes": [
-            {"default": "SELECT * FROM users"}
-        ]
-    }
-
-    modal_frontend_config = {
-        "users": {
-            "options": {
-                "type[XOR]": ["admin", "normal"]
-            },
-            "conditional_options": {},
-            "scopes": {
-                "create": True,
-                "read": ["id","username","password","type", "created_at","updated_at"],
-                "read_summary": ["id","username","password","type"],
-                "update": ["username","password","type"],
-                "delete": True
-            },
-            "validation_rules": {
-                "username": ["REQUIRED"],
-                "password": ["REQUIRED"]
-            },
-            "ai_quality_checks": {},
-        }
-    }
-
-    modal_frontend_config.update(non_user_modal_frontend_config)
-
-
-    # Extract read_routes from modal_backend_config and append to modal_frontend_config
-    for modal_name, modal_details in modal_backend_config.get('modals', {}).items():
-        if isinstance(modal_details, dict) and 'read_routes' in modal_details:
-            read_routes = [list(route.keys())[0] for route in modal_details['read_routes']]
-            
-            # Debugging: Print read_routes for each modal
-            print(f"Read routes for {modal_name}: {read_routes}")
-            
-            if modal_name in modal_frontend_config:
-                if 'read_routes' in modal_frontend_config[modal_name]:
-                    modal_frontend_config[modal_name]['read_routes'].extend(read_routes)
-                else:
-                    modal_frontend_config[modal_name]['read_routes'] = read_routes
-            else:
-                modal_frontend_config[modal_name] = {
-                    "read_routes": read_routes
-                }
-        else:
-            # Debugging: Print the problematic modal_name and modal_details
-            print(f"Error: {modal_name} does not have the expected structure. modal_details: {modal_details}")
-
-    # Debugging: Print the final structure of modal_frontend_config
-    print("modal_frontend_config:", json.dumps(modal_frontend_config, indent=4))
 
     # Get all modal names
-    modals = ','.join(modal_backend_config.get('modals', {}).keys())
-    print("Modals:", modals)
+    #modals = ','.join(modal_backend_config.get('modals', {}).keys())
+    #print("Modals:", modals)
 
 
     use_src = True
@@ -406,7 +352,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
     value_2 = value_2.replace('{{', '{').replace('}}', '}')
     index_2 = value_2.find(search_phrase_2)
     value_2 = value_2[:index_2]
-    keys = non_user_modal_frontend_config.keys()
+    keys = modal_frontend_config.keys()
     formatted_keys = [f"/{key}" for key in keys]
     existing_routes = ['/', '/login', '/users']
     all_routes = existing_routes + formatted_keys
@@ -428,7 +374,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         domain_name=frontend_domain,
     )
 
-def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
+def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
 
     def create_public_bucket_if_not_exists_and_upload_version(cloud_storage_credential_path, cloud_storage_bucket_name, version):
         # Authenticate using the selected credentials file
@@ -495,12 +441,12 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             lines = file.readlines()
 
         # Check if the packages already exist in pubspec.yaml
-        has_rgml_fl = any('rgwml_fl: ^0.0.42' in line for line in lines)
+        has_rgml_fl = any('rgwml_fl: ^0.0.44' in line for line in lines)
         has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
 
         # Add the necessary dependencies if they don't exist
         if not has_rgml_fl:
-            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.42\n')
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.44\n')
         if not has_flutter_launcher_icons:
             lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
 
@@ -589,8 +535,7 @@ include ":app"
 
         print(f"Updated settings.gradle to use the specified content.")
 
-
-    def add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_backend_config, non_user_modal_frontend_config):
+    def add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_frontend_config):
         def convert_to_dart_bool(value):
             return 'true' if value else 'false'
 
@@ -607,16 +552,16 @@ include ":app"
             return result
 
         modal_config_entries = []
-        for modal_name, modal_data in non_user_modal_frontend_config.items():
-            backend_modal = modal_backend_config["modals"].get(modal_name, {})
-            read_routes = convert_read_routes(backend_modal.get("read_routes", []))
+        for modal_name, modal_data in modal_frontend_config.items():
+            #backend_modal = modal_backend_config["modals"].get(modal_name, {})
+            #read_routes = convert_read_routes(backend_modal.get("read_routes", []))
 
             options = json.dumps(modal_data.get("options", {}), indent=4)
             conditional_options = convert_conditional_options(modal_data.get("conditional_options", {}))
-            
+
             # Convert dictionary to Dart map literal
             conditional_options_str = '{' + ', '.join(f'"{key}": [{", ".join(value)}]' for key, value in conditional_options.items()) + '}'
-            
+
             scopes_create = convert_to_dart_bool(modal_data.get("scopes", {}).get("create", False))
             scopes_read = json.dumps(modal_data.get("scopes", {}).get("read", []))
             scopes_read_summary = json.dumps(modal_data.get("scopes", {}).get("read_summary", []))
@@ -624,6 +569,10 @@ include ":app"
             scopes_delete = convert_to_dart_bool(modal_data.get("scopes", {}).get("delete", False))
             validation_rules = json.dumps(modal_data.get("validation_rules", {}), indent=4)
             ai_quality_checks = json.dumps(modal_data.get("ai_quality_checks", {}), indent=4)
+            
+            # FIX: Format read_routes as a Dart list literal
+            read_routes = modal_data.get("read_routes", [])
+            read_routes_str = '[' + ', '.join(f'"{route}"' for route in read_routes) + ']'
 
             modal_config_entry = f"""
         "{modal_name}": ModalConfig(
@@ -638,7 +587,7 @@ include ":app"
             ),
             validationRules: {validation_rules},
             aiQualityChecks: {ai_quality_checks},
-            readRoutes: {json.dumps(read_routes)},
+            readRoutes: {read_routes_str},
         ),
             """
             modal_config_entries.append(modal_config_entry)
@@ -727,8 +676,8 @@ class MyApp extends StatelessWidget {{
         "frontend_flutter_app_path": frontend_flutter_app_path,
         "backend_domain": backend_domain,
         "modals": modals,
-        "modal_backend_config": modal_backend_config,
-        "non_user_modal_frontend_config": non_user_modal_frontend_config,
+        #"modal_backend_config": modal_backend_config,
+        "modal_frontend_config": modal_frontend_config,
         "open_ai_key": open_ai_key,
         "open_ai_json_mode_model": open_ai_json_mode_model,
         "cloud_storage_credential_path": cloud_storage_credential_path,
@@ -803,7 +752,7 @@ class MyApp extends StatelessWidget {{
     update_flutter_settings_gradle_version(frontend_flutter_app_path)
 
     # STEP 3: Build the main.dart file
-    add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_backend_config, non_user_modal_frontend_config)
+    add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_frontend_config)
     add_my_app_class_to_main_dart(frontend_flutter_app_path, version, project_name, version_url, backend_domain, open_ai_json_mode_model, open_ai_key)
     run_flutter_launcher_icons_commands(frontend_flutter_app_path)
 
@@ -811,16 +760,78 @@ class MyApp extends StatelessWidget {{
     apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
     return apk_url
 
+def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config):
+
+    modal_backend_config['modals']['users'] = {
+        "columns": "username,password,type",
+        "read_routes": [
+            {"default": "SELECT * FROM users"}
+        ]
+    }
+
+    modal_frontend_config = {
+        "users": {
+            "options": {
+                "type[XOR]": ["admin", "normal"]
+            },
+            "conditional_options": {},
+            "scopes": {
+                "create": True,
+                "read": ["id","username","password","type", "created_at","updated_at"],
+                "read_summary": ["id","username","password","type"],
+                "update": ["username","password","type"],
+                "delete": True
+            },
+            "validation_rules": {
+                "username": ["REQUIRED"],
+                "password": ["REQUIRED"]
+            },
+            "ai_quality_checks": {},
+        }
+    }
+
+    modal_frontend_config.update(non_user_modal_frontend_config)
+
+
+    # Extract read_routes from modal_backend_config and append to modal_frontend_config
+    for modal_name, modal_details in modal_backend_config.get('modals', {}).items():
+        if isinstance(modal_details, dict) and 'read_routes' in modal_details:
+            read_routes = [list(route.keys())[0] for route in modal_details['read_routes']]
+
+            # Debugging: Print read_routes for each modal
+            print(f"Read routes for {modal_name}: {read_routes}")
+
+            if modal_name in modal_frontend_config:
+                if 'read_routes' in modal_frontend_config[modal_name]:
+                    modal_frontend_config[modal_name]['read_routes'].extend(read_routes)
+                else:
+                    modal_frontend_config[modal_name]['read_routes'] = read_routes
+            else:
+                modal_frontend_config[modal_name] = {
+                    "read_routes": read_routes
+                }
+        else:
+            # Debugging: Print the problematic modal_name and modal_details
+            print(f"Error: {modal_name} does not have the expected structure. modal_details: {modal_details}")
+
+    # Debugging: Print the final structure of modal_frontend_config
+    print("modal_frontend_config:", json.dumps(modal_frontend_config, indent=4))
+
+    return modal_frontend_config
+
 
 def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, cloud_storage_bucket_name, version, deploy_web, deploy_flutter):
 
 
+    modal_frontend_config = update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config)
+
+
     if deploy_flutter:
-        apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
-        print(apk_url)
+        apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
+        #print(apk_url)
 
     if deploy_web:
         apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
-        create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
+        create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
 
