@@ -202,8 +202,10 @@ def create_entry(modal_name):
         response.status = 500
         return {{"error": str(e)}}
 
+
 @app.route('/read/<modal_name>/<route_name>', method=['OPTIONS', 'GET'])
-def read_entries(modal_name, route_name):
+@app.route('/read/<modal_name>/<route_name>/<belongs_to_user_id>', method=['OPTIONS', 'GET'])
+def read_entries(modal_name, route_name, belongs_to_user_id=None):
     if request.method == 'OPTIONS':
         return {{}}
 
@@ -218,6 +220,10 @@ def read_entries(modal_name, route_name):
                     break
             if not query:
                 raise ValueError(f"Read route '{{route_name}}' not found for modal '{{modal_name}}'")
+
+            if belongs_to_user_id:
+                query = query.replace('$belongs_to_user_id$', belongs_to_user_id)
+
             cursor.execute(query)
             result = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
@@ -236,52 +242,6 @@ def read_entries(modal_name, route_name):
                 serialized_result.append(serialized_row)
 
             return {{"columns": column_names, "data": serialized_result}}
-    except Exception as e:
-        response.status = 500
-        return {{"error": str(e)}}
-
-
-
-@app.route('/query/<modal_name>', method=['OPTIONS', 'POST'])
-def query_entries(modal_name):
-    if request.method == 'OPTIONS':
-        response.headers['Allow'] = 'OPTIONS, POST'
-        return {{}}
-
-    data = request.json
-    if not data or 'query_string' not in data:
-        response.status = 400
-        return {{"error": "query_string is required in the request body"}}
-
-    query_string = data['query_string'].strip()
-    lower_query_string = query_string.lower()
-    expected_start = f"select * from {{modal_name}}".lower()
-
-    if not lower_query_string.startswith(expected_start):
-        response.status = 400
-        return {{"error": f"query_string must start with 'SELECT * FROM {{modal_name}}'"}}
-
-    try:
-        conn = pymysql.connect(**config)
-        cursor = conn.cursor()
-        cursor.execute(query_string)
-        result = cursor.fetchall()
-        column_names = [desc[0] for desc in cursor.description]
-        cursor.close()
-        conn.close()
-
-        # Serialize datetime objects
-        serialized_result = []
-        for row in result:
-            serialized_row = []
-            for item in row:
-                if isinstance(item, datetime):
-                    serialized_row.append(item.isoformat())
-                else:
-                    serialized_row.append(item)
-            serialized_result.append(serialized_row)
-
-        return {{"columns": column_names, "data": serialized_result}}
     except Exception as e:
         response.status = 500
         return {{"error": str(e)}}
@@ -588,17 +548,6 @@ def run_tests(base_url, modal_map):
             route_name = list(route.keys())[0]
             read_response = subprocess.run(['curl', '-X', 'GET', f"{base_url}/read/{modal}/{route_name}"], capture_output=True, text=True)
             print(f"READ Entries Response for {route_name}:", read_response.stdout)
-
-        # Query entries
-        query_data = {"query_string": f"SELECT * FROM {modal} WHERE user_id = 1 ORDER BY id DESC"}
-        print(f"Query data for modal {modal}: {query_data}")
-        query_response = subprocess.run([
-            'curl', '-X', 'POST', f"{base_url}/query/{modal}",
-            '-H', "Content-Type: application/json",
-            '-d', json.dumps(query_data)
-        ], capture_output=True, text=True)
-        print("READ Query Entries Response:", query_response.stdout)
-        print("READ Query Entries Response (stderr):", query_response.stderr)
 
         # Update entry
         updated_data = {col: "xxxxx_updated" for col in columns_list}

@@ -366,6 +366,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
     #subprocess.run(['npm', 'run', 'dev'], check=True)
 
 
+    """
     deploy_project(
         location_of_next_project_in_local_machine=frontend_local_deploy_path,
         VERCEL_ACCESS_TOKEN=vercel_key,
@@ -373,6 +374,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         NETLIFY_TOKEN=netlify_key,
         domain_name=frontend_domain,
     )
+    """
 
 def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
 
@@ -441,12 +443,12 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             lines = file.readlines()
 
         # Check if the packages already exist in pubspec.yaml
-        has_rgml_fl = any('rgwml_fl: ^0.0.44' in line for line in lines)
+        has_rgml_fl = any('rgwml_fl: ^0.0.45' in line for line in lines)
         has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
 
         # Add the necessary dependencies if they don't exist
         if not has_rgml_fl:
-            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.44\n')
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.45\n')
         if not has_flutter_launcher_icons:
             lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
 
@@ -540,7 +542,11 @@ include ":app"
             return 'true' if value else 'false'
 
         def convert_read_routes(read_routes):
-            return [list(route.keys())[0] for route in read_routes]
+            read_route_configs = []
+            for route_name, route_config in read_routes.items():
+                belongs_to_user_id = convert_to_dart_bool(route_config['belongs_to_user_id'])
+                read_route_configs.append(f'"{route_name}": ReadRouteConfig(belongsToUserId: {belongs_to_user_id})')
+            return '{' + ', '.join(read_route_configs) + '}'
 
         def convert_conditional_options(conditional_options):
             result = {}
@@ -553,9 +559,6 @@ include ":app"
 
         modal_config_entries = []
         for modal_name, modal_data in modal_frontend_config.items():
-            #backend_modal = modal_backend_config["modals"].get(modal_name, {})
-            #read_routes = convert_read_routes(backend_modal.get("read_routes", []))
-
             options = json.dumps(modal_data.get("options", {}), indent=4)
             conditional_options = convert_conditional_options(modal_data.get("conditional_options", {}))
 
@@ -569,10 +572,10 @@ include ":app"
             scopes_delete = convert_to_dart_bool(modal_data.get("scopes", {}).get("delete", False))
             validation_rules = json.dumps(modal_data.get("validation_rules", {}), indent=4)
             ai_quality_checks = json.dumps(modal_data.get("ai_quality_checks", {}), indent=4)
-            
-            # FIX: Format read_routes as a Dart list literal
-            read_routes = modal_data.get("read_routes", [])
-            read_routes_str = '[' + ', '.join(f'"{route}"' for route in read_routes) + ']'
+
+            # Convert read_routes to the new ReadRouteConfig structure
+            read_routes = modal_data.get("read_routes", {})
+            read_routes_str = convert_read_routes(read_routes)
 
             modal_config_entry = f"""
         "{modal_name}": ModalConfig(
@@ -757,8 +760,8 @@ class MyApp extends StatelessWidget {{
     run_flutter_launcher_icons_commands(frontend_flutter_app_path)
 
     # STEP 4: Build and upload the APK
-    apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
-    return apk_url
+    #apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
+    #return apk_url
 
 def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config):
 
@@ -792,18 +795,22 @@ def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_
 
     modal_frontend_config.update(non_user_modal_frontend_config)
 
-
-    # Extract read_routes from modal_backend_config and append to modal_frontend_config
+    # Extract and transform read_routes from modal_backend_config and append to modal_frontend_config
     for modal_name, modal_details in modal_backend_config.get('modals', {}).items():
         if isinstance(modal_details, dict) and 'read_routes' in modal_details:
-            read_routes = [list(route.keys())[0] for route in modal_details['read_routes']]
+            read_routes = {}
+            for route in modal_details['read_routes']:
+                for route_name, query in route.items():
+                    read_routes[route_name] = {
+                        "belongs_to_user_id": "belongs_to_user_id = '$'" in query
+                    }
 
             # Debugging: Print read_routes for each modal
             print(f"Read routes for {modal_name}: {read_routes}")
 
             if modal_name in modal_frontend_config:
                 if 'read_routes' in modal_frontend_config[modal_name]:
-                    modal_frontend_config[modal_name]['read_routes'].extend(read_routes)
+                    modal_frontend_config[modal_name]['read_routes'].update(read_routes)
                 else:
                     modal_frontend_config[modal_name]['read_routes'] = read_routes
             else:
@@ -819,13 +826,12 @@ def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_
 
     return modal_frontend_config
 
-
 def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, cloud_storage_bucket_name, version, deploy_web, deploy_flutter):
 
 
     modal_frontend_config = update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config)
 
-
+    """
     if deploy_flutter:
         apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
         #print(apk_url)
@@ -833,5 +839,8 @@ def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, ho
     if deploy_web:
         apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
         create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
-
+    """
+    apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
+    create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
+    create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
