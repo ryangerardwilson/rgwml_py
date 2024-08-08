@@ -24,7 +24,9 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
   const [searchError, setSearchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
 
-  const readRoutes = useMemo(() => modalConfig[modal]?.read_routes || [], [modal]);
+  const readRoutes = useMemo(() => {
+    return Object.keys(modalConfig[modal as string]?.read_routes || {});
+  }, [modal]);
 
   useEffect(() => {
     if (readRoutes.length > 0) {

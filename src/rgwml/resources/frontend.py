@@ -841,6 +841,6 @@ def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, ho
         create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
     """
     apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
-    create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
+    #create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
     create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
