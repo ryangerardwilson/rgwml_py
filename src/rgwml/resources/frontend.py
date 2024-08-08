@@ -366,7 +366,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
     #subprocess.run(['npm', 'run', 'dev'], check=True)
 
 
-    """
+    
     deploy_project(
         location_of_next_project_in_local_machine=frontend_local_deploy_path,
         VERCEL_ACCESS_TOKEN=vercel_key,
@@ -374,7 +374,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         NETLIFY_TOKEN=netlify_key,
         domain_name=frontend_domain,
     )
-    """
+    
 
 def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
 
@@ -443,12 +443,12 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             lines = file.readlines()
 
         # Check if the packages already exist in pubspec.yaml
-        has_rgml_fl = any('rgwml_fl: ^0.0.45' in line for line in lines)
+        has_rgml_fl = any('rgwml_fl: ^0.0.47' in line for line in lines)
         has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
 
         # Add the necessary dependencies if they don't exist
         if not has_rgml_fl:
-            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.45\n')
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.47\n')
         if not has_flutter_launcher_icons:
             lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
 
@@ -760,8 +760,8 @@ class MyApp extends StatelessWidget {{
     run_flutter_launcher_icons_commands(frontend_flutter_app_path)
 
     # STEP 4: Build and upload the APK
-    #apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
-    #return apk_url
+    apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
+    return apk_url
 
 def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config):
 
@@ -831,7 +831,7 @@ def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, ho
 
     modal_frontend_config = update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config)
 
-    """
+    
     if deploy_flutter:
         apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
         #print(apk_url)
@@ -839,8 +839,8 @@ def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, ho
     if deploy_web:
         apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
         create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
-    """
-    apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
+    
+    #apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
     #create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
-    create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
+    #create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
