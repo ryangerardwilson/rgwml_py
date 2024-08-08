@@ -315,6 +315,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         "DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX": os.path.join(src_dir, "components/downloadUtils.tsx"),
         "DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX": os.path.join(src_dir, "components/modalConfig.tsx"),
         "DIR__PAGES__FILE____MODAL____TSX": os.path.join(src_dir, "pages/[modal].tsx"),
+        "DIR__PAGES__FILE__BULK__OPERATIONS__TSX": os.path.join(src_dir, "pages/bulk_operations.tsx"),
         "DIR__PAGES__FILE__LOGIN__TSX": os.path.join(src_dir, "pages/login.tsx"),
         "ROOT__FILE__MIDDLEWARE__TSX": os.path.join(src_dir, "middleware.tsx"),
         # Add other mappings as needed

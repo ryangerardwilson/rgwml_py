@@ -1,3 +1,5 @@
+// src/components/Sidebar.tsx
+
 import React, { useEffect, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -40,6 +42,10 @@ const Sidebar: React.FC = () => {
     router.push('/login');
   }, [router]);
 
+  const handleBulkOperationsClick = () => {
+    router.push('/bulk_operations');
+  };
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const parsedCookies = parseCookies();
@@ -57,9 +63,10 @@ const Sidebar: React.FC = () => {
   const apkUrl = process.env.NEXT_PUBLIC_APK_URL;
 
   return (
-    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col justify-between">
-      <div>
+    <div className="bg-black border-r border-yellow-100/25 text-yellow-100/70 w-64 min-h-screen p-4 flex flex-col">
+      <div className="flex-grow">
         <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
+         <hr className="border-yellow-100/10 my-4"/>
         <ul>
           {filteredModals.map((item) => (
             <li key={item} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
@@ -71,20 +78,27 @@ const Sidebar: React.FC = () => {
             </li>
           ))}
         </ul>
-      </div>
-      <div>
+        <hr className="border-yellow-100/10 my-4"/>
+        {userType === 'admin' || userType === 'sudo' ? (
+          <button
+            onClick={handleBulkOperationsClick}
+            className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black w-full text-left"
+          >
+            bulk_operations
+          </button>
+        ) : null}
         <a
-          className="block text-sm mb-2 p-3 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black text-center"
+          className="block text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black text-left"
           href={apkUrl}
           download
         >
-          Download Android App
+          download_android_app
         </a>
         <button
           onClick={handleLogout}
-          className="text-sm mb-1 p-3 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black w-full"
+          className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black w-full text-left"
         >
-          Logout {userName} [{userId},{userType}]
+          logout_{userName}_[{userId},{userType}]
         </button>
       </div>
     </div>
