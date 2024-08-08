@@ -8,15 +8,15 @@ import { isValidUrl, formatDateTime } from './formatUtils';
 import { downloadCSV } from './downloadUtils';
 
 interface DynamicTableProps {
-  apiHost: string;
   modal: string;
-  columns: string[];
-  data: any[];
 }
 
-const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, data: initialData }) => {
-  const [data, setData] = useState<any[]>(initialData);
-  const [filteredData, setFilteredData] = useState<any[]>(initialData);
+const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
+
+  const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+  const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [editRowData, setEditRowData] = useState<any[]>([]);
@@ -36,10 +36,10 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
 
   useEffect(() => {
     if (activeTab) {
-      fetchData(apiHost, modal, activeTab, (newData) => {
-        setData(newData);
-        setFilteredData(newData);
-      });
+      fetchData(apiHost as string, modal, activeTab, data => {
+        setData(data);
+        setFilteredData(data);
+      }, setColumns);
     }
   }, [apiHost, modal, activeTab]);
 
@@ -59,7 +59,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
     }
   }, [data]);
 
-  const columnIndices = modalConfig[modal].scopes.read_summary.map((col: string) => columns.indexOf(col)) || [];
+  const columnIndices = modalConfig[modal]?.scopes?.read_summary.map((col: string) => columns.indexOf(col)) || [];
 
   const copyToClipboard = (row: any, columnNames: string[]) => {
     const rowString = columnNames.map((col, index) => `${col}: ${row[index]}`).join('\n');
@@ -111,7 +111,6 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
         )}
       </div>
 
-      {/* Count of Rows */}
       <div className="mb-4 w-fill text-center italic">
         <p>*** Rows Fetched: {filteredData.length} ***</p>
       </div>
@@ -121,7 +120,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
           <thead className="bg-black sticky top-0">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-              {modalConfig[modal].scopes.read_summary.map((col: string, colIndex: number) => (
+              {modalConfig[modal]?.scopes?.read_summary.map((col: string, colIndex: number) => (
                 <th
                   key={`col-${colIndex}`}
                   className="px-3 py-3 text-left text-xs font-medium text-yellow-100 w-96"
@@ -143,7 +142,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
                   </button>
                   {modalConfig[modal]?.scopes.delete && (
                     <button
-                      onClick={() => handleDelete(apiHost, modal, row[0], row[1])}
+                      onClick={() => handleDelete(apiHost as string, modal, row[0], row[1])}
                       className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
                     >
                       Delete
@@ -190,7 +189,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
       {isCreateModalOpen && (
         <CreateModal
           modalName={modal}
-          apiHost={apiHost}
+          apiHost={apiHost as string}
           columns={columns}
           onClose={() => closeCreateModal(setCreateModalOpen)}
         />
@@ -198,7 +197,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
       {isEditModalOpen && editRowData && (
         <EditModal
           modalName={modal}
-          apiHost={apiHost}
+          apiHost={apiHost as string}
           columns={columns}
           rowData={editRowData}
           onClose={(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}
@@ -209,4 +208,5 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ apiHost, modal, columns, da
 };
 
 export default DynamicTable;
+
 

@@ -1,4 +1,5 @@
 // src/components/crudUtils.tsx
+import modalConfig from './modalConfig';
 
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {
   setCreateModalOpen(true);
@@ -8,18 +9,43 @@ export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) =>
   setCreateModalOpen(false);
 };
 
-export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {
+const getUserIDFromCookies = (): string | undefined => {
+  const cookies = document.cookie.split(';').reduce((acc: { [key: string]: string }, cookie) => {
+    const [key, value] = cookie.trim().split('=');
+    acc[key] = value;
+    return acc;
+  }, {} as { [key: string]: string });
+
+  return cookies.user_id;
+};
+
+export const fetchData = async (
+  apiHost: string, 
+  modal: string, 
+  routeKey: string, 
+  setData: React.Dispatch<React.SetStateAction<any[]>>, 
+  setColumns: React.Dispatch<React.SetStateAction<any[]>>
+) => {
+
+  const config = modalConfig[modal];
+  const userId = getUserIDFromCookies();
+
   try {
-    //console.log(`${apiHost}read/${modal}/${route}`);
-    const response = await fetch(`${apiHost}read/${modal}/${route}`);
-    //console.log(response);
-    
+    const readRoute = config.read_routes[routeKey];
+    const apiUrl = readRoute.belongs_to_user_id && userId
+      ? `${apiHost}read/${modal}/${routeKey}/${userId}`
+      : `${apiHost}read/${modal}/${routeKey}`;
+
+    const response = await fetch(apiUrl);
     const result = await response.json();
+    setColumns(result.columns || []);
     setData(result.data || []);
   } catch (error) {
+    setColumns([]);
     setData([]);
   }
 };
+
 
 export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number) => {
   try {
@@ -79,5 +105,4 @@ export const closeEditModal = (
   }
   setEditModalOpen(false);
 };
-
 

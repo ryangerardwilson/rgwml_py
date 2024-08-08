@@ -802,7 +802,7 @@ def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_
             for route in modal_details['read_routes']:
                 for route_name, query in route.items():
                     read_routes[route_name] = {
-                        "belongs_to_user_id": "belongs_to_user_id = '$'" in query
+                        "belongs_to_user_id": "belongs_to_user_id = '$belongs_to_user_id$'" in query
                     }
 
             # Debugging: Print read_routes for each modal

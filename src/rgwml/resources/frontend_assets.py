@@ -352,6 +352,7 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
 export default EditModal;'''
 
 DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''// src/components/crudUtils.tsx
+import modalConfig from './modalConfig';
 
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
   setCreateModalOpen(true);
@@ -361,18 +362,43 @@ export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) =>
   setCreateModalOpen(false);
 }};
 
-export const fetchData = async (apiHost: string, modal: string, route: string, setData: React.Dispatch<React.SetStateAction<any[]>>) => {{
+const getUserIDFromCookies = (): string | undefined => {{
+  const cookies = document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
+    const [key, value] = cookie.trim().split('=');
+    acc[key] = value;
+    return acc;
+  }}, {{}} as {{ [key: string]: string }});
+
+  return cookies.user_id;
+}};
+
+export const fetchData = async (
+  apiHost: string, 
+  modal: string, 
+  routeKey: string, 
+  setData: React.Dispatch<React.SetStateAction<any[]>>, 
+  setColumns: React.Dispatch<React.SetStateAction<any[]>>
+) => {{
+
+  const config = modalConfig[modal];
+  const userId = getUserIDFromCookies();
+
   try {{
-    //console.log(`${{apiHost}}read/${{modal}}/${{route}}`);
-    const response = await fetch(`${{apiHost}}read/${{modal}}/${{route}}`);
-    //console.log(response);
-    
+    const readRoute = config.read_routes[routeKey];
+    const apiUrl = readRoute.belongs_to_user_id && userId
+      ? `${{apiHost}}read/${{modal}}/${{routeKey}}/${{userId}}`
+      : `${{apiHost}}read/${{modal}}/${{routeKey}}`;
+
+    const response = await fetch(apiUrl);
     const result = await response.json();
+    setColumns(result.columns || []);
     setData(result.data || []);
   }} catch (error) {{
+    setColumns([]);
     setData([]);
   }}
 }};
+
 
 export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number) => {{
   try {{
@@ -509,15 +535,15 @@ import {{ isValidUrl, formatDateTime }} from './formatUtils';
 import {{ downloadCSV }} from './downloadUtils';
 
 interface DynamicTableProps {{
-  apiHost: string;
   modal: string;
-  columns: string[];
-  data: any[];
 }}
 
-const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, data: initialData }}) => {{
-  const [data, setData] = useState<any[]>(initialData);
-  const [filteredData, setFilteredData] = useState<any[]>(initialData);
+const DynamicTable: React.FC<DynamicTableProps> = ({{ modal }}) => {{
+
+  const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+  const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [editRowData, setEditRowData] = useState<any[]>([]);
@@ -537,10 +563,10 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
 
   useEffect(() => {{
     if (activeTab) {{
-      fetchData(apiHost, modal, activeTab, (newData) => {{
-        setData(newData);
-        setFilteredData(newData);
-      }});
+      fetchData(apiHost as string, modal, activeTab, data => {{
+        setData(data);
+        setFilteredData(data);
+      }}, setColumns);
     }}
   }}, [apiHost, modal, activeTab]);
 
@@ -560,7 +586,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
     }}
   }}, [data]);
 
-  const columnIndices = modalConfig[modal].scopes.read_summary.map((col: string) => columns.indexOf(col)) || [];
+  const columnIndices = modalConfig[modal]?.scopes?.read_summary.map((col: string) => columns.indexOf(col)) || [];
 
   const copyToClipboard = (row: any, columnNames: string[]) => {{
     const rowString = columnNames.map((col, index) => `${{col}}: ${{row[index]}}`).join('\\n');
@@ -612,7 +638,6 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
         )}}
       </div>
 
-      {{/* Count of Rows */}}
       <div className="mb-4 w-fill text-center italic">
         <p>*** Rows Fetched: {{filteredData.length}} ***</p>
       </div>
@@ -622,7 +647,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
           <thead className="bg-black sticky top-0">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-medium text-yellow-100 uppercase tracking-wider">Actions</th>
-              {{modalConfig[modal].scopes.read_summary.map((col: string, colIndex: number) => (
+              {{modalConfig[modal]?.scopes?.read_summary.map((col: string, colIndex: number) => (
                 <th
                   key={{`col-${{colIndex}}`}}
                   className="px-3 py-3 text-left text-xs font-medium text-yellow-100 w-96"
@@ -644,7 +669,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
                   </button>
                   {{modalConfig[modal]?.scopes.delete && (
                     <button
-                      onClick={{() => handleDelete(apiHost, modal, row[0], row[1])}}
+                      onClick={{() => handleDelete(apiHost as string, modal, row[0], row[1])}}
                       className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
                     >
                       Delete
@@ -691,7 +716,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
       {{isCreateModalOpen && (
         <CreateModal
           modalName={{modal}}
-          apiHost={{apiHost}}
+          apiHost={{apiHost as string}}
           columns={{columns}}
           onClose={{() => closeCreateModal(setCreateModalOpen)}}
         />
@@ -699,7 +724,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ apiHost, modal, columns, d
       {{isEditModalOpen && editRowData && (
         <EditModal
           modalName={{modal}}
-          apiHost={{apiHost}}
+          apiHost={{apiHost as string}}
           columns={{columns}}
           rowData={{editRowData}}
           onClose={{(updatedData) => closeEditModal(updatedData, columns, setData, setEditModalOpen)}}
@@ -1292,7 +1317,7 @@ export const open_ai_quality_checks = async (field: string, value: string, check
   return failedChecks;
 }};'''
 
-DIR__COMPONENTS__FILE__SIDEBAR__TSX = '''import React, {{ useEffect, useCallback }} from 'react';
+DIR__COMPONENTS__FILE__SIDEBAR__TSX = '''import React, {{ useEffect, useCallback, useState }} from 'react';
 import Link from 'next/link';
 import {{ useRouter }} from 'next/router';
 import modalConfig from './modalConfig';
@@ -1310,14 +1335,14 @@ const parseCookies = (): Cookies => {{
 }};
 
 const Sidebar: React.FC = () => {{
-  const cookies = parseCookies();
-  const userType = cookies.type;
-  const userName = cookies.username;
-  const userId = cookies.user_id;
+  const [cookies, setCookies] = useState<Cookies>({{}});
+  const [userType, setUserType] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
 
   const modals = Object.keys(modalConfig);
 
-  const modalsArray = modals.filter(modal => {{
+  const filteredModals = modals.filter(modal => {{
     if (modal === 'users' && userType !== 'admin' && userType !== 'sudo') {{
       return false;
     }}
@@ -1335,10 +1360,18 @@ const Sidebar: React.FC = () => {{
   }}, [router]);
 
   useEffect(() => {{
-    if (!userId) {{
-      handleLogout();
+    if (typeof window !== 'undefined') {{
+      const parsedCookies = parseCookies();
+      setCookies(parsedCookies);
+      setUserType(parsedCookies.type);
+      setUserName(parsedCookies.username);
+      setUserId(parsedCookies.user_id);
+
+      if (!parsedCookies.user_id) {{
+        handleLogout();
+      }}
     }}
-  }}, [handleLogout, userId]);
+  }}, [handleLogout]);
 
   const apkUrl = process.env.NEXT_PUBLIC_APK_URL;
 
@@ -1347,7 +1380,7 @@ const Sidebar: React.FC = () => {{
       <div>
         <h1 className="text text-yellow-100/50 ml-1 mt-4">Chemical-X</h1>
         <ul>
-          {{modalsArray.map((item) => (
+          {{filteredModals.map((item) => (
             <li key={{item}} className="text-sm mb-1 p-1 text-yellow-100/50 rounded-lg bg-black border border-yellow-100/10 hover:bg-yellow-100/70 hover:text-black">
               <Link href={{`/${{item}}`}} legacyBehavior>
                 <a className="block w-full h-full ps-1 cursor-pointer">
@@ -1520,83 +1553,12 @@ DIR__PAGES__FILE____MODAL____TSX = '''import React, {{ useEffect, useState }} fr
 import {{ useRouter }} from 'next/router';
 import DynamicTable from '../components/DynamicTable';
 import Sidebar from '../components/Sidebar';
-import modalConfig from '../components/modalConfig';
 import '../app/globals.css';
 
 const ModalPage: React.FC = () => {{
   const router = useRouter();
   const {{ modal }} = router.query;
 
-  const [data, setData] = useState<any[]>([]);
-  const [columns, setColumns] = useState<string[]>([]);
-
-  const apiHost = process.env.NEXT_PUBLIC_API_HOST;
-
-  const getUserIDFromCookies = (): string | undefined => {{
-    const cookies = document.cookie.split(';').reduce((acc: {{ [key: string]: string }}, cookie) => {{
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }}, {{}} as {{ [key: string]: string }});
-
-    return cookies.user_id;
-  }};
-
-useEffect(() => {{
-  const fetchData = async () => {{
-    if (modal && apiHost) {{
-      const config = modalConfig[modal as string];
-      if (config && config.read_routes) {{
-        const userId = getUserIDFromCookies();
-
-        //console.log("UserID from cookies:", userId);
-
-        for (const readRouteKey in config.read_routes) {{
-          if (config.read_routes.hasOwnProperty(readRouteKey)) {{
-            const readRoute = config.read_routes[readRouteKey];
-            //console.log("ReadRoute Key:", readRouteKey);
-            //console.log("ReadRoute Config:", readRoute);
-            //console.log("UserID before constructing URL:", userId);
-
-            // Construct URL based on belongs_to_user_id flag
-            const apiUrl = readRoute.belongs_to_user_id && userId
-              ? `${{apiHost}}read/${{modal}}/${{readRouteKey}}/${{userId}}`
-              : `${{apiHost}}read/${{modal}}/${{readRouteKey}}`;
-
-            //console.log('Constructed API URL:', apiUrl);
-
-            try {{
-              const response = await fetch(apiUrl);
-              if (response.ok) {{
-                const fetchedData = await response.json();
-                setColumns(fetchedData.columns);
-                setData(fetchedData.data);
-                break; // exit the loop once we have a successful response
-              }} else {{
-                setData([]);
-                setColumns([]);
-              }}
-            }} catch (error) {{
-              //console.error("Data fetch error:", error);
-              setData([]);
-              setColumns([]);
-            }}
-          }}
-        }}
-      }}
-    }}
-  }};
-
-  // Ensure this runs only on client-side
-  if (typeof window !== 'undefined') {{
-    fetchData();
-  }}
-}}, [modal, apiHost]);
-
-
-  if (!modal || !apiHost) {{
-    return <div>Loading...</div>;
-  }}
 
   return (
     <div className="flex">
@@ -1606,14 +1568,9 @@ useEffect(() => {{
           <h1 className="text-yellow-100/50 mr-2 text-right">
             {{(modal as string)}} table
           </h1>
-          {{apiHost && (
             <DynamicTable
-              apiHost={{apiHost}}
               modal={{modal as string}}
-              columns={{columns}}
-              data={{data}}
             />
-          )}}
         </div>
       </div>
     </div>
