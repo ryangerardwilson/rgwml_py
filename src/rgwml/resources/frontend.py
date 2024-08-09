@@ -446,12 +446,12 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             lines = file.readlines()
 
         # Check if the packages already exist in pubspec.yaml
-        has_rgml_fl = any('rgwml_fl: ^0.0.47' in line for line in lines)
+        has_rgml_fl = any('rgwml_fl: ^0.0.48' in line for line in lines)
         has_flutter_launcher_icons = any('flutter_launcher_icons: ^0.13.1' in line for line in lines)
 
         # Add the necessary dependencies if they don't exist
         if not has_rgml_fl:
-            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.47\n')
+            lines.insert(lines.index('dependencies:\n') + 1, '  rgwml_fl: ^0.0.48\n')
         if not has_flutter_launcher_icons:
             lines.insert(lines.index('dev_dependencies:\n') + 1, '  flutter_launcher_icons: ^0.13.1\n')
 
