@@ -246,6 +246,54 @@ def read_entries(modal_name, route_name, belongs_to_user_id=None):
         response.status = 500
         return {{"error": str(e)}}
 
+@app.route('/bulk_read/<modal_name>/<limit_name>', method=['OPTIONS', 'GET'])
+def bulk_read_entries(modal_name, limit_name):
+    if request.method == 'OPTIONS':
+        return {{}}
+
+    limit_mappings = {{
+        'today': 'WHERE DATE(created_at) = CURDATE()',
+        'since_yesterday': 'WHERE DATE(created_at) >= CURDATE() - INTERVAL 1 DAY',
+        'since_last_7_days': 'WHERE DATE(created_at) >= CURDATE() - INTERVAL 7 DAY',
+        'since_last_14_days': 'WHERE DATE(created_at) >= CURDATE() - INTERVAL 14 DAY',
+        'since_last_28_days': 'WHERE DATE(created_at) >= CURDATE() - INTERVAL 28 DAY',
+        'since_last_90_days': 'WHERE DATE(created_at) >= CURDATE() - INTERVAL 90 DAY',
+    }}
+
+    try:
+        limit_clause = limit_mappings.get(limit_name, '')
+        if not limit_clause:
+            response.status = 400
+            return {{"error": "Invalid limit_name"}}
+
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        if modal_name != 'favicon':
+
+            query = f"SELECT * FROM {{modal_name}} {{limit_clause}}"
+
+            cursor.execute(query)
+            result = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description]
+            cursor.close()
+            conn.close()
+
+            # Serialize datetime objects
+            serialized_result = []
+            for row in result:
+                serialized_row = []
+                for item in row:
+                    if isinstance(item, datetime):
+                        serialized_row.append(item.isoformat())
+                    else:
+                        serialized_row.append(item)
+                serialized_result.append(serialized_row)
+
+            return {{"columns": column_names, "data": serialized_result}}
+    except Exception as e:
+        response.status = 500
+        return {{"error": str(e)}}
+
 @app.route('/update/<modal_name>/<entry_id>', method=['PUT', 'OPTIONS'])
 def update_entry(modal_name, entry_id):
     if request.method == 'OPTIONS':
