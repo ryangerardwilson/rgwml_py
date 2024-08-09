@@ -9,15 +9,19 @@ export const closeCreateModal = (setCreateModalOpen: (open: boolean) => void) =>
   setCreateModalOpen(false);
 };
 
-const getUserIDFromCookies = (): string | undefined => {
-  const cookies = document.cookie.split(';').reduce((acc: { [key: string]: string }, cookie) => {
-    const [key, value] = cookie.trim().split('=');
-    acc[key] = value;
-    return acc;
-  }, {} as { [key: string]: string });
+export const getUserIDFromCookies = (): string | undefined => {
+  if (typeof document !== 'undefined') {
+    const cookies = document.cookie.split(';').reduce((acc: { [key: string]: string }, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as { [key: string]: string });
 
-  return cookies.user_id;
+    return cookies.user_id;
+  }
+  return undefined;
 };
+
 
 export const fetchData = async (
   apiHost: string, 

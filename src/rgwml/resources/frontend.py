@@ -13,7 +13,8 @@ def create_nextjs_project(project_path, use_src):
     src_flag = '--src-dir' if use_src else ''
     subprocess.run(['npx', 'create-next-app@latest', project_path, '--typescript', '--eslint', '--tailwind', '--app','--no-import-alias', src_flag], check=True)
     os.chdir(project_path)
-    subprocess.run(['npm', 'install', '-D', 'tailwindcss', 'postcss', 'autoprefixer'], check=True)
+    subprocess.run(['npm', 'install', '-D', 'tailwindcss', 'postcss', 'autoprefixer','papaparse'], check=True)
+    subprocess.run(['npm','i','--save-dev','@types/papaparse'],check=True)
     subprocess.run(['npx', 'tailwindcss', 'init', '-p'], check=True)
 
 def configure_tailwind(use_src):
@@ -314,6 +315,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         "DIR__COMPONENTS__FILE__QUERY_UTILS__TSX": os.path.join(src_dir, "components/queryUtils.tsx"),
         "DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX": os.path.join(src_dir, "components/downloadUtils.tsx"),
         "DIR__COMPONENTS__FILE__MODAL_CONFIG__TSX": os.path.join(src_dir, "components/modalConfig.tsx"),
+        "DIR__COMPONENTS__FILE__BULK_OPERATIONS__TSX": os.path.join(src_dir, "components/BulkOperations.tsx"),
         "DIR__PAGES__FILE____MODAL____TSX": os.path.join(src_dir, "pages/[modal].tsx"),
         "DIR__PAGES__FILE__BULK__OPERATIONS__TSX": os.path.join(src_dir, "pages/bulk_operations.tsx"),
         "DIR__PAGES__FILE__LOGIN__TSX": os.path.join(src_dir, "pages/login.tsx"),

@@ -97,7 +97,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
         </div>
         <button
           className="bg-black border border-yellow-100/30 text-yellow-100/80 hover:bg-yellow-100/80 hover:text-black py-2 px-4 mx-4 rounded-lg text-sm"
-          onClick={() => downloadCSV(filteredData, modalConfig[modal]?.scopes.read, `${modal}_data`)}
+          onClick={() => downloadCSV(filteredData, columns, `${modal}_data`)}
         >
           CSV
         </button>

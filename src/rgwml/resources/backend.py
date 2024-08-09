@@ -202,6 +202,67 @@ def create_entry(modal_name):
         response.status = 500
         return {{"error": str(e)}}
 
+@app.route('/bulk_create/<modal_name>', method=['OPTIONS', 'POST'])
+def create_entry(modal_name):
+    if request.method == 'OPTIONS':
+        response.headers['Content-Type'] = 'application/json'
+        return {{}}
+
+    data = request.json
+    if not data or 'user_id' not in data:
+        response.status = 400
+        response.content_type = 'application/json'
+        return {{"error": "user_id is required in the request body"}}
+
+    try:
+        modal_details = modal_map.get(modal_name, {{}})
+        if not modal_details:
+            raise ValueError(f"Modal {{modal_name}} not found in modal_map")
+
+        if 'columns' not in data or 'data' not in data:
+            raise ValueError("Both 'columns' and 'data' fields are required in the request body")
+
+        user_id = data['user_id']
+        columns = data['columns']
+        bulk_values = data['data']
+
+        if not isinstance(columns, list) or not all(isinstance(col, str) for col in columns):
+            raise ValueError("'columns' should be a list of strings")
+        if not isinstance(bulk_values, list) or not all(isinstance(val, list) for val in bulk_values):
+            raise ValueError("'data' should be a list of lists")
+
+        column_names = ", ".join(columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        values_list = [[user_id] + entry for entry in bulk_values]
+
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+
+        insert_query = f"INSERT INTO {{modal_name}} (user_id, {{column_names}}) VALUES (%s, {{placeholders}})"
+        cursor.executemany(insert_query, values_list)
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        
+        log_entries = [
+            {{
+                'user_id': data['user_id'],
+                'operation_type': 'CREATE',
+                'operation_details': {{**dict(zip(columns, entry))}}
+            }}
+            for entry in bulk_values
+        ]
+        bulk_log_operation(modal_name, log_entries)
+
+        response.content_type = 'application/json'
+        return {{"status": "success"}}
+
+    except Exception as e:
+        print(f"Error creating entry: {{e}}")
+        response.status = 500
+        response.content_type = 'application/json'
+        return {{"error": str(e)}}
 
 @app.route('/read/<modal_name>/<route_name>', method=['OPTIONS', 'GET'])
 @app.route('/read/<modal_name>/<route_name>/<belongs_to_user_id>', method=['OPTIONS', 'GET'])
@@ -389,6 +450,24 @@ def log_operation(modal_name, user_id, operation_type, operation_details):
     conn.commit()
     cursor.close()
     conn.close()
+
+def bulk_log_operation(modal_name, log_entries):
+    if not log_entries:
+        return
+    values_list = [(entry['user_id'], entry['operation_type'], json.dumps(entry['operation_details'], default=serialize_datetime)) for entry in log_entries]
+
+    conn = pymysql.connect(**config)
+    cursor = conn.cursor()
+
+    placeholders = "(%s, %s, %s)"
+    insert_query = f"INSERT INTO {{modal_name}}_logs (user_id, operation_type, operation_details) VALUES {{', '.join([placeholders] * len(values_list))}}"
+    flat_values = [val for sublist in values_list for val in sublist]
+    
+    cursor.execute(insert_query, flat_values)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 """
     with open("app.py", "w") as f:
