@@ -1173,6 +1173,116 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
 
 export default CreateModal;'''
 
+DIR__COMPONENTS__FILE__BULK_OPERATIONS_UTILS__TSX = '''// src/utils/bulkOperationsUtils.ts
+import {{ downloadCSV }} from './downloadUtils';
+import Papa from 'papaparse';
+
+export async function handleReadOperation(apiHost: string, modal: string, timeLimit: string) {{
+  try {{
+    const response = await fetch(`${{apiHost}}bulk_read/${{modal}}/${{timeLimit}}`);
+    const responseData = await response.json();
+    const {{ columns, data }} = responseData;
+    downloadCSV(data, columns, 'bulk_read');
+  }} catch (error) {{
+    console.error('There was an error!', error);
+  }}
+}}
+
+export async function handleCreateOperation(apiHost: string, modal: string, file: File, userId: string | undefined) {{
+  try {{
+    const text = await file.text();
+    const parsedData = Papa.parse(text, {{ header: true }});
+    if (parsedData.errors.length > 0) {{
+      console.error('Error parsing CSV file:', parsedData.errors);
+      alert('Error parsing CSV File');
+      return;
+    }}
+    if (!parsedData.data || parsedData.data.length === 0) {{
+      alert('No data found in the CSV file');
+      return;
+    }}
+    const firstRow = parsedData.data[0];
+    if (!firstRow) {{
+      alert('The file appears to be empty or improperly formatted.');
+      return;
+    }}
+    const columns = Object.keys(firstRow);
+    const bulkValues = parsedData.data.map((row: any) => columns.map(column => row[column]));
+    const payload = {{
+      user_id: userId,
+      columns,
+      data: bulkValues,
+    }};
+    const response = await fetch(`${{apiHost}}bulk_create/${{modal}}`, {{
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+      }},
+      body: JSON.stringify(payload),
+    }});
+    const result = await response.json();
+    if (response.ok) {{
+      alert('Data uploaded successfully');
+    }} else {{
+      alert(`Error: ${{result.error}}`);
+    }}
+  }} catch (error) {{
+    console.error('There was an error uploading the data!', error);
+  }}
+}}
+
+export async function handleUpdateOperation(apiHost: string, modal: string, file: File | null, userId: string | undefined, selectedColumns: string[]) {{
+  // Implement the update operation based on the selected columns
+  if (file) {{
+    try {{
+      const text = await file.text();
+      const parsedData = Papa.parse(text, {{ header: true }});
+      if (parsedData.errors.length > 0) {{
+        console.error('Error parsing CSV file:', parsedData.errors);
+        alert('Error parsing CSV File');
+        return;
+      }}
+      if (!parsedData.data || parsedData.data.length === 0) {{
+        alert('No data found in the CSV file');
+        return;
+      }}
+      const firstRow = parsedData.data[0];
+      if (!firstRow) {{
+        alert('The file appears to be empty or improperly formatted.');
+        return;
+      }}
+      const columns = Object.keys(firstRow);
+      const filteredData = parsedData.data.map((row: any) =>
+        selectedColumns.reduce((acc: any, col: string) => {{
+          acc[col] = row[col];
+          return acc;
+        }}, {{}})
+      );
+      const bulkValues = filteredData.map((row: any) => selectedColumns.map(column => row[column]));
+      const payload = {{
+        user_id: userId,
+        columns: selectedColumns,
+        data: bulkValues,
+      }};
+      const response = await fetch(`${{apiHost}}bulk_update/${{modal}}`, {{
+        method: 'POST',
+        headers: {{
+          'Content-Type': 'application/json',
+        }},
+        body: JSON.stringify(payload),
+      }});
+      const result = await response.json();
+      if (response.ok) {{
+        alert('Data updated successfully');
+      }} else {{
+        alert(`Error: ${{result.error}}`);
+      }}
+    }} catch (error) {{
+      console.error('There was an error updating the data!', error);
+    }}
+  }}
+}}'''
+
 DIR__COMPONENTS__FILE__SEARCH_INPUT__TSX = '''import React from 'react';
 
 interface SearchInputProps {{
@@ -1468,26 +1578,77 @@ DIR__COMPONENTS__FILE__QUERY_UTILS__TSX = '''export const handleQuerySubmit = as
   }}
 }};'''
 
-DIR__COMPONENTS__FILE__BULK_OPERATIONS__TSX = '''// src/components/BulkOperations.tsx
-import React, {{ useEffect, useState }} from 'react';
+DIR__COMPONENTS__FILE__BULK_OPERATIONS__TSX = '''import React, {{ useEffect, useState }} from 'react';
 import modalConfig from './modalConfig';
 import {{ downloadCSV }} from './downloadUtils';
 import {{ getUserIDFromCookies }} from './crudUtils';
+import {{ handleReadOperation, handleCreateOperation, handleUpdateOperation }} from './bulkOperationsUtils';
 import Papa from 'papaparse';
 
 const BulkOperationsForm: React.FC = () => {{
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
-  //const userId = getUserIDFromCookies();
+
   const [userId, setUserId] = useState<string | undefined>(undefined);
   const [operation, setOperation] = useState<string>('');
   const [modal, setModal] = useState<string>('');
   const [timeLimit, setTimeLimit] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [isColumnSelectionVisible, setIsColumnSelectionVisible] = useState<boolean>(false);
+  const [isValidFile, setIsValidFile] = useState<boolean>(true);  // State to manage file validity
+
 
   useEffect(() => {{
     setUserId(getUserIDFromCookies());
   }}, []);
 
+  useEffect(() => {{
+    const parseFile = async () => {{
+      if (file) {{
+        const text = await file.text();
+        const parsedData = Papa.parse(text, {{ header: true }});
+        if (parsedData.errors.length > 0) {{
+          console.error('Error parsing CSV file:', parsedData.errors);
+          alert('Error parsing CSV File');
+          setIsValidFile(false);
+          return;
+        }}
+        if (!parsedData.data || parsedData.data.length === 0) {{
+          alert('No data found in the CSV file');
+          setIsValidFile(false);
+          return;
+        }}
+        const firstRow = parsedData.data[0];
+        if (!firstRow) {{
+          alert('The file appears to be empty or improperly formatted.');
+          setIsValidFile(false);
+          return;
+        }}
+
+        const cols = Object.keys(firstRow).filter(col => !['id', 'user_id', 'created_at', 'updated_at'].includes(col));
+
+        // Get the read scope columns for the selected modal
+        const readScopeColumns = modalConfig[modal]?.scopes?.read || [];
+
+        // Check if every column in the file is in the read scope
+        const isValidFile = cols.every(col => readScopeColumns.includes(col));
+
+        if (!isValidFile) {{
+          setIsValidFile(false);
+          return;
+        }}
+
+        setColumns(cols);
+        setIsColumnSelectionVisible(true);
+        setIsValidFile(true);
+      }}
+    }};
+
+    if (operation === 'update' && file) {{
+      parseFile();
+    }}
+  }}, [file, operation, modal]);
 
   const modalNames = Object.keys(modalConfig);
   const timeLimits = [
@@ -1499,116 +1660,61 @@ const BulkOperationsForm: React.FC = () => {{
     'since_last_90_days',
   ];
 
+  const validateForm = (): string[] => {{
+    const missingFields: string[] = [];
+    if (operation === '') missingFields.push('operation');
+    if (modal === '') missingFields.push('modal');
+    if (operation === 'read' && timeLimit === '') missingFields.push('time_limit');
+    return missingFields;
+  }};
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
     event.preventDefault();
-
-    const missingFields: string[] = [];
-    if (operation === '') {{
-      missingFields.push('operation');
-    }}
-    if (modal === '') {{
-      missingFields.push('modal');
-    }}
-    if (operation === 'read' && timeLimit === '') {{
-      missingFields.push('time_limit');
-    }}
-
+    const missingFields = validateForm();
     if (missingFields.length > 0) {{
       alert(`Please fill all required fields: ${{missingFields.join(', ')}}`);
       return;
     }}
 
+    if (!isValidFile) {{
+      alert('The file uploaded does not relate to the modal selected.');
+      return;
+    }}
+
     if (operation === 'read') {{
-      try {{
-        const response = await fetch(`${{apiHost}}bulk_read/${{modal}}/${{timeLimit}}`);
-        const responseData = await response.json();
-        const {{ columns, data }} = responseData;
-
-        downloadCSV(data, columns, 'bulk_read');
-      }} catch (error) {{
-        console.error('There was an error!', error);
-      }}
-    }} else if (operation === 'create') {{
+      await handleReadOperation(apiHost, modal, timeLimit);
+    }}
+    else if (operation === 'create') {{
       if (file) {{
-        try {{
-          const text = await file.text();
-          const parsedData = Papa.parse(text, {{ header: true }});
-
-          if (parsedData.errors.length > 0) {{
-            console.error('Error parsing CSV file:', parsedData.errors);
-            alert('Error parsing CSV File');
-            return;
-          }}
-
-          if (!parsedData.data || parsedData.data.length === 0) {{
-            alert('No data found in the CSV file');
-            return;
-          }}
-
-          const firstRow = parsedData.data[0];
-          if (!firstRow) {{
-            alert('The file appears to be empty or improperly formatted.');
-            return;
-          }}
-
-          const columns = Object.keys(firstRow);
-          const bulkValues = parsedData.data.map((row: any) =>
-            columns.map(column => row[column])
-          );
-
-          const payload = {{
-            user_id: userId, // you have to replace this with actual user_id
-            columns,
-            data: bulkValues,
-          }};
-
-          const response = await fetch(`${{apiHost}}bulk_create/${{modal}}`, {{
-            method: 'POST',
-            headers: {{
-              'Content-Type': 'application/json',
-            }},
-            body: JSON.stringify(payload),
-          }});
-
-          const result = await response.json();
-
-          if (response.ok) {{
-            alert('Data uploaded successfully');
-          }} else {{
-            alert(`Error: ${{result.error}}`);
-          }}
-        }} catch (error) {{
-          console.error('There was an error uploading the data!', error);
-        }}
+        await handleCreateOperation(apiHost, modal, file, userId);
       }} else {{
         alert('Please upload a file.');
       }}
-    }} else {{
+    }}
+    else if (operation === 'update') {{
+      if (isColumnSelectionVisible && selectedColumns.length > 0) {{
+        // Proceed with the update operation
+        await handleUpdateOperation(apiHost, modal, file, userId, selectedColumns);
+      }} else {{
+        alert('Please select columns to update.');
+      }}
+    }}
+    else {{
       alert('Form submitted successfully.');
     }}
   }};
 
   const handleDownloadTemplate = () => {{
-    if (modal && operation === 'create') {{
-      const columns = modalConfig[modal].scopes.read.filter(
-        column => column !== 'id' && column !== 'user_id' && column !== 'created_at' && column !== 'updated_at'
-      );
-      downloadCSV([], columns, `${{modal}}_create_template`);
-    }}
+    const columns = modalConfig[modal].scopes.read.filter(
+      column => column !== 'id' && column !== 'user_id' && column !== 'created_at' && column !== 'updated_at'
+    );
+    downloadCSV([], columns, `${{modal}}_create_template`);
+  }};
 
-    if (modal && operation === 'update') {{
-      const columns = modalConfig[modal].scopes.read.filter(
-        column => column !== 'user_id' && column !== 'created_at' && column !== 'updated_at'
-      );
-      downloadCSV([], columns, `${{modal}}_update_template`);
-    }}
-
-    if (modal && operation === 'delete') {{
-      const columns = modalConfig[modal].scopes.read.filter(
-        column => column !== 'user_id' && column !== 'created_at' && column !== 'updated_at'
-      );
-      downloadCSV([], columns, `${{modal}}_delete_template`);
-    }}
+  const handleColumnSelectionChange = (column: string) => {{
+    setSelectedColumns((prev) =>
+      prev.includes(column) ? prev.filter(col => col !== column) : [...prev, column]
+    );
   }};
 
   return (
@@ -1661,7 +1767,7 @@ const BulkOperationsForm: React.FC = () => {{
         </div>
       )}}
 
-      {{(operation === 'create' || operation === 'update' || operation === 'delete') && modal && (
+      {{operation === 'create' && modal && (
         <div className="mb-4">
           <button
             type="button"
@@ -1672,9 +1778,10 @@ const BulkOperationsForm: React.FC = () => {{
           </button>
         </div>
       )}}
+
       {{(operation === 'create' || operation === 'update' || operation === 'delete') && (
         <div className="mb-4">
-          <label htmlFor="file" className="block text-sm text-yellow-100/50 mb-2">Upload CSV</label>
+          <label htmlFor="file" className="block text-sm text-yellow-100/50 mb-2">upload_csv</label>
           <input
             type="file"
             id="file"
@@ -1683,10 +1790,31 @@ const BulkOperationsForm: React.FC = () => {{
           />
         </div>
       )}}
+
+      {{isColumnSelectionVisible && (
+        <div className="flex flex-col space-y-2 mb-4">
+          <label className="block text-sm text-yellow-100/50 mb-2">confirm_columns_to_update</label>
+          {{columns.map((column) => (
+            <label key={{column}} className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                id={{column}}
+                value={{column}}
+                onChange={{() => handleColumnSelectionChange(column)}}
+                checked={{selectedColumns.includes(column)}}
+                className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
+              />
+              <span className="ml-3 text-yellow-100/50">{{column}}</span>
+            </label>
+          ))}}
+        </div>
+      )}}
+
       <div className="text-right">
         <button
           type="submit"
           className="bg-yellow-100 text-black py-2.5 px-6 rounded-lg mt-4"
+          disabled={{operation === 'update' && isColumnSelectionVisible && selectedColumns.length === 0}}
         >
           Submit
         </button>
