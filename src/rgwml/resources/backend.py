@@ -425,10 +425,104 @@ def update_entry(modal_name, entry_id):
         if conn:
             conn.close()
 
+@app.route('/bulk_update/<modal_name>', method=['OPTIONS', 'PUT'])
+def bulk_update(modal_name):
+    if request.method == 'OPTIONS':
+        response.headers['Access-Control-Allow-Methods'] = 'PUT, OPTIONS'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return {{}}
+
+    data = request.json
+    if not data or 'user_id' not in data:
+        response.status = 400
+        response.content_type = 'application/json'
+        return {{"error": "user_id is required in the request body"}}
+
+    try:
+        modal_details = modal_map.get(modal_name, {{}})
+        if not modal_details:
+            raise ValueError(f"Modal {{modal_name}} not found in modal_map")
+
+        if 'columns' not in data or 'data' not in data:
+            raise ValueError("Both 'columns' and 'data' fields are required in the request body")
+
+        user_id = data['user_id']
+        columns = data['columns']
+        bulk_values = data['data']  # This should be a list of dicts, where each dict contains 'id' and the columns to update
+
+        if not isinstance(columns, list) or not all(isinstance(col, str) for col in columns):
+            raise ValueError("'columns' should be a list of strings")
+        if not isinstance(bulk_values, list) or not all(isinstance(entry, dict) for entry in bulk_values):
+            raise ValueError("'data' should be a list of dictionaries")
+
+        columns_str = modal_details.get('columns', '')
+        valid_columns = [col for col in columns_str.split(",")]
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+        entry_ids = [int(entry['id']) for entry in bulk_values]
+        # Use placeholders for parameterized queries
+        placeholders = ', '.join(['%s'] * len(entry_ids))
+        query = f"SELECT * FROM `{{modal_name}}` WHERE id IN ({{placeholders}})"
+        # Execute the query with parameterized input
+        cursor.execute(query, entry_ids)
+        old_rows = cursor.fetchall()
+        column_names = [i[0] for i in cursor.description]
+        # Convert the list of tuples into a list of dictionaries
+        result = [{{column_names[i]: row[i] for i in range(len(column_names))}} for row in old_rows]
+        # Convert the list of dictionaries to JSON
+        #result_json = json.dumps(result, default=lambda x: x.isoformat() if isinstance(x, datetime) else x, indent=4)
+        old_rows_dict = {{row['id']: row for row in result}}
+        # Prepare batch update statement
+        update_entries = []
+        update_params = []
+        for entry in bulk_values:
+            entry_id = entry.get('id')
+            if not entry_id:
+                raise ValueError("Each entry must have an 'id' field")
+            set_clauses = []
+            params = []
+            for col in columns:
+                if col in entry:
+                    value = entry[col]
+                    if value is not None:
+                        set_clauses.append(f"`{{col}}`=%s")
+                        params.append(value)
+            params.append(entry_id)
+            set_clause = ", ".join(set_clauses)
+            update_query = f"UPDATE `{{modal_name}}` SET {{set_clause}} WHERE id = %s"           
+            cursor.execute(update_query, params)
+            # Log operation for the specific entry
+            log_entry = {{
+                'user_id': user_id,
+                'operation_type': 'UPDATE',
+                'operation_details': {{'old': old_rows_dict.get(entry_id, {{}}), 'new': entry}}
+            }}
+            bulk_log_operation(modal_name, [log_entry])
+        conn.commit()
+        response.content_type = 'application/json'
+        return {{"status": "success"}}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error updating entries: {{e}}")
+        response.status = 500
+        response.content_type = 'application/json'
+        return {{"status": "error", "message": str(e)}}
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 @app.route('/delete/<modal_name>/<entry_id>', method=['OPTIONS', 'DELETE'])
 def delete_entry(modal_name, entry_id):
 
     if request.method == 'OPTIONS':
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Access-Control-Allow-Methods'] = 'DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return {{}}
 
     data = request.json
@@ -442,6 +536,85 @@ def delete_entry(modal_name, entry_id):
     cursor.close()
     log_operation(modal_name, user_id, 'DELETE', {{ "deleted_row": old_row }})
     return {{"status": "success"}}
+
+@app.route('/bulk_delete/<modal_name>', method=['OPTIONS','DELETE'])
+def bulk_delete(modal_name):
+
+    if request.method == 'OPTIONS':
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Access-Control-Allow-Methods'] = 'DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return {{}}
+
+    data = request.json
+    if not data or 'user_id' not in data:
+        response.status = 400
+        response.content_type = 'application/json'
+        return {{"error": "user_id is required in the request body"}}
+
+    if 'ids' not in data:
+        response.status = 400
+        response.content_type = 'application/json'
+        return {{"error": "ids field is required in the request body"}}
+
+    try:
+        modal_details = modal_map.get(modal_name, {{}})
+        if not modal_details:
+            raise ValueError(f"Modal {{modal_name}} not found in modal_map")
+
+        user_id = data['user_id']
+        ids = data['ids']  # This should be a list of ids to delete
+
+        if not isinstance(ids, list) or not all(isinstance(entry_id, int) for entry_id in ids):
+            raise ValueError("'ids' should be a list of integers")
+
+        conn = pymysql.connect(**config)
+        cursor = conn.cursor()
+
+        # Use placeholders for parameterized queries
+        placeholders = ', '.join(['%s'] * len(ids))
+        select_query = f"SELECT * FROM `{{modal_name}}` WHERE id IN ({{placeholders}})"
+        cursor.execute(select_query, ids)
+        old_rows = cursor.fetchall()
+        column_names = [i[0] for i in cursor.description]
+        
+        # Convert the list of tuples into a list of dictionaries
+        #old_rows_dict = {{row['id']: {{column_names[i]: row[i] for i in range(len(column_names))}} for row in old_rows}}
+
+        result = [{{column_names[i]: row[i] for i in range(len(column_names))}} for row in old_rows]
+        # Convert the list of dictionaries to JSON
+        #result_json = json.dumps(result, default=lambda x: x.isoformat() if isinstance(x, datetime) else x, indent=4)
+        old_rows_dict = {{row['id']: row for row in result}}
+
+
+        delete_query = f"DELETE FROM `{{modal_name}}` WHERE id IN ({{placeholders}})"
+        cursor.execute(delete_query, ids)
+        
+        # Log operation
+        log_entry = {{
+            'user_id': user_id,
+            'operation_type': 'DELETE',
+            'operation_details': {{'old': [old_rows_dict.get(entry_id, {{}}) for entry_id in ids]}}
+        }}
+        bulk_log_operation(modal_name, [log_entry])
+        
+        conn.commit()
+        response.content_type = 'application/json'
+        return {{"status": "success"}}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error deleting entries: {{e}}")
+        response.status = 500
+        response.content_type = 'application/json'
+        return {{"status": "error", "message": str(e)}}
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 def log_operation(modal_name, user_id, operation_type, operation_details):
     conn = pymysql.connect(**config)
