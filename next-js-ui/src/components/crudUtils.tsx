@@ -109,4 +109,3 @@ export const closeEditModal = (
   }
   setEditModalOpen(false);
 };
-

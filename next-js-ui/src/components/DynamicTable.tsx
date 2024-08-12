@@ -208,5 +208,3 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
 };
 
 export default DynamicTable;
-
-

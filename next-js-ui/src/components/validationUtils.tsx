@@ -121,4 +121,3 @@ export const open_ai_quality_checks = async (field: string, value: string, check
 
   return failedChecks;
 };
-

@@ -304,11 +304,3 @@ const EditModal: React.FC<EditModalProps> = ({ modalName, apiHost, columns, rowD
 };
 
 export default EditModal;
-
-
-
-
-
-
-
-

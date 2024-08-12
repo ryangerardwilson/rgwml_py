@@ -787,6 +787,8 @@ interface ModalConfigMap {{
   [key: string]: ModalConfig;
 }}
 
+
+
 const modalConfig: ModalConfigMap = {{
   "users": {{
     "options": {{
@@ -805,6 +807,12 @@ const modalConfig: ModalConfigMap = {{
         "type",
         "created_at",
         "updated_at"
+      ],
+      "read_summary": [
+        "id",
+        "username",
+        "password",
+        "type"
       ],
       "update": [
         "username",
@@ -827,6 +835,149 @@ const modalConfig: ModalConfigMap = {{
         "belongs_to_user_id": false
       }}
     }}
+  }},
+  "router_recovery_outgoing_calls": {{
+    "options": {{
+      "customer_primary_remarks[XOR]": [
+        "ready_to_return",
+        "recharge_and_resume",
+        "migration_or_shifting",
+        "dispute_or_refund",
+        "service_issue",
+        "already_returned",
+        "out_of_town",
+        "other"
+      ]
+    }},
+    "conditional_options": {{
+      "customer_secondary_remarks": [
+        {{
+          "condition": "customer_primary_remarks == ready_to_return",
+          "options": [
+            "disconnect_and_handover",
+            "cannot_disconnect_and_handover"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == recharge_and_resume",
+          "options": [
+            "follow_up_in_24_hours",
+            "assign_to_ra"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == migration_or_shifting",
+          "options": [
+            "shifting_ticket_created",
+            "shifting_approved",
+            "shifting_denied",
+            "shifting_ticket_no_update"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == dispute_or_refund",
+          "options": [
+            "refund_request_created",
+            "refund_approved",
+            "refund_denied",
+            "refund_request_no_update"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == already_returned",
+          "options": [
+            "returned_to_lco",
+            "returned_to_wiom_official",
+            "pata_nahi_kisko_de_diya"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == service_issue",
+          "options": [
+            "refund_needed",
+            "esclataed_to_nqt",
+            "other"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == out_of_town",
+          "options": [
+            "not_applicable"
+          ]
+        }},
+        {{
+          "condition": "customer_primary_remarks == other",
+          "options": [
+            "other"
+          ]
+        }}
+      ]
+    }},
+    "scopes": {{
+      "create": false,
+      "read": [
+        "id",
+        "user_id",
+        "belongs_to_user_id",
+        "mobile",
+        "source",
+        "device_id",
+        "plan_expiry_date",
+        "customer_name",
+        "customer_address",
+        "zone",
+        "lco_contact",
+        "pin_code",
+        "latitude",
+        "longitude",
+        "am_name",
+        "customer_primary_remarks",
+        "customer_secondary_remarks",
+        "follow_up_date",
+        "comment",
+        "created_at",
+        "updated_at"
+      ],
+      "read_summary": [
+        "mobile",
+        "device_id",
+        "customer_name"
+      ],
+      "update": [
+        "category",
+        "customer_primary_remarks",
+        "customer_secondary_remarks",
+        "follow_up_date",
+        "comment"
+      ],
+      "delete": false
+    }},
+    "validation_rules": {{
+      "customer_primary_remarks": [
+        "REQUIRED"
+      ],
+      "customer_secondary_remarks": [
+        "REQUIRED"
+      ],
+      "follow_up_date": [
+        "IS_AFTER_TODAY"
+      ]
+    }},
+    "ai_quality_checks": {{}},
+    "read_routes": {{
+      "uninitiated": {{
+        "belongs_to_user_id": true
+      }},
+      "initiated": {{
+        "belongs_to_user_id": true
+      }},
+      "follow-up-due-today": {{
+        "belongs_to_user_id": true
+      }},
+      "follow-up-overdue": {{
+        "belongs_to_user_id": true
+      }}
+    }}
   }}
 }};
 
@@ -837,8 +988,29 @@ DIR__COMPONENTS__FILE__DOWNLOAD_UTILS__TSX = '''export const downloadCSV = (data
   const headers = columns.join(',');
   csvRows.push(headers);
 
+  const escapeCellValue = (value: any): string => {{
+    if (value === null || value === undefined) return '';
+
+    let cellValue = value;
+    if (typeof value === 'object') {{
+      cellValue = JSON.stringify(value);
+    }} else {{
+      cellValue = String(value);
+    }}
+
+    // Escape double quotes by replacing " with ""
+    cellValue = cellValue.replace(/"/g, '""');
+
+    // Enclose the cell in double quotes if it contains a comma, double quotes, or a newline
+    if (/[",\\n]/.test(cellValue)) {{
+      cellValue = `"${{cellValue}}"`;
+    }}
+
+    return cellValue;
+  }};
+
   data.forEach(row => {{
-    const values = row.map((cellValue: any) => `"${{cellValue}}"`); // Enclose each cell value in quotes to handle commas within the values
+    const values = row.map((cellValue: any) => escapeCellValue(cellValue));
     csvRows.push(values.join(','));
   }});
 
@@ -1206,13 +1378,22 @@ export async function handleCreateOperation(apiHost: string, modal: string, file
       alert('The file appears to be empty or improperly formatted.');
       return;
     }}
-    const columns = Object.keys(firstRow);
-    const bulkValues = parsedData.data.map((row: any) => columns.map(column => row[column]));
+
+    // Filter out unwanted columns
+    const unwantedColumns = ['id', 'user_id', 'created_at', 'updated_at'];
+    const columns = Object.keys(firstRow).filter(col => !unwantedColumns.includes(col));
+    
+    // Filter out unwanted data from each row
+    const bulkValues = parsedData.data.map((row: any) => 
+      columns.map(column => row[column])
+    );
+
     const payload = {{
       user_id: userId,
       columns,
       data: bulkValues,
     }};
+
     const response = await fetch(`${{apiHost}}bulk_create/${{modal}}`, {{
       method: 'POST',
       headers: {{
@@ -1220,57 +1401,71 @@ export async function handleCreateOperation(apiHost: string, modal: string, file
       }},
       body: JSON.stringify(payload),
     }});
+
     const result = await response.json();
     if (response.ok) {{
       alert('Data uploaded successfully');
+      window.location.reload();  // Refresh the page on success
     }} else {{
       alert(`Error: ${{result.error}}`);
     }}
   }} catch (error) {{
     console.error('There was an error uploading the data!', error);
+    alert('There was an error uploading the data.');
   }}
 }}
 
+
+
 export async function handleUpdateOperation(apiHost: string, modal: string, file: File | null, userId: string | undefined, selectedColumns: string[]) {{
-  // Implement the update operation based on the selected columns
   if (file) {{
     try {{
       const text = await file.text();
       const parsedData = Papa.parse(text, {{ header: true }});
       if (parsedData.errors.length > 0) {{
         console.error('Error parsing CSV file:', parsedData.errors);
-        alert('Error parsing CSV File');
+        alert('Error parsing CSV file');
         return;
       }}
+
       if (!parsedData.data || parsedData.data.length === 0) {{
         alert('No data found in the CSV file');
         return;
       }}
+
       const firstRow = parsedData.data[0];
       if (!firstRow) {{
         alert('The file appears to be empty or improperly formatted.');
         return;
       }}
+
       const columns = Object.keys(firstRow);
+      selectedColumns.push('id');
+
       const filteredData = parsedData.data.map((row: any) =>
         selectedColumns.reduce((acc: any, col: string) => {{
           acc[col] = row[col];
           return acc;
         }}, {{}})
       );
-      const bulkValues = filteredData.map((row: any) => selectedColumns.map(column => row[column]));
+
       const payload = {{
         user_id: userId,
         columns: selectedColumns,
-        data: bulkValues,
+        data: filteredData // Include the whole row with 'id' field
       }};
+
+      console.log('159');
+      console.log(payload);
+
       const response = await fetch(`${{apiHost}}bulk_update/${{modal}}`, {{
-        method: 'POST',
+        method: 'PUT', // Use PUT instead of POST
         headers: {{
           'Content-Type': 'application/json',
         }},
         body: JSON.stringify(payload),
       }});
+
       const result = await response.json();
       if (response.ok) {{
         alert('Data updated successfully');
@@ -1280,6 +1475,37 @@ export async function handleUpdateOperation(apiHost: string, modal: string, file
     }} catch (error) {{
       console.error('There was an error updating the data!', error);
     }}
+  }}
+}}
+
+export async function handleDeleteOperation(apiHost: string, modal: string, userId: string | undefined, ids: number[]) {{
+  if (ids.length > 0 && userId) {{
+    try {{
+      const payload = {{
+        user_id: userId,
+        ids: ids,
+      }};
+
+      const response = await fetch(`${{apiHost}}bulk_delete/${{modal}}`, {{
+        method: 'DELETE',
+        headers: {{
+          'Content-Type': 'application/json',
+        }},
+        body: JSON.stringify(payload),
+      }});
+
+      const result = await response.json();
+      if (response.ok) {{
+        alert('Data deleted successfully');
+      }} else {{
+        alert(`Error: ${{result.error}}`);
+      }}
+    }} catch (error) {{
+      console.error('There was an error deleting the data!', error);
+      alert('There was an error deleting the data!');
+    }}
+  }} else {{
+    alert('User ID and IDs to delete are required.');
   }}
 }}'''
 
@@ -1582,7 +1808,7 @@ DIR__COMPONENTS__FILE__BULK_OPERATIONS__TSX = '''import React, {{ useEffect, use
 import modalConfig from './modalConfig';
 import {{ downloadCSV }} from './downloadUtils';
 import {{ getUserIDFromCookies }} from './crudUtils';
-import {{ handleReadOperation, handleCreateOperation, handleUpdateOperation }} from './bulkOperationsUtils';
+import {{ handleReadOperation, handleCreateOperation, handleUpdateOperation, handleDeleteOperation }} from './bulkOperationsUtils';
 import Papa from 'papaparse';
 
 const BulkOperationsForm: React.FC = () => {{
@@ -1626,10 +1852,13 @@ const BulkOperationsForm: React.FC = () => {{
           return;
         }}
 
-        const cols = Object.keys(firstRow).filter(col => !['id', 'user_id', 'created_at', 'updated_at'].includes(col));
+        const cols = Object.keys(firstRow).filter(col => !['user_id', 'created_at', 'updated_at'].includes(col));
 
         // Get the read scope columns for the selected modal
         const readScopeColumns = modalConfig[modal]?.scopes?.read || [];
+
+        console.log(readScopeColumns);
+        console.log(cols);
 
         // Check if every column in the file is in the read scope
         const isValidFile = cols.every(col => readScopeColumns.includes(col));
@@ -1668,41 +1897,81 @@ const BulkOperationsForm: React.FC = () => {{
     return missingFields;
   }};
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
-    event.preventDefault();
-    const missingFields = validateForm();
-    if (missingFields.length > 0) {{
-      alert(`Please fill all required fields: ${{missingFields.join(', ')}}`);
-      return;
-    }}
+const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
+  event.preventDefault();
+  
+  const missingFields = validateForm();
+  if (missingFields.length > 0) {{
+    alert(`Please fill all required fields: ${{missingFields.join(', ')}}`);
+    return;
+  }}
 
-    if (!isValidFile) {{
-      alert('The file uploaded does not relate to the modal selected.');
-      return;
-    }}
+  if (!isValidFile) {{
+    alert('The file uploaded does not relate to the modal selected.');
+    return;
+  }}
 
+  // Ensure the apiHost, modal, and timeLimit are non-null, non-undefined strings
+  if (!apiHost || !modal) {{
+    alert('API host and modal must be selected.');
+    return;
+  }}
+  
+  try {{
     if (operation === 'read') {{
-      await handleReadOperation(apiHost, modal, timeLimit);
-    }}
-    else if (operation === 'create') {{
+      await handleReadOperation(apiHost, modal, timeLimit || '');
+    }} else if (operation === 'create') {{
       if (file) {{
         await handleCreateOperation(apiHost, modal, file, userId);
+        alert('Data created successfully.');
+        window.location.reload();
       }} else {{
         alert('Please upload a file.');
       }}
-    }}
-    else if (operation === 'update') {{
+    }} else if (operation === 'update') {{
       if (isColumnSelectionVisible && selectedColumns.length > 0) {{
         // Proceed with the update operation
         await handleUpdateOperation(apiHost, modal, file, userId, selectedColumns);
+        alert('Data updated successfully.');
+        window.location.reload();
       }} else {{
         alert('Please select columns to update.');
       }}
-    }}
-    else {{
+    }} else if (operation === 'delete') {{
+      if (file) {{
+        // Parse the file to extract ids
+        const text = await file.text();
+        const parsedData = Papa.parse(text, {{ header: true }});
+        if (parsedData.errors.length > 0) {{
+          console.error('Error parsing CSV file:', parsedData.errors);
+          alert('Error parsing CSV file');
+          return;
+        }}
+        if (!parsedData.data || parsedData.data.length === 0) {{
+          alert('No data found in the CSV file');
+          return;
+        }}
+        const ids = parsedData.data.map((row: any) => parseInt(row['id'], 10)).filter((id: number) => !isNaN(id));
+        if (ids.length === 0) {{
+          alert('No valid IDs found in the CSV file');
+          return;
+        }}
+
+        await handleDeleteOperation(apiHost, modal, userId || '', ids);
+        alert('Data deleted successfully.');
+        window.location.reload();
+      }} else {{
+        alert('Please upload a file.');
+      }}
+    }} else {{
       alert('Form submitted successfully.');
     }}
-  }};
+  }} catch (error) {{
+    console.error('There was an error handling the operation!', error);
+    alert('There was an error handling the operation.');
+  }}
+}};
+
 
   const handleDownloadTemplate = () => {{
     const columns = modalConfig[modal].scopes.read.filter(
@@ -1791,24 +2060,26 @@ const BulkOperationsForm: React.FC = () => {{
         </div>
       )}}
 
-      {{isColumnSelectionVisible && (
-        <div className="flex flex-col space-y-2 mb-4">
-          <label className="block text-sm text-yellow-100/50 mb-2">confirm_columns_to_update</label>
-          {{columns.map((column) => (
-            <label key={{column}} className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                id={{column}}
-                value={{column}}
-                onChange={{() => handleColumnSelectionChange(column)}}
-                checked={{selectedColumns.includes(column)}}
-                className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
-              />
-              <span className="ml-3 text-yellow-100/50">{{column}}</span>
-            </label>
-          ))}}
-        </div>
-      )}}
+
+{{isColumnSelectionVisible && (
+  <div className="flex flex-col space-y-2 mb-4">
+    <label className="block text-sm text-yellow-100/50 mb-2">confirm_columns_to_update</label>
+    {{columns.filter(column => column !== 'id').map((filteredColumn) => (
+      <label key={{filteredColumn}} className="flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          id={{filteredColumn}}
+          value={{filteredColumn}}
+          onChange={{() => handleColumnSelectionChange(filteredColumn)}}
+          checked={{selectedColumns.includes(filteredColumn)}}
+          className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
+        />
+        <span className="ml-3 text-yellow-100/50">{{filteredColumn}}</span>
+      </label>
+    ))}}
+  </div>
+)}}
+
 
       <div className="text-right">
         <button

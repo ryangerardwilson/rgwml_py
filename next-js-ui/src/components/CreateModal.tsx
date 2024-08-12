@@ -277,4 +277,3 @@ const CreateModal: React.FC<CreateModalProps> = ({ modalName, apiHost, columns, 
 };
 
 export default CreateModal;
-

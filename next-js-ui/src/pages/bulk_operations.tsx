@@ -23,4 +23,3 @@ const BulkOperationsPage: React.FC = () => {
 };
 
 export default BulkOperationsPage;
-

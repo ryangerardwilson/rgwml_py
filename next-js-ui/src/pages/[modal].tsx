@@ -27,4 +27,3 @@ const ModalPage: React.FC = () => {
 };
 
 export default ModalPage;
-

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import modalConfig from './modalConfig';
 import { downloadCSV } from './downloadUtils';
 import { getUserIDFromCookies } from './crudUtils';
-import { handleReadOperation, handleCreateOperation, handleUpdateOperation } from './bulkOperationsUtils';
+import { handleReadOperation, handleCreateOperation, handleUpdateOperation, handleDeleteOperation } from './bulkOperationsUtils';
 import Papa from 'papaparse';
 
 const BulkOperationsForm: React.FC = () => {
@@ -46,10 +46,13 @@ const BulkOperationsForm: React.FC = () => {
           return;
         }
 
-        const cols = Object.keys(firstRow).filter(col => !['id', 'user_id', 'created_at', 'updated_at'].includes(col));
+        const cols = Object.keys(firstRow).filter(col => !['user_id', 'created_at', 'updated_at'].includes(col));
 
         // Get the read scope columns for the selected modal
         const readScopeColumns = modalConfig[modal]?.scopes?.read || [];
+
+        console.log(readScopeColumns);
+        console.log(cols);
 
         // Check if every column in the file is in the read scope
         const isValidFile = cols.every(col => readScopeColumns.includes(col));
@@ -88,41 +91,81 @@ const BulkOperationsForm: React.FC = () => {
     return missingFields;
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const missingFields = validateForm();
-    if (missingFields.length > 0) {
-      alert(`Please fill all required fields: ${missingFields.join(', ')}`);
-      return;
-    }
+const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+  
+  const missingFields = validateForm();
+  if (missingFields.length > 0) {
+    alert(`Please fill all required fields: ${missingFields.join(', ')}`);
+    return;
+  }
 
-    if (!isValidFile) {
-      alert('The file uploaded does not relate to the modal selected.');
-      return;
-    }
+  if (!isValidFile) {
+    alert('The file uploaded does not relate to the modal selected.');
+    return;
+  }
 
+  // Ensure the apiHost, modal, and timeLimit are non-null, non-undefined strings
+  if (!apiHost || !modal) {
+    alert('API host and modal must be selected.');
+    return;
+  }
+  
+  try {
     if (operation === 'read') {
-      await handleReadOperation(apiHost, modal, timeLimit);
-    }
-    else if (operation === 'create') {
+      await handleReadOperation(apiHost, modal, timeLimit || '');
+    } else if (operation === 'create') {
       if (file) {
         await handleCreateOperation(apiHost, modal, file, userId);
+        alert('Data created successfully.');
+        window.location.reload();
       } else {
         alert('Please upload a file.');
       }
-    }
-    else if (operation === 'update') {
+    } else if (operation === 'update') {
       if (isColumnSelectionVisible && selectedColumns.length > 0) {
         // Proceed with the update operation
         await handleUpdateOperation(apiHost, modal, file, userId, selectedColumns);
+        alert('Data updated successfully.');
+        window.location.reload();
       } else {
         alert('Please select columns to update.');
       }
-    }
-    else {
+    } else if (operation === 'delete') {
+      if (file) {
+        // Parse the file to extract ids
+        const text = await file.text();
+        const parsedData = Papa.parse(text, { header: true });
+        if (parsedData.errors.length > 0) {
+          console.error('Error parsing CSV file:', parsedData.errors);
+          alert('Error parsing CSV file');
+          return;
+        }
+        if (!parsedData.data || parsedData.data.length === 0) {
+          alert('No data found in the CSV file');
+          return;
+        }
+        const ids = parsedData.data.map((row: any) => parseInt(row['id'], 10)).filter((id: number) => !isNaN(id));
+        if (ids.length === 0) {
+          alert('No valid IDs found in the CSV file');
+          return;
+        }
+
+        await handleDeleteOperation(apiHost, modal, userId || '', ids);
+        alert('Data deleted successfully.');
+        window.location.reload();
+      } else {
+        alert('Please upload a file.');
+      }
+    } else {
       alert('Form submitted successfully.');
     }
-  };
+  } catch (error) {
+    console.error('There was an error handling the operation!', error);
+    alert('There was an error handling the operation.');
+  }
+};
+
 
   const handleDownloadTemplate = () => {
     const columns = modalConfig[modal].scopes.read.filter(
@@ -211,24 +254,26 @@ const BulkOperationsForm: React.FC = () => {
         </div>
       )}
 
-      {isColumnSelectionVisible && (
-        <div className="flex flex-col space-y-2 mb-4">
-          <label className="block text-sm text-yellow-100/50 mb-2">confirm_columns_to_update</label>
-          {columns.map((column) => (
-            <label key={column} className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                id={column}
-                value={column}
-                onChange={() => handleColumnSelectionChange(column)}
-                checked={selectedColumns.includes(column)}
-                className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
-              />
-              <span className="ml-3 text-yellow-100/50">{column}</span>
-            </label>
-          ))}
-        </div>
-      )}
+
+{isColumnSelectionVisible && (
+  <div className="flex flex-col space-y-2 mb-4">
+    <label className="block text-sm text-yellow-100/50 mb-2">confirm_columns_to_update</label>
+    {columns.filter(column => column !== 'id').map((filteredColumn) => (
+      <label key={filteredColumn} className="flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          id={filteredColumn}
+          value={filteredColumn}
+          onChange={() => handleColumnSelectionChange(filteredColumn)}
+          checked={selectedColumns.includes(filteredColumn)}
+          className="h-5 w-5 cursor-pointer appearance-none rounded-md border border-yellow-100/30 transition-all checked:bg-yellow-100/50 checked:border-none"
+        />
+        <span className="ml-3 text-yellow-100/50">{filteredColumn}</span>
+      </label>
+    ))}
+  </div>
+)}
+
 
       <div className="text-right">
         <button

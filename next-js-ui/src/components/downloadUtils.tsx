@@ -3,8 +3,29 @@ export const downloadCSV = (data: any[], columns: string[], filename: string) =>
   const headers = columns.join(',');
   csvRows.push(headers);
 
+  const escapeCellValue = (value: any): string => {
+    if (value === null || value === undefined) return '';
+
+    let cellValue = value;
+    if (typeof value === 'object') {
+      cellValue = JSON.stringify(value);
+    } else {
+      cellValue = String(value);
+    }
+
+    // Escape double quotes by replacing " with ""
+    cellValue = cellValue.replace(/"/g, '""');
+
+    // Enclose the cell in double quotes if it contains a comma, double quotes, or a newline
+    if (/[",\n]/.test(cellValue)) {
+      cellValue = `"${cellValue}"`;
+    }
+
+    return cellValue;
+  };
+
   data.forEach(row => {
-    const values = row.map((cellValue: any) => `"${cellValue}"`); // Enclose each cell value in quotes to handle commas within the values
+    const values = row.map((cellValue: any) => escapeCellValue(cellValue));
     csvRows.push(values.join(','));
   });
 
@@ -29,5 +50,4 @@ export const downloadCSV = (data: any[], columns: string[], filename: string) =>
   link.click();
   document.body.removeChild(link);
 };
-
 

@@ -26,4 +26,3 @@ const QueryInput: React.FC<QueryInputProps> = ({
 };
 
 export default QueryInput;
-

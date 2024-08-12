@@ -30,4 +30,3 @@ export const formatDateTime = (dateTime: string): string => {
       return false;
     }
   };
-
