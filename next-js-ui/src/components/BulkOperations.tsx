@@ -117,7 +117,6 @@ const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     } else if (operation === 'create') {
       if (file) {
         await handleCreateOperation(apiHost, modal, file, userId);
-        alert('Data created successfully.');
         window.location.reload();
       } else {
         alert('Please upload a file.');
@@ -126,7 +125,6 @@ const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
       if (isColumnSelectionVisible && selectedColumns.length > 0) {
         // Proceed with the update operation
         await handleUpdateOperation(apiHost, modal, file, userId, selectedColumns);
-        alert('Data updated successfully.');
         window.location.reload();
       } else {
         alert('Please select columns to update.');
@@ -152,7 +150,6 @@ const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         }
 
         await handleDeleteOperation(apiHost, modal, userId || '', ids);
-        alert('Data deleted successfully.');
         window.location.reload();
       } else {
         alert('Please upload a file.');
