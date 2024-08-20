@@ -329,14 +329,17 @@ Set up your environment with the necessary dependencies to use this feature:
 
 - Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
 
-#### Backend Config Syntax (`modal_backend_config`)
+#### 6.3 Backend Config Syntax (`modal_backend_config`)
 
 - Ensure that queries in the read routes return columns in the same order as a simple SELECT * FROM `your_table` query
 - Keep the `read_routes` queries simple by avoiding adding columns from other tables, and returning only the columns present in the corresponding modal. 
 
-#### Frontend Config Syntax (`modal_frontend_config`)
+#### 6.4 Frontend Config Syntax (`modal_frontend_config`)
 
 - Keep the order of the READ permissions the same as the order of a simple SELECT * FROM `your_table` query with respect to the concerned modal.
+- Available validation rules: `REQUIRED, CHAR_LENGTH:X, IS_NUMERICALLY_PARSEABLE, IS_INDIAN_MOBILE_NUMBER, IS_YYYY-MM-DD, IS_AFTER_TODAY, IS_BEFORE_TODAY`
+
+#### 6.5 Example
 
     project_name = "crm"
     db_name = "crm"
