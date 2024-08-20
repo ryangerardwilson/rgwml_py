@@ -12,7 +12,6 @@ import copy
 import gc
 import mysql.connector
 import tempfile
-#from clickhouse_driver import Client as ClickHouseClient
 import clickhouse_connect
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -35,16 +34,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import asyncio
 import whisper
-#from transformers import pipeline, logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, logging, AutoTokenizer
 import warnings
 import torch
 import re
 
 class p:
-    def __init__(self, df=None):
-        """Initialize the p class with an empty DataFrame."""
+    def __init__(self, df=None, source=None):
+        """Initialize the p class with an empty DataFrame and source path."""
         self.df = df
+        self.source = source
 
     def cl(self):
         """UTILS::[d.clo()] Clone."""
@@ -104,8 +103,76 @@ class p:
         """LOAD::[d.frd(['col1','col2'],[[1,2,3],[4,5,6]])] From raw data."""
         if isinstance(data, list) and all(isinstance(row, list) for row in data):
             self.df = pd.DataFrame(data, columns=headers)
+            self.source = None  # Clear the source since data is from raw input
         else:
             raise ValueError("Data should be an array of arrays.")
+        self.pr()
+        return self
+
+    def ar(self, rows):
+        """TINKER::[d.ar([[col1_val, col2_val]])] Append rows"""
+        if not isinstance(rows, list):
+            raise ValueError("Rows should be provided as a list of lists.")
+        
+        # Check if the DataFrame is empty or not
+        if self.df.empty:
+            self.df = pd.DataFrame(rows)
+        else:
+            # Create a temporary DataFrame from the rows
+            new_rows_df = pd.DataFrame(rows, columns=self.df.columns)
+            # Append the new rows to the existing DataFrame
+            self.df = pd.concat([self.df, new_rows_df], ignore_index=True)
+        self.pr()
+        return self
+
+    def ac(self, *col_names):
+        """TINKER::[d.ac([['new_col1_name', 'new_col2_name']])] Append columns"""
+
+        if not all(isinstance(col_name, str) for col_name in col_names):
+            raise ValueError("Column names should be provided as strings.")
+
+        # Add new columns with default values of None and dtype of object
+        for col_name in col_names:
+            self.df[col_name] = pd.Series([None] * len(self.df), dtype='object')
+        
+        self.pr()
+        return self
+
+    def ur(self, condition, updates):
+        """TINKER::[d.ur("id == 5", {'status': 'completed', 'due_date': '2024-09-30'})] Update row"""
+
+        # Query the DataFrame to find the rows matching the condition
+        mask = self.df.query(condition)
+
+        if mask.empty:
+            raise ValueError("No rows match the given condition.")
+
+        # Validate updates
+        if not isinstance(updates, dict):
+            raise ValueError("Updates should be provided as a dictionary with column names as keys and new values as values.")
+
+        # Validate that all keys are valid column names
+        invalid_cols = [col for col in updates if col not in self.df.columns]
+        if invalid_cols:
+            raise ValueError(f"Columns {', '.join(invalid_cols)} do not exist in the DataFrame.")
+
+        # Update the specified columns
+        for col_name, new_value in updates.items():
+            self.df.loc[mask.index, col_name] = new_value
+
+        self.pr()
+        return self
+
+    def dr(self, condition):
+        """TINKER::[d.dr("id == 5")] Delete row"""
+        # Convert condition to a boolean mask
+        mask = self.df.query(condition)
+        
+        if mask.empty:
+            raise ValueError("No rows match the given condition.")
+        
+        # Drop the rows that match the condition
+        self.df = self.df.drop(mask.index).reset_index(drop=True)
         self.pr()
         return self
 
@@ -1100,13 +1167,18 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
     def fp(self, file_path):
         """LOAD::[d.fp('/absolute/path')] From path."""
+        self.source = os.path.abspath(file_path)  # Set the source to the absolute path of the given file
+
         file_extension = file_path.split('.')[-1]
-        
+
         if file_extension == 'csv':
-            self.df = pd.read_csv(file_path)
+            self.df = pd.read_csv(file_path, dtype=str)
+
+            # Replace empty strings with None
+            self.df.replace('', None, inplace=True)
+
         elif file_extension in ['xls', 'xlsx']:
             self.df = pd.read_excel(file_path)
         elif file_extension == 'json':
@@ -1137,7 +1209,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             self.df = pd.read_pickle(file_path)
         else:
             raise ValueError(f"Unsupported file extension: {file_extension}")
-        
+
         self.pr()
         gc.collect()
         return self
@@ -1176,10 +1248,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
                 if 1 <= choice <= len(recent_files):
                     file_path = recent_files[choice - 1]  # Correct the index
+                    self.source = os.path.abspath(file_path)  # Set the source to the absolute path of the chosen file
                     file_extension = file_path.split('.')[-1]
 
                     if file_extension == 'csv':
-                        self.df = pd.read_csv(file_path)
+                        self.df = pd.read_csv(file_path, dtype=str)
+
+                        # Replace empty strings with None
+                        self.df.replace('', None, inplace=True)
+
                     elif file_extension in ['xls', 'xlsx']:
                         self.df = pd.read_excel(file_path)
                     elif file_extension == 'json':
@@ -1231,6 +1308,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         gc.collect()
         return self
+
 
     def des(self):
         """INSPECT::[d.d()]Describe."""
@@ -1297,19 +1375,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
         
-        gc.collect()
-        return self
-
-    def pr(self):
-        """INSPECT::[d.pr()] Print."""
-        if self.df is not None:
-            print(self.df)
-            columns_with_types = [f"{col} ({self.df[col].dtypes})" for col in self.df.columns]
-            #columns_with_types = [f"{col} ({self.df[col].dtype})" for col in self.df.columns]
-            print("Columns:", columns_with_types)
-        else:
-            raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
-
         gc.collect()
         return self
 
@@ -1518,10 +1583,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-    def s(self, name_or_path):
-        """PERSIST::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file on the desktop."""
+    def s(self, name_or_path=None):
+        """PERSIST::[d.s('/filename/or/path')] Save the DataFrame as a CSV or HDF5 file."""
         if self.df is None:
             raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
+
+        if name_or_path is None:
+            if not self.source:
+                raise ValueError("No source to save the DataFrame. Please provide a filename or path.")
+            name_or_path = self.source
 
         # Ensure the file has the correct extension
         if not name_or_path.lower().endswith(('.csv', '.h5')):
@@ -1539,48 +1609,62 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         # Ensure the directory exists
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
-        # Convert nullable integer columns to regular integers
-        for col in self.df.select_dtypes(include=["integer"]).columns:
-            self.df[col] = self.df[col].astype('int64')
-
-        # Convert datetime columns to strings for HDF5 serialization
-        for col in self.df.columns:
-            if pd.api.types.is_datetime64_any_dtype(self.df[col]) or pd.api.types.is_timedelta64_dtype(self.df[col]):
-                print(f"Converting datetime column {col} to string")
-                self.df[col] = self.df[col].astype(str)
-
-        # Convert date object columns to strings for HDF5 serialization
-        for col in self.df.columns:
-            if pd.api.types.is_object_dtype(self.df[col]):
-                try:
-                    # Attempt to convert the entire column to string
-                    self.df[col] = self.df[col].astype(str)
-                except Exception as e:
-                    # Fallback: Convert each element to string individually
-                    self.df[col] = self.df[col].apply(lambda x: str(x) if isinstance(x, (pd.Timestamp, pd.Period, pd.NaTType)) else x)
-                print(f"Converting object column {col} to string")
-
-        # Convert other extension arrays to NumPy arrays
-        for col in self.df.columns:
-            if pd.api.types.is_extension_array_dtype(self.df[col]):
-                self.df[col] = self.df[col].astype(object).astype(str)
-
-        # Save the DataFrame as a CSV or HDF5 file
+        # Convert all columns to type object for CSV
         if full_path.lower().endswith('.csv'):
+            self.df = self.df.astype('object')
             self.df.to_csv(full_path, index=False)
             print(f"DataFrame saved to {full_path}")
+
+        # Handle HDF5 file saving
         elif full_path.lower().endswith('.h5'):
+            # Convert datetime and timedelta columns to strings
+            for col in self.df.columns:
+                if pd.api.types.is_datetime64_any_dtype(self.df[col]) or pd.api.types.is_timedelta64_dtype(self.df[col]):
+                    print(f"Converting datetime column {col} to string")
+                    self.df[col] = self.df[col].astype(str)
+                elif pd.api.types.is_object_dtype(self.df[col]):
+                    # Convert object columns to string
+                    try:
+                        self.df[col] = self.df[col].astype(str)
+                    except Exception as e:
+                        self.df[col] = self.df[col].apply(lambda x: str(x) if pd.isnull(x) else x)
+                    print(f"Converting object column {col} to string")
+
+            # Convert other extension arrays to string
+            for col in self.df.columns:
+                if pd.api.types.is_extension_array_dtype(self.df[col]):
+                    self.df[col] = self.df[col].astype(str)
+
             self.df.to_hdf(full_path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {full_path}")
 
         gc.collect()
         return self
 
+    def pr(self):
+        """INSPECT::[d.pr()] Print."""
+        if self.df is not None:
+            print(self.df)
+            columns_with_types = [f"{col} ({self.df[col].dtypes})" for col in self.df.columns]
+            print("Columns:", columns_with_types)
+            if self.source is not None:
+                print(f"Source: {self.source}")
+        else:
+            raise ValueError("No DataFrame to print. Please load a file first using the frm or frml method.")
 
-    def ds(self, path):
+        gc.collect()
+        return self
+
+
+    def ds(self, path=None):
         """PERSIST::[d.ds('/filename/or/path')] Dask Save the DataFrame as a HDF5 or CSV file."""
         if self.df is None:
             raise ValueError("No DataFrame to save. Please load or create a DataFrame first.")
+
+        if path is None:
+            if not self.source:
+                raise ValueError("No source to save the DataFrame. Please provide a filename or path.")
+            path = self.source
 
         # Determine the format based on the file extension
         if path.lower().endswith('.h5'):
@@ -1616,10 +1700,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 dask_df[col] = dask_df[col].astype(str)
 
         # Save the DataFrame as a CSV or HDF5 file
-        if path.lower().endswith('.csv'):
+        if format == 'csv':
             dask_df.to_csv(path, single_file=True, index=False)
             print(f"DataFrame saved to {path}")
-        elif path.lower().endswith('.h5'):
+        elif format == 'h5':
             dask_df.compute().to_hdf(path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {path}")
 
@@ -1658,6 +1742,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             new_order = new_order[:pos] + remaining + new_order[pos:]
 
         self.df = self.df[new_order]
+        self.pr()
         return self
 
 
@@ -1947,8 +2032,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def rnc(self, rename_pairs):
         """TINKER::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
-        print("aaa")
-        self.pr()
         if self.df is not None:
             self.df = self.df.rename(columns=rename_pairs)
             self.pr()

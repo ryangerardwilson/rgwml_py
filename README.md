@@ -76,6 +76,12 @@ Set out below is the format of a rgwml.config file. Place it anywhere in your De
           "ssh_key_path": ""
         }
       ],
+    "cloud_storage_presets": [
+        {
+          "name": "gcs_bucket_name",
+          "credential_path": "path/to/your/credentials.json"
+        }
+      ],
     "open_ai_key": "",
     "netlify_token": "",
     "vercel_token": ""
@@ -187,6 +193,7 @@ Instantiate this class by `d = r.p()`
 
     # Save (saves as csv (default) or h5, to desktop (default) or path)
     d.s('/filename/or/path')
+    d.s() #If the dataframe was loaded from a source with an absolute path, calling the s method without an argument will save at the same path
 
 ### 4.7. PLOT
 
@@ -293,38 +300,43 @@ Instantiate this class by `d = r.d()`
 6. `r.f()` Methods
 ------------------
 
-Instantiate this class by crm = r.f()
+Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e., a Bottle App on your GCS VM), a NextJS Web Frontend, and a Flutter Android App, on your local machine with highly customized options based on modal definitions. Note that all modal names, modal column names, and option values must NOT contain spaces and should be separated by underscores.
 
-### 6.1. Serve a CRM
+#### 6.1 Instantiation
 
-    # Serves a CRM with a Scaffolded MYSQL DB, Backend (i.e., a Bottle App on your GCS VM), and NextJS Frontend on your local machine with highly customized options based on modal definitions. Note that all modal names, modal column names, and option values must NOT contain spaces and should be separated by underscores.
+    import rgwml as r
+    crm = r.f()
 
-    """
-    ENVIRONMENT SETUP
-    1. Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager). Typical steps would include the below. However, make sure the restart your terminals before you verify the installations.
+#### 6.2 Envirnoment
 
-        # installs nvm (Node Version Manager)
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+Set up your environment with the necessary dependencies to use this feature:
+ 
+- Install the latest version of NodeJS (https://nodejs.org/en/download/package-manager). Typical steps would include the below. However, make sure the restart your terminals before you verify the installations.
 
-        # download and install Node.js (you may need to restart the terminal)
-        nvm install 20
+    # installs nvm (Node Version Manager)
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
-        # verifies the right Node.js version is in the environment
-        node -v # should print `v20.16.0`
+    # download and install Node.js (you may need to restart the terminal)
+    nvm install 20
 
-        # verifies the right npm version is in the environment
-        npm -v # should print `10.8.1`
+    # verifies the right Node.js version is in the environment
+    node -v # should print `v20.16.0`
 
-    2. Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
+    # verifies the right npm version is in the environment
+    npm -v # should print `10.8.1`
 
-    BACKEND CONFIG
-    1. Ensure that queries in the read routes return columns in the same order as a simple SELECT * FROM `your_table` query
-    2. Keep the `read_routes` queries simple by avoiding adding columns from other tables, and returning only the columns present in the corresponding modal. 
+- Install Android Studio (via https://developer.android.com/studio) and Flutter (via the Snap Store)
 
-    FRONTEND CONFIG
-    1. For simplicity, keep the order of the READ permissions the same as the order of a simple SELECT * FROM `your_table` query with respect to the concerned modal.
+- Ensure that your rgwml.config sets out details of the VM being used, as well as your VERCEL and NETLIFY tokens
 
-    """
+#### Backend Config Syntax (`modal_backend_config`)
+
+- Ensure that queries in the read routes return columns in the same order as a simple SELECT * FROM `your_table` query
+- Keep the `read_routes` queries simple by avoiding adding columns from other tables, and returning only the columns present in the corresponding modal. 
+
+#### Frontend Config Syntax (`modal_frontend_config`)
+
+- Keep the order of the READ permissions the same as the order of a simple SELECT * FROM `your_table` query with respect to the concerned modal.
 
     project_name = "crm"
     db_name = "crm"
@@ -350,7 +362,6 @@ Instantiate this class by crm = r.f()
                 },
             }
         }
-
 
     modal_frontend_config = {
         "social_media_escalations": {
