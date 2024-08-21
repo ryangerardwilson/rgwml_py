@@ -6,7 +6,7 @@ import re
 import time
 import json
 import paramiko
-import time
+
 
 def create_database(config, new_db_name):
     temp_config = config.copy()
@@ -18,10 +18,11 @@ def create_database(config, new_db_name):
     cursor.close()
     conn.close()
 
+
 def create_user_table(config, modal_backend_config):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
-    
+
     # Create the users table if it does not exist
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
@@ -35,7 +36,7 @@ def create_user_table(config, modal_backend_config):
     )
     """)
 
-    cursor.execute(f"""
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS users_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT,
@@ -50,7 +51,7 @@ def create_user_table(config, modal_backend_config):
     cursor.execute("SELECT COUNT(*) FROM users WHERE type = 'sudo'")
     result = cursor.fetchone()
     sudo_user_exists = result[0] > 0
-    
+
     # Seed the database with a 'sudo' user if one does not exist
     if not sudo_user_exists:
         sudo_user = modal_backend_config.get('sudo')
@@ -62,11 +63,12 @@ def create_user_table(config, modal_backend_config):
             INSERT INTO users (user_id, username, password, type)
             VALUES (%s, %s, %s, 'sudo')
             """, (user_id, username, password))
-    
+
     # Commit changes and close the connection
     conn.commit()
     cursor.close()
     conn.close()
+
 
 def create_modal_table(config, modal_name, columns):
     conn = pymysql.connect(**config)
@@ -244,7 +246,7 @@ def create_entry(modal_name):
         cursor.close()
         conn.close()
 
-        
+
         log_entries = [
             {{
                 'user_id': data['user_id'],
@@ -489,7 +491,7 @@ def bulk_update(modal_name):
                         params.append(value)
             params.append(entry_id)
             set_clause = ", ".join(set_clauses)
-            update_query = f"UPDATE `{{modal_name}}` SET {{set_clause}} WHERE id = %s"           
+            update_query = f"UPDATE `{{modal_name}}` SET {{set_clause}} WHERE id = %s"
             cursor.execute(update_query, params)
             # Log operation for the specific entry
             log_entry = {{
@@ -577,7 +579,7 @@ def bulk_delete(modal_name):
         cursor.execute(select_query, ids)
         old_rows = cursor.fetchall()
         column_names = [i[0] for i in cursor.description]
-        
+
         # Convert the list of tuples into a list of dictionaries
         #old_rows_dict = {{row['id']: {{column_names[i]: row[i] for i in range(len(column_names))}} for row in old_rows}}
 
@@ -589,7 +591,7 @@ def bulk_delete(modal_name):
 
         delete_query = f"DELETE FROM `{{modal_name}}` WHERE id IN ({{placeholders}})"
         cursor.execute(delete_query, ids)
-        
+
         # Log operation
         log_entry = {{
             'user_id': user_id,
@@ -597,7 +599,7 @@ def bulk_delete(modal_name):
             'operation_details': {{'old': [old_rows_dict.get(entry_id, {{}}) for entry_id in ids]}}
         }}
         bulk_log_operation(modal_name, [log_entry])
-        
+
         conn.commit()
         response.content_type = 'application/json'
         return {{"status": "success"}}
@@ -635,7 +637,7 @@ def bulk_log_operation(modal_name, log_entries):
     placeholders = "(%s, %s, %s)"
     insert_query = f"INSERT INTO {{modal_name}}_logs (user_id, operation_type, operation_details) VALUES {{', '.join([placeholders] * len(values_list))}}"
     flat_values = [val for sublist in values_list for val in sublist]
-    
+
     cursor.execute(insert_query, flat_values)
     conn.commit()
     cursor.close()
@@ -645,6 +647,7 @@ def bulk_log_operation(modal_name, log_entries):
 """
     with open("app.py", "w") as f:
         f.write(app_code)
+
 
 def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host):
 
@@ -671,7 +674,7 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
         response = requests.post(url, headers=headers, json=data)
         try:
             response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             if response.status_code == 422 and "conflicting zone" in response.json().get("errors", {}).get("name", [])[0]:
                 return get_dns_zone_id(domain)
             else:
@@ -723,7 +726,7 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
             zone_id = get_dns_zone_id(parent_domain)
         if zone_id is None:
             raise ValueError(f"Unable to retrieve DNS zone ID for {parent_domain} after creation attempt.")
-    
+
     print(f"DNS Zone ID: {zone_id}")
 
     dns_records = get_dns_records(zone_id)
@@ -752,19 +755,18 @@ def direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host
 def upload_to_gcs(ssh_key_path, gcs_instance, deploy_path):
     # Create the deployment directory on the remote server
     subprocess.run(['ssh', '-i', ssh_key_path, gcs_instance, f'mkdir -p {deploy_path}'])
-            
+
     # Copy the app.py file to the remote server
     subprocess.run(['scp', '-i', ssh_key_path, 'app.py', f'{gcs_instance}:{deploy_path}/'])
-    
+
     # Wait for the server to start
     time.sleep(3)
-
 
 
 def deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, backend_domain):
 
     location_of_app_file_on_vm = f"{backend_vm_deploy_path}/app.py"
-    app_name = project_name
+    # app_name = project_name
     app_file_name = "app"
     domain_name = backend_domain
 
@@ -809,6 +811,7 @@ def deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, 
 
     ssh.close()
 
+
 def parse_column_names(columns_str):
     columns = []
     for col in columns_str.split(','):
@@ -818,6 +821,7 @@ def parse_column_names(columns_str):
             col_name = col
         columns.append(col_name.strip())
     return columns
+
 
 def run_tests(base_url, modal_map):
     for modal, details in modal_map.items():
@@ -868,6 +872,7 @@ def run_tests(base_url, modal_map):
         ], capture_output=True, text=True)
         print("DELETE Entry Response:", delete_response.stdout)
 
+
 def cleanup_db(config, modal_map):
     conn = pymysql.connect(**config)
     cursor = conn.cursor()
@@ -894,7 +899,7 @@ def cleanup_db(config, modal_map):
         cursor.execute(query)
 
         # Delete from modal logs table
-        #log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
+        # log_conditions = " OR ".join([f"operation_details LIKE '%%{col}%%xxxxx%%'" for col in columns_list])
         log_query = f"DELETE FROM {modal_name}_logs WHERE operation_details LIKE '%xxxxx%'"
         print(f"Delete log query for modal {modal_name}: {log_query}")
         cursor.execute(log_query)
@@ -915,6 +920,7 @@ def parse_column_definitions(columns_str):
         columns.append((col_name.strip(), col_type.strip()))
     return columns
 
+
 def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_path, instance, backend_vm_deploy_path, backend_domain, netlify_key, vm_preset, vm_host):
     create_database(db_config, new_db_name)
     create_user_table(db_config, modal_backend_config)
@@ -925,7 +931,7 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
         columns = parse_column_definitions(modal_details["columns"])
         create_modal_table(db_config, modal_name, columns)
 
-    #modal_map["users"] = "username,password,type"
+    # modal_map["users"] = "username,password,type"
 
     modal_map['users'] = {
         "columns": "username,password,type",
@@ -934,7 +940,6 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
         ]
     }
 
-
     create_bottle_app(modal_map, db_config)
 
     direct_domain_to_instance(netlify_key, project_name, backend_domain, vm_host)
@@ -942,10 +947,7 @@ def main(project_name, new_db_name, db_config, modal_backend_config, ssh_key_pat
     deploy_to_gcs(vm_preset, backend_vm_deploy_path, project_name, new_db_name, backend_domain)
 
     # Run dynamic tests
-    #run_tests(f"https://{backend_domain}", modal_map)
+    # run_tests(f"https://{backend_domain}", modal_map)
 
     cleanup_db(db_config, modal_map)
     print(f"Backend deployed to: https://{backend_domain}")
-    
-
-

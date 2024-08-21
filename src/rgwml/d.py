@@ -6,6 +6,7 @@ import os
 import copy
 import collections
 
+
 class d:
     def __init__(self, df=None):
         """Initialize the class with an empty Dask DataFrame."""
@@ -122,7 +123,7 @@ class d:
                 try:
                     # Attempt to convert the entire column to string
                     self.df[col] = self.df[col].astype(str)
-                except Exception as e:
+                except Exception:
                     # Fallback: Convert each element to string individually
                     self.df[col] = self.df[col].apply(lambda x: str(x) if isinstance(x, (pd.Timestamp, pd.Period, pd.NaTType)) else x)
                 print(f"Converting object column {col} to string")
@@ -139,8 +140,8 @@ class d:
         elif full_path.lower().endswith('.h5'):
             # For Dask, converting to Pandas DataFrame for HDF5 saving
             self.df.compute().to_hdf(full_path, key='df', mode='w', format='table')
-            #pandas_df = self.df.compute()
-            #pandas_df.to_hdf(full_path, key='df', mode='w', format='table')
+            # pandas_df = self.df.compute()
+            # pandas_df.to_hdf(full_path, key='df', mode='w', format='table')
             print(f"DataFrame saved to {full_path}")
 
         gc.collect()
@@ -193,11 +194,7 @@ class d:
     def fim(self, mobile_col):
         """TINKER::[d.fim('mobile')] Filter Indian mobiles."""
         if self.df is not None:
-            self.df = self.df[self.df[mobile_col].apply(
-                lambda x: str(x).isdigit() and
-                          str(x).startswith(('6', '7', '8', '9')) and
-                          len(set(str(x))) >= 4,
-                meta=(mobile_col, 'bool'))]
+            self.df = self.df[self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')) and len(set(str(x))) >= 4, meta=(mobile_col, 'bool'))]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
@@ -207,11 +204,7 @@ class d:
     def fimc(self, mobile_col):
         """TINKER::[d.fimc('mobile')] Filter Indian mobiles (complement)."""
         if self.df is not None:
-            self.df = self.df[~self.df[mobile_col].apply(
-                lambda x: str(x).isdigit() and
-                          str(x).startswith(('6', '7', '8', '9')) and
-                          len(set(str(x))) >= 4,
-                meta=(mobile_col, 'bool'))]
+            self.df = self.df[~self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')) and len(set(str(x))) >= 4, meta=(mobile_col, 'bool'))]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
@@ -220,7 +213,7 @@ class d:
 
     def g(self, target_cols, agg_funcs):
         """TRANSFORM::[d.(['group_by_columns'], ['column1::sum', 'column1::count', 'column3::sum'])] Group. Permits multiple aggregations on the same column. Available agg options: sum, mean, min, max, count, size, std, var, median, css (comma-separated strings), etc. Warning: When using MEAN, its essential that the column values are such that they avoid division by zero errors"""
-        
+
         def css(series):
             if series.empty or series.isnull().all():
                 return ''
@@ -316,7 +309,7 @@ class d:
 
     def doc(self, method_type_filter=None):
         """DOCUMENTATION::[d.doc()] Prints docs. Optional parameter: method_type_filter (str) egs. 'APPEND, PLOT'"""
-            
+
         # Dictionary to hold methods grouped by their type
         method_types = collections.defaultdict(list)
 
@@ -326,7 +319,7 @@ class d:
         for method in methods:
             method_func = getattr(self, method)
             docstring = method_func.__doc__
-            if docstring: 
+            if docstring:
                 # Extract only the first line of the docstring
                 first_line = docstring.split('\n')[0]
                 if "::" in first_line:
@@ -380,4 +373,3 @@ class d:
             raise ValueError("The specified column must exist in both DataFrames.")
         self.df = self.df.merge(other_d.df[[column_name]].drop_duplicates(), on=column_name, how='inner')
         return self
-

@@ -7,7 +7,6 @@ import json
 from datetime import datetime
 import collections
 import time
-import argparse
 import copy
 import gc
 import mysql.connector
@@ -28,18 +27,19 @@ import dask.dataframe as dd
 from openai import OpenAI
 from pprint import pprint
 import requests
-from requests_html import HTMLSession, AsyncHTMLSession
+from requests_html import AsyncHTMLSession
 import filetype
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import asyncio
 import whisper
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, logging, AutoTokenizer
+from transformers import pipeline, logging
 import warnings
-import torch
 import re
 
+
 class p:
+
     def __init__(self, df=None, source=None):
         """Initialize the p class with an empty DataFrame and source path."""
         self.df = df
@@ -53,7 +53,6 @@ class p:
     def gdf(self):
         """UTILS::[d.gdf()] Get DataFrame."""
         return self.df
-
 
     def ncl(self, column_names, column_type, irregular_value_treatment):
         """CLEAN::[d.ncl('Column7, Column9', column_type='INTEGER', irregular_value_treatment='NAN')] Numeric clean. Cleans the numeric column based on the specified treatments. column_type (can be INTEGER or FLOAT), irregular_value_treatment (can be NAN, TO_ZERO or MEAN)"""
@@ -89,7 +88,6 @@ class p:
         self.pr()
         return self
 
-
     def lim(self, num_rows):
         """TINKER::[d.lim(7)] Limit the DataFrame to a specified number of rows."""
         if not isinstance(num_rows, int):
@@ -113,7 +111,7 @@ class p:
         """TINKER::[d.ar([[col1_val, col2_val]])] Append rows"""
         if not isinstance(rows, list):
             raise ValueError("Rows should be provided as a list of lists.")
-        
+
         # Check if the DataFrame is empty or not
         if self.df.empty:
             self.df = pd.DataFrame(rows)
@@ -134,7 +132,7 @@ class p:
         # Add new columns with default values of None and dtype of object
         for col_name in col_names:
             self.df[col_name] = pd.Series([None] * len(self.df), dtype='object')
-        
+
         self.pr()
         return self
 
@@ -167,10 +165,8 @@ class p:
         """TINKER::[d.dr("id == 5")] Delete row"""
         # Convert condition to a boolean mask
         mask = self.df.query(condition)
-        
         if mask.empty:
             raise ValueError("No rows match the given condition.")
-        
         # Drop the rows that match the condition
         self.df = self.df.drop(mask.index).reset_index(drop=True)
         self.pr()
@@ -186,7 +182,6 @@ class p:
         else:
             raise ValueError("DataFrame is not initialized.")
 
-
     def ddrf(self, columns):
         """CLEAN::[d.ddrf('Column1, Column7')] Drop duplicates retaining the first occurrence based on the specified columns."""
         if self.df is not None:
@@ -198,7 +193,7 @@ class p:
             return self
         else:
             raise ValueError("DataFrame is not initialized.")
-    
+
     def ddrl(self, columns):
         """CLEAN::[d.ddrl('Column1, Column7')] Drop duplicates retaining the last occurrence based on the specified columns."""
         if self.df is not None:
@@ -228,10 +223,9 @@ class p:
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-
         # Read the rgwml.config file from the Desktop
         config_path = locate_config_file()
-        #config_path = os.path.expanduser("~/Desktop/rgwml.config")
+        # config_path = os.path.expanduser("~/Desktop/rgwml.config")
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -270,28 +264,26 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            #database = db_preset.get('database', '')
+            # database = db_preset.get('database', '')
 
-            #client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            # client = ClickHouseClient(host=host, user=username, password=password, database=database)
             client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
             data = client.query(query)
             rows = data.result_rows
             columns = data.column_names
-           
+
             df = pd.DataFrame(rows, columns=columns)
             self.df = df
             self.pr()
             gc.collect()
             return self
 
-                
-            #columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
-            #columns = [row[0] for row in client.execute(columns_query)]
+            # columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
+            # columns = [row[0] for row in client.execute(columns_query)]
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
 
-            bigquery_presets = config.get('google_big_query_presets', [])
             if not db_preset:
                 raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
 
@@ -348,7 +340,7 @@ class p:
 
         db_type = db_preset['db_type']
         pd.set_option('display.max_rows', None)
-        pd.set_option('display.max_columns', None) 
+        pd.set_option('display.max_columns', None)
 
         if db_type == 'mssql':
             host = db_preset['host']
@@ -391,13 +383,12 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            #database = db_preset.get('database', '')
+            # database = db_preset.get('database', '')
 
             client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
             data = client.query(query)
             rows = data.result_rows
             columns = data.column_names
-            
 
             if rows:
                 if 'FROM' not in query.upper():
@@ -407,11 +398,10 @@ class p:
                     elif query.upper().startswith('SHOW DATABASES'):
                         columns = ['name']
                     else:
-                        columns = [f'column_{i+1}' for i in range(len(rows[0]))]
+                        columns = [f'column_{i + 1}' for i in range(len(rows[0]))]
 
                 df = pd.DataFrame(rows, columns=columns)
                 print(df)
-
 
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
@@ -617,9 +607,9 @@ SELECT TOP 100 * FROM your_table_name ORDER BY your_date_column DESC;
     DROP DATABASE database_name;
 
     -- Rename a database (MySQL does not support renaming databases directly. This workaround can be used)
-    CREATE DATABASE new_database_name; 
-    RENAME TABLE old_database_name.table1 TO new_database_name.table1; 
-    RENAME TABLE old_database_name.table2 TO new_database_name.table2; 
+    CREATE DATABASE new_database_name;
+    RENAME TABLE old_database_name.table1 TO new_database_name.table1;
+    RENAME TABLE old_database_name.table2 TO new_database_name.table2;
     DROP DATABASE old_database_name;
 
 -- TABLE COMMANDS
@@ -838,7 +828,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 data = [tuple(row) for row in unique_new_data_df.values]
 
                 # Debugging: print the data to be inserted
-                #print("Data to be inserted:", data)
+                # print("Data to be inserted:", data)
 
                 # Insert unique new data into the table
                 if data:
@@ -856,7 +846,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 gc.collect()
 
         return self
-
 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
@@ -991,8 +980,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 rows_to_update = merge_df[merge_df['_merge'] == 'both']
                 rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
 
-                #print("Rows to update:", rows_to_update)
-                #print("Rows to insert:", rows_to_insert)
+                # print("Rows to update:", rows_to_update)
+                # print("Rows to insert:", rows_to_insert)
 
                 # Prepare update queries
                 for _, row in rows_to_update.iterrows():
@@ -1031,7 +1020,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 os.path.join(home_dir, "Documents"),
                 os.path.join(home_dir, "Downloads"),
             ]
-                    
+
             for path in search_paths:
                 for root, dirs, files in os.walk(path):
                     if filename in files:
@@ -1109,7 +1098,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             password = db_preset['password']
             database = db_preset.get('database', '')
 
-            client = ClickHouseClient(host=host, user=username, password=password, database=database)
+            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
+
+            # client = ClickHouseClient(host=host, user=username, password=password, database=database)
             total_rows = client.execute(f"SELECT COUNT(*) FROM ({query}) AS total_query")[0][0]
 
             offset = 0
@@ -1131,7 +1122,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
 
-            bigquery_presets = config.get('google_big_query_presets', [])
             if not db_preset:
                 raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
 
@@ -1213,7 +1203,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         gc.collect()
         return self
-
 
     def fd(self):
         """LOAD::[d.fd()] From directory."""
@@ -1309,7 +1298,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
     def des(self):
         """INSPECT::[d.d()]Describe."""
         if self.df is not None:
@@ -1318,7 +1306,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             self.df = description
         else:
             raise ValueError("No DataFrame to describe. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
 
@@ -1359,7 +1347,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
 
@@ -1374,7 +1362,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
-        
+
         gc.collect()
         return self
 
@@ -1407,14 +1395,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
     def f(self, filter_expr):
         """TINKER::[d.f("col1 > 100 and Col1 == Col3 and Col5 == 'XYZ'")] Filter."""
         if self.df is not None:
             try:
                 # Attempt to use query method for simple expressions
                 self.df = self.df.query(filter_expr)
-            except:
+            except BaseException:
                 # Fallback to eval for more complex expressions
                 self.df = self.df[self.df.eval(filter_expr)]
             self.pr()
@@ -1423,27 +1410,22 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
     def fim(self, mobile_col):
         """TINKER::[d.fim('mobile')] Filter Indian mobiles."""
         if self.df is not None:
-            self.df = self.df[self.df[mobile_col].apply(
-                lambda x: str(x).isdigit() and 
-                          str(x).startswith(('6', '7', '8', '9')) and 
-                          len(set(str(x))) >= 4)]
+            self.df = self.df[self.df[mobile_col].apply(lambda x: (str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')) and len(set(str(x))) >= 4))]
             self.pr()
         else:
-            raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
+            raise ValueError(
+                "No DataFrame to filter. Please load a file first using the frm or frml method."
+            )
         gc.collect()
         return self
 
     def fimc(self, mobile_col):
         """TINKER::[d.fimc('mobile')] Filter Indian mobiles (complement)."""
         if self.df is not None:
-            self.df = self.df[~self.df[mobile_col].apply(
-                lambda x: str(x).isdigit() and 
-                          str(x).startswith(('6', '7', '8', '9')) and 
-                          len(set(str(x))) >= 4)]
+            self.df = self.df[~self.df[mobile_col].apply(lambda x: str(x).isdigit() and str(x).startswith(('6', '7', '8', '9')) and len(set(str(x))) >= 4)]
             self.pr()
         else:
             raise ValueError("No DataFrame to filter. Please load a file first using the frm or frml method.")
@@ -1534,7 +1516,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def doc(self, method_type_filter=None):
         """DOCUMENTATION::[d.doc()] Prints docs. Optional parameter: method_type_filter (str) egs. 'APPEND, PLOT'"""
-            
+
         # Dictionary to hold methods grouped by their type
         method_types = collections.defaultdict(list)
 
@@ -1544,7 +1526,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         for method in methods:
             method_func = getattr(self, method)
             docstring = method_func.__doc__
-            if docstring: 
+            if docstring:
                 # Extract only the first line of the docstring
                 first_line = docstring.split('\n')[0]
                 if "::" in first_line:
@@ -1626,7 +1608,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     # Convert object columns to string
                     try:
                         self.df[col] = self.df[col].astype(str)
-                    except Exception as e:
+                    except Exception:
                         self.df[col] = self.df[col].apply(lambda x: str(x) if pd.isnull(x) else x)
                     print(f"Converting object column {col} to string")
 
@@ -1654,7 +1636,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         gc.collect()
         return self
-
 
     def ds(self, path=None):
         """PERSIST::[d.ds('/filename/or/path')] Dask Save the DataFrame as a HDF5 or CSV file."""
@@ -1689,7 +1670,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 try:
                     # Attempt to convert the entire column to string
                     dask_df[col] = dask_df[col].astype(str)
-                except Exception as e:
+                except Exception:
                     # Fallback: Convert each element to string individually
                     dask_df[col] = dask_df[col].apply(lambda x: str(x) if isinstance(x, (pd.Timestamp, pd.Period, pd.NaTType)) else x)
                 print(f"Converting object column {col} to string")
@@ -1712,16 +1693,16 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def oc(self, column_order_str):
         """TINKER::[d.oc('Column1, ..., Column2')] Order columns based on a string input."""
-        
+
         if self.df is None:
             raise ValueError("No DataFrame to reorder. Please load or create a DataFrame first.")
-        
+
         columns = self.df.columns.tolist()
         parts = [part.strip() for part in column_order_str.split(',')]
-        
+
         new_order = []
         seen = set()
-        
+
         for part in parts:
             if part == '...':
                 continue
@@ -1745,10 +1726,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-
-
-
-
     def asc(self, new_col_name, static_value):
         """APPEND::[d.asc('new_column_name', static_value)] Append static column. Append a column with a static value for all rows."""
         if self.df is not None:
@@ -1758,7 +1735,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise ValueError("No DataFrame to append a static value column. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
-
 
     def abc(self, condition, new_col_name):
         """APPEND::[d.abc('column1 > 30 and column2 < 50', 'new_column_name')] Append boolean classification column."""
@@ -1784,7 +1760,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 return f"{padded_integer_part}.{decimal_part}"
             else:
                 return str(int(number)).zfill(integer_length)
-        
+
         if self.df is not None:
             # Check if any range value contains decimals
             range_list = ranges.split(',')
@@ -1795,12 +1771,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 range_list = [float(r) for r in range_list]
                 max_decimal_length = max(len(str(r).split('.')[1]) for r in range_list if '.' in str(r))
                 max_integer_length = max(len(str(int(float(r)))) for r in range_list)
-                labels = [f"{pad_number(range_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(range_list[i+1], max_integer_length, max_decimal_length, decimal=True)}" for i in range(len(range_list) - 1)]
+                labels = [f"{pad_number(range_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(range_list[i + 1], max_integer_length, max_decimal_length, decimal=True)}" for i in range(len(range_list) - 1)]
             else:
                 # Keep range values as integers if none have decimals
                 range_list = [int(r) for r in range_list]
                 max_integer_length = max(len(str(r)) for r in range_list)
-                labels = [f"{pad_number(range_list[i], max_integer_length)} to {pad_number(range_list[i+1], max_integer_length)}" for i in range(len(range_list) - 1)]
+                labels = [f"{pad_number(range_list[i], max_integer_length)} to {pad_number(range_list[i + 1], max_integer_length)}" for i in range(len(range_list) - 1)]
 
             # Ensure the target column is numeric
             self.df[target_col] = pd.to_numeric(self.df[target_col], errors='coerce')
@@ -1824,7 +1800,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 return f"{padded_integer_part}.{decimal_part}"
             else:
                 return str(int(number)).zfill(integer_length)
-        
+
         if self.df is not None:
             # Check if any percentile value contains decimals
             percentiles_list = percentiles.split(',')
@@ -1835,12 +1811,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 percentiles_list = [float(p) for p in percentiles_list]
                 max_decimal_length = max(len(str(p).split('.')[1]) for p in percentiles_list if '.' in str(p))
                 max_integer_length = max(len(str(int(float(p)))) for p in percentiles_list)
-                labels = [f"{pad_number(percentiles_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(percentiles_list[i+1], max_integer_length, max_decimal_length, decimal=True)} ({i})" for i in range(len(percentiles_list) - 1)]
+                labels = [f"{pad_number(percentiles_list[i], max_integer_length, max_decimal_length, decimal=True)} to {pad_number(percentiles_list[i + 1], max_integer_length, max_decimal_length, decimal=True)} ({i})" for i in range(len(percentiles_list) - 1)]
             else:
                 # Keep percentile values as integers if none have decimals
                 percentiles_list = [int(p) for p in percentiles_list]
                 max_integer_length = max(len(str(p)) for p in percentiles_list)
-                labels = [f"{pad_number(percentiles_list[i], max_integer_length)} to {pad_number(percentiles_list[i+1], max_integer_length)}" for i in range(len(percentiles_list) - 1)]
+                labels = [f"{pad_number(percentiles_list[i], max_integer_length)} to {pad_number(percentiles_list[i + 1], max_integer_length)}" for i in range(len(percentiles_list) - 1)]
 
             # Ensure the target column is numeric
             self.df[target_col] = pd.to_numeric(self.df[target_col], errors='coerce')
@@ -1852,14 +1828,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
-
-
     def ardc(self, date_ranges, target_col, new_col_name):
         """APPEND::[d.ardc('2024-01-01,2024-02-01,2024-03-01', 'date_column', 'new_date_classification')] Append ranged date classification column."""
         if self.df is not None:
             date_list = [pd.to_datetime(date) for date in date_ranges.split(',')]
-            labels = [f"{date_list[i].strftime('%Y-%m-%d')} to {date_list[i+1].strftime('%Y-%m-%d')}" for i in range(len(date_list) - 1)]
+            labels = [f"{date_list[i].strftime('%Y-%m-%d')} to {date_list[i + 1].strftime('%Y-%m-%d')}" for i in range(len(date_list) - 1)]
             self.df[new_col_name] = pd.cut(pd.to_datetime(self.df[target_col]), bins=date_list, labels=labels, right=False)
             self.pr()
         else:
@@ -1939,7 +1912,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         """JOINS::[d.uj(d2)] Union join."""
         if not isinstance(other, type(self)):
             raise TypeError("The 'other' parameter must be an instance of the same class")
-       
+
         # Debug before operation
         print(f"self.df before join: {type(self.df)}, columns: {self.df.columns.tolist()}")
         print(f"other.df before join: {type(other.df)}, columns: {other.df.columns.tolist()}")
@@ -1948,7 +1921,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         if self.df is None and other.df is None:
             raise ValueError("Both instances must contain a DataFrame or be empty")
-        
+
         if self.df is None or self.df.empty:
             self.df = other.df
         elif other.df is None or other.df.empty:
@@ -1957,28 +1930,27 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Ensure both DataFrames have the same columns before concat
             if set(self.df.columns) != set(other.df.columns):
                 raise ValueError("Both DataFrames must have the same columns for a union join")
-            
+
             try:
                 # Perform the union join using concat and drop_duplicates
                 # Including debug print
                 print("Attempting concat...")
                 self.df = pd.concat([self.df, other.df], ignore_index=True)
                 print("After concat\n", self.df.head())
-                
+
                 # Ensure no lists are being set as the index or within the data
                 self.df.index = range(len(self.df))
                 self.df.drop_duplicates(inplace=True)
             except Exception as e:
                 print(f"An error occurred during union join: {e}")
-        
+
         # Debug after operation
         print(f"self.df after join: {type(self.df)}")
         print(self.df.head())
-        
+
         self.pr()
         gc.collect()
         return self
-
 
     def buj(self, other):
         """JOINS::[d.buj(d2)] Bag union join (does not drop duplicates)."""
@@ -2029,7 +2001,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-
     def rnc(self, rename_pairs):
         """TINKER::[d.rnc({'old_col1': 'new_col1', 'old_col2': 'new_col2'})] Rename columns."""
         if self.df is not None:
@@ -2039,7 +2010,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise ValueError("No DataFrame to rename columns. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
-
 
     def ie(self):
         """INSPECT::[d.ie()] Is empty. Returns boolean, not chainable."""
@@ -2078,22 +2048,22 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 asc_order.append(True)
 
         # Debug prints to inspect parsed inputs
-        #print("Column Names after parsing:", col_names)
-        #print("Ascending Order after parsing:", asc_order)
+        # print("Column Names after parsing:", col_names)
+        # print("Ascending Order after parsing:", asc_order)
 
         if self.df is not None:
             try:
                 # Check if all parsed columns are in the DataFrame
-                #print("DataFrame columns:", self.df.columns.tolist())
+                # print("DataFrame columns:", self.df.columns.tolist())
                 for name in col_names:
                     if name not in self.df.columns:
                         raise ValueError(f"Column {name} not found in DataFrame")
 
-                #print("Before Sorting - self.df type:", type(self.df))
-                #print(self.df.head())
+                # print("Before Sorting - self.df type:", type(self.df))
+                # print(self.df.head())
                 self.df = self.df.sort_values(by=col_names, ascending=asc_order)
-                #print("After Sorting - self.df:")
-                #print(self.df.head())
+                # print("After Sorting - self.df:")
+                # print(self.df.head())
             except Exception as e:
                 print(f"An error occurred during sorting: {e}")
             self.pr()
@@ -2101,7 +2071,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print("DataFrame is not initialized.")
 
         return self
-
 
     def axl(self, ratio_str):
         """PREDICT::[d.axl('70:20:10')] Append XGB training labels based on a ratio string."""
@@ -2112,24 +2081,24 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             # Calculate the number of rows for each label
             total_rows = len(self.df)
-            
+
             if len(ratios) == 2:
                 # TRAIN:TEST scenario
                 train_rows = (ratios[0] * total_rows) // total_ratio
                 test_rows = total_rows - train_rows
-                
+
                 # Assign labels
                 labels = ['TRAIN'] * train_rows + ['TEST'] * test_rows
-                
+
             elif len(ratios) == 3:
                 # TRAIN:VALIDATE:TEST scenario
                 train_rows = (ratios[0] * total_rows) // total_ratio
                 validate_rows = (ratios[1] * total_rows) // total_ratio
                 test_rows = total_rows - train_rows - validate_rows
-                
+
                 # Assign labels
                 labels = ['TRAIN'] * train_rows + ['VALIDATE'] * validate_rows + ['TEST'] * test_rows
-                
+
             else:
                 raise ValueError("Invalid ratio string format. Use 'TRAIN:TEST' or 'TRAIN:VALIDATE:TEST'.")
 
@@ -2154,7 +2123,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Separate data into TRAIN, VALIDATE (if present), and TEST sets
             train_data = self.df[self.df['XGB_TYPE'] == 'TRAIN']
             validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE'] if 'VALIDATE' in self.df['XGB_TYPE'].values else None
-            test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
+            # test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
 
             # Prepare DMatrix for XGBoost with enable_categorical parameter
             dtrain = xgb.DMatrix(train_data[features], label=train_data[target_col], enable_categorical=True)
@@ -2163,15 +2132,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             if validate_data is not None:
                 dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
                 evals.append((dvalidate, 'validate'))
-            
-            dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
+
+            # dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
 
             # Train the XGBoost model
             params = {
                 'objective': 'reg:squarederror',
                 'eval_metric': 'rmse'
             }
-            
+
             if validate_data is not None:
                 model = xgb.train(params, dtrain, num_boost_round=boosting_rounds, evals=evals, early_stopping_rounds=10)
             else:
@@ -2209,7 +2178,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Separate data into TRAIN, VALIDATE (if present), and TEST sets
             train_data = self.df[self.df['XGB_TYPE'] == 'TRAIN']
             validate_data = self.df[self.df['XGB_TYPE'] == 'VALIDATE'] if 'VALIDATE' in self.df['XGB_TYPE'].values else None
-            test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
+            # test_data = self.df[self.df['XGB_TYPE'] == 'TEST']
 
             # Prepare DMatrix for XGBoost with enable_categorical parameter
             dtrain = xgb.DMatrix(train_data[features], label=train_data[target_col], enable_categorical=True)
@@ -2219,7 +2188,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 dvalidate = xgb.DMatrix(validate_data[features], label=validate_data[target_col], enable_categorical=True)
                 evals.append((dvalidate, 'validate'))
 
-            dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
+            # dtest = xgb.DMatrix(test_data[features], enable_categorical=True)
 
             # Train the XGBoost model
             params = {
@@ -2285,7 +2254,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             img.show()
         except Exception as e:
             print(f"Failed to open image: {e}")
-        
+
         return self
 
     def pdist(self, y, save_path=None):
@@ -2306,7 +2275,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         for i, y_column in enumerate(y, 1):
             if y_column not in self.df.columns:
                 raise ValueError(f"Column '{y_column}' not found in data frame.")
-            
+
             plt.subplot(num_columns, 1, i)
             self.df[y_column].hist(bins=30, alpha=0.7)
             plt.xlabel(y_column)
@@ -2333,7 +2302,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
-
     def pqq(self, y, save_path=None):
         """PLOT::[d.pqq(y='Column1, Column2, Column3')] Plot Q-Q plots for the specified columns. Optional param: image_save_path (str)"""
         if isinstance(y, str):
@@ -2352,7 +2320,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         for i, y_column in enumerate(y, 1):
             if y_column not in self.df.columns:
                 raise ValueError(f"Column '{y_column}' not found in data frame.")
-            
+
             plt.subplot(num_columns, 1, i)
             stats.probplot(self.df[y_column], dist="norm", plot=plt)
             plt.title(f'Q-Q Plot of {y_column}')
@@ -2409,15 +2377,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         plt.close()
 
-        
         # Attempt to open and display the saved image
-        
+
         try:
             img = Image.open(save_path)
             img.show()
         except Exception as e:
             print(f"Failed to open image: {e}")
-        
 
         return self
 
@@ -2493,7 +2459,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             plt.close()
             plots.append(temp_file.name)
 
-
         def combine_and_show_plots(plot_files):
             images = [Image.open(file) for file in plot_files]
             widths, heights = zip(*(img.size for img in images))
@@ -2551,7 +2516,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             combine_and_show_plots(plots)
 
-        plots = []
+        # plots = []
 
         if self.df is not None:
             # Select the features for clustering
@@ -2560,7 +2525,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             # Determine the optimal number of clusters if required
             n_clusters = None
-            if n_clusters_finding_method == None:
+            if n_clusters_finding_method is None:
                 n_clusters_finding_method = 'ELBOW'
             optimal_method = parse_optimal_clustering_method(n_clusters_finding_method)
             if isinstance(optimal_method, int):
@@ -2585,7 +2550,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 self.df[cluster_column_name] = perform_birch(X, n_clusters)
             else:
                 raise ValueError("Operation must be one of 'KMEANS', 'AGGLOMERATIVE', 'MEAN_SHIFT', 'GMM', 'SPECTRAL', or 'BIRCH'")
-            
+
             if visualize:
                 plot_cluster_analysis(X, feature_list, cluster_column_name, operation)
 
@@ -2594,8 +2559,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise ValueError("No DataFrame to append a cluster analysis column. Please load a file first using the frm or frml method.")
         gc.collect()
         return self
-
-
 
     def adbscancc(self, features, cluster_column_name, eps, min_samples, visualize=True):
         """APPEND::[d.adbscancc('Column1,Column2', 'new_cluster_column_name', eps=0.5, min_samples=5, visualize=True)] Append DBSCAN cluster column. Optional: visualize (boolean)."""
@@ -2608,7 +2571,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             plt.savefig(temp_file.name, bbox_inches='tight')
             plt.close()
             plots.append(temp_file.name)
-
 
         def combine_and_show_plots(plot_files):
             images = [Image.open(file) for file in plot_files]
@@ -2663,7 +2625,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             combine_and_show_plots(plots)
 
-        plots = []
+        # plots = []
 
         if self.df is not None:
             # Select the features for clustering
@@ -2671,7 +2633,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             X = self.df[feature_list]
 
             self.df[cluster_column_name] = perform_dbscan(X, eps, min_samples)
-           
+
             if visualize:
                 plot_cluster_analysis(X, feature_list, cluster_column_name)
 
@@ -2683,7 +2645,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def pnfc(self, n, columns, order_by="FREQ_DESC"):
         """INSPECT::[d.pnfc(5,'Column1,Columns')] Print n frequency cascading. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)"""
-        
+
         # Split columns string into a list
         columns = [col.strip() for col in columns.split(",")]
 
@@ -2734,8 +2696,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     }
 
             return report
-
-
 
         def sort_frequency(frequency, order_by):
             if order_by == "ASC":
@@ -2878,7 +2838,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             }
             batch_input_data.append(request_data)
 
-        #print(batch_input_data)
+        # print(batch_input_data)
 
         # Write the batch input data to a .jsonl file
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
@@ -2949,10 +2909,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         # Return self for method chaining
         return self
 
-
     def oaibc(self, batch_id):
         """OPENAI::[d.oaibc('batch_id_to_cancel')] OpenAI batch cancel. Cancel a batch and print its status."""
-        
+
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
@@ -3082,7 +3041,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         def download_output_file(output_file_id, open_ai_key):
             client = OpenAI(api_key=open_ai_key)
-            
+
             # Retrieve the file metadata
             file_metadata = client.files.retrieve(output_file_id)
             print(file_metadata)
@@ -3394,7 +3353,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         self.pr()
         return self
 
-    def ltatc(self, url_column, transcription_column, classify=None, openai_whisper_model_name='base',classifications_model='roberta-large-mnli'):
+    def ltatc(self, url_column, transcription_column, classify=None, openai_whisper_model_name='base', classifications_model='roberta-large-mnli'):
         """LOCAL_TRANSFORMERS::[d.ltatc('audio_url_column_name','transcriptions_new_column_name', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], openai_whisper_model_name = 'base', classifications_model='roberta-large-mnli')] Local transformer append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, openai_whisper_model_name (default is base, options: tiny, base, small, medium, large, large-v2, large-v3), classifications_model (default is roberta-large-mnli, other hugging face options: facebook/bart-large-mnli)"""
 
         def locate_config_file(filename="rgwml.config"):
@@ -3414,9 +3373,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             return config.get(key_name)
 
         def transcribe_audio(file_path, openai_whisper_model_name):
-            #options = {"task": "translate"}
+            # options = {"task": "translate"}
             model = whisper.load_model(openai_whisper_model_name)
-            #result = model.transcribe(file_path, **options)
+            # result = model.transcribe(file_path, **options)
             result = model.transcribe(file_path)
             return result["text"]
 
@@ -3442,12 +3401,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             except Exception as e:
                 return None, {}, str(e)
 
-        open_ai_key = load_key('open_ai_key')
-        client = OpenAI(api_key=open_ai_key)
+        # open_ai_key = load_key('open_ai_key')
+        # client = OpenAI(api_key=open_ai_key)
 
         async def process_url(session, url, classify_labels):
             # Ensure ffmpeg is available
-            #iio_ffmpeg.get_ffmpeg_version()
+            # iio_ffmpeg.get_ffmpeg_version()
 
             # Suppress specific warnings
             warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
@@ -3646,7 +3605,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             for text in texts:
                 text_string = f"{text}"
                 scores = classify_emotion(text_string)
-                #print(scores)  # For debugging
+                # print(scores)  # For debugging
                 for score in scores:
                     emotion_scores[score['label']].append(score['score'])
                 pbar.update(1)
@@ -3694,7 +3653,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 response_format={"type": "json_object"},
                 messages=messages
             )
-            #print(improvement_response)
+            # print(improvement_response)
 
             # Parse the response
             improved_transcription_content = improvement_response.choices[0].message.content
@@ -3716,15 +3675,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 response_format={"type": "json_object"},
                 messages=messages
             )
-            #print(label_response)
-
+            # print(label_response)
 
             label_content = label_response.choices[0].message.content
             label = json.loads(label_content)["label"]
 
-
             return label
-
 
         def get_classifications(flow, classify, client, json_mode_model):
             labels_dict = {}
@@ -3904,7 +3860,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         summaries = []
         all_labels = {list(classification.keys())[0]: [] for classification in classify} if classify else {}
         for result in results:
-            #print(result)
+            # print(result)
             transcription, labels_dict, summary, flow, url, error = result
             if error:
                 print(f"Failed to process {url}: {error}")

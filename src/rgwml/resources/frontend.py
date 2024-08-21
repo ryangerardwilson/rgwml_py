@@ -4,18 +4,17 @@ import shutil
 import json
 import requests
 from google.cloud import storage
-import google.auth
-
-# Import the generated frontend assets
 from .frontend_assets import *
+
 
 def create_nextjs_project(project_path, use_src):
     src_flag = '--src-dir' if use_src else ''
-    subprocess.run(['npx', 'create-next-app@latest', project_path, '--typescript', '--eslint', '--tailwind', '--app','--no-import-alias', src_flag], check=True)
+    subprocess.run(['npx', 'create-next-app@latest', project_path, '--typescript', '--eslint', '--tailwind', '--app', '--no-import-alias', src_flag], check=True)
     os.chdir(project_path)
-    subprocess.run(['npm', 'install', '-D', 'tailwindcss', 'postcss', 'autoprefixer','papaparse'], check=True)
-    subprocess.run(['npm','i','--save-dev','@types/papaparse'],check=True)
+    subprocess.run(['npm', 'install', '-D', 'tailwindcss', 'postcss', 'autoprefixer', 'papaparse'], check=True)
+    subprocess.run(['npm', 'i', '--save-dev', '@types/papaparse'], check=True)
     subprocess.run(['npx', 'tailwindcss', 'init', '-p'], check=True)
+
 
 def configure_tailwind(use_src):
     content_paths = [
@@ -48,6 +47,7 @@ module.exports = {{
     with open(os.path.join(styles_dir, 'globals.css'), 'w') as f:
         f.write(globals_css)
 
+
 def remove_conflicting_files(project_path):
     if os.path.exists(project_path):
         try:
@@ -56,10 +56,12 @@ def remove_conflicting_files(project_path):
             print(f"Error removing directory {project_path}: {e}")
     os.makedirs(project_path, exist_ok=True)
 
+
 def remove_src_directory(project_path):
     src_dir = os.path.join(project_path, 'src')
     if os.path.exists(src_dir):
         shutil.rmtree(src_dir)  # Remove the entire src directory
+
 
 def create_env_file(project_path, api_host, open_ai_key, open_ai_json_mode_model, apk_url):
     env_content = f"""
@@ -71,9 +73,11 @@ NEXT_PUBLIC_APK_URL={apk_url}
     with open(os.path.join(project_path, '.env'), 'w') as f:
         f.write(env_content)
 
+
 def to_camel_case(snake_str):
     components = snake_str.split('_')
     return components[0].lower() + ''.join(x.title() for x in components[1:])
+
 
 def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKEN, project_name, NETLIFY_TOKEN, domain_name):
     base_domain = ".".join(domain_name.split(".")[-2:])
@@ -223,7 +227,7 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
                 if project_id:
                     url = f"https://api.vercel.com/v9/projects/{project_id}/domains"
                     response = requests.post(url, headers=headers, json=data)
-            
+
             if response.status_code == 409 and response.json().get("error", {}).get("code") == "domain_already_in_use":
                 existing_project_id = response.json()["error"]["projectId"]
                 remove_custom_domain_from_vercel(existing_project_id, domain_name)
@@ -273,11 +277,9 @@ def deploy_project(location_of_next_project_in_local_machine, VERCEL_ACCESS_TOKE
 
 def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url):
 
-
     # Get all modal names
-    #modals = ','.join(modal_backend_config.get('modals', {}).keys())
-    #print("Modals:", modals)
-
+    # modals = ','.join(modal_backend_config.get('modals', {}).keys())
+    # print("Modals:", modals)
 
     use_src = True
 
@@ -349,8 +351,6 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
     with open(modal_config_file_path, 'w') as f:
         f.write(tsx_content)
 
-
-
     search_phrase_2 = "export const config"
     value_2 = globals()["ROOT__FILE__MIDDLEWARE__TSX"]
     value_2 = value_2.replace('{{', '{').replace('}}', '}')
@@ -367,10 +367,8 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
     with open(middleware_file_path, 'w') as f:
         f.write(tsx_content_2)
 
-    #subprocess.run(['npm', 'run', 'dev'], check=True)
+    # subprocess.run(['npm', 'run', 'dev'], check=True)
 
-
-    
     deploy_project(
         location_of_next_project_in_local_machine=frontend_local_deploy_path,
         VERCEL_ACCESS_TOKEN=vercel_key,
@@ -378,7 +376,7 @@ def create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path,
         NETLIFY_TOKEN=netlify_key,
         domain_name=frontend_domain,
     )
-    
+
 
 def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version):
 
@@ -403,7 +401,7 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
             else:
                 bucket = client.bucket(bucket_name)
                 print(f"Bucket '{bucket_name}' already exists.")
-            
+
             # Define the content of the VERSION.json file
             version_info = {
                 "version": version,
@@ -426,7 +424,6 @@ def create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, 
         except Exception as e:
             print(f"An error occurred: {str(e)}")
             return None
-
 
     def remove_existing_directory(path):
         if os.path.exists(path):
@@ -492,7 +489,7 @@ flutter_icons:
             '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>',
             '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>'
         ]
-        
+
         for line in permissions:
             if line not in lines:
                 lines.insert(1, line + '\n')
@@ -539,7 +536,7 @@ include ":app"
         with open(settings_gradle_path, 'w') as file:
             file.write(new_content.strip())
 
-        print(f"Updated settings.gradle to use the specified content.")
+        print("Updated settings.gradle to use the specified content.")
 
     def add_modal_config_to_main_dart_file(frontend_flutter_app_path, modal_frontend_config):
         def convert_to_dart_bool(value):
@@ -621,8 +618,6 @@ include ":app"
 
         print(f"Generated main.dart at {main_dart_path}")
 
-
-
     def add_my_app_class_to_main_dart(frontend_flutter_app_path, version, project_name, version_url, backend_domain, open_ai_json_mode_model, open_ai_key):
         my_app_class = f"""
 class MyApp extends StatelessWidget {{
@@ -662,28 +657,26 @@ class MyApp extends StatelessWidget {{
 
     def run_flutter_launcher_icons_commands(frontend_flutter_app_path):
         os.chdir(frontend_flutter_app_path)
-        
+
         result = subprocess.run(['flutter', 'pub', 'get'], capture_output=True, text=True)
         if result.returncode == 0:
             print("Successfully ran 'flutter pub get'")
         else:
             print(f"Error running 'flutter pub get': {result.stderr}")
-            
+
         result = subprocess.run(['flutter', 'pub', 'run', 'flutter_launcher_icons'], capture_output=True, text=True)
         if result.returncode == 0:
             print("Successfully ran 'flutter pub run flutter_launcher_icons'")
         else:
             print(f"Error running 'flutter pub run flutter_launcher_icons': {result.stderr}")
 
-
-
-    #print(project_name, frontend_local_deploy_path, host, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model)
+    # print(project_name, frontend_local_deploy_path, host, backend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model)
     variables = {
         "project_name": project_name,
         "frontend_flutter_app_path": frontend_flutter_app_path,
         "backend_domain": backend_domain,
         "modals": modals,
-        #"modal_backend_config": modal_backend_config,
+        # "modal_backend_config": modal_backend_config,
         "modal_frontend_config": modal_frontend_config,
         "open_ai_key": open_ai_key,
         "open_ai_json_mode_model": open_ai_json_mode_model,
@@ -701,51 +694,49 @@ class MyApp extends StatelessWidget {{
             # Step 1: Build the release APK
             print("Building the release APK...")
             subprocess.run(
-                ['flutter', 'build', 'apk', '--release'], 
-                cwd=frontend_flutter_app_path, 
+                ['flutter', 'build', 'apk', '--release'],
+                cwd=frontend_flutter_app_path,
                 check=True
             )
             print("Release APK built successfully.")
-            
+
             # Path to the generated APK file
             apk_path = f"{frontend_flutter_app_path}/build/app/outputs/flutter-apk/app-release.apk"
             apk_blob_name = "app-release.apk"
-            
+
             # Step 2: Upload the release APK to the bucket
             print("Uploading the release APK to the bucket...")
             client = storage.Client.from_service_account_json(cloud_storage_credential_path)
             bucket = client.bucket(cloud_storage_bucket_name)
-            
+
             blob = bucket.blob(apk_blob_name)
             blob.upload_from_filename(apk_path)
-            
+
             # Make the blob public
             blob.make_public()
-            
+
             apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/{apk_blob_name}"
             print(f"Release APK uploaded to '{apk_url}'.")
-            
+
             # Step 3: Update the VERSION.json with the new APK URL
             print("Updating VERSION.json with new APK URL...")
             version_blob = bucket.blob('VERSION.json')
-            
+
             version_info_json = version_blob.download_as_text()
             version_info = json.loads(version_info_json)
-            
+
             version_info["apk_url"] = apk_url
-            
+
             updated_version_info_json = json.dumps(version_info)
             version_blob.upload_from_string(updated_version_info_json, content_type='application/json')
-            
+
             print(f"VERSION.json updated with new APK URL in bucket '{project_name}'.")
             return apk_url
-            
+
         except subprocess.CalledProcessError as e:
             print(f"An error occurred while building the release APK: {str(e)}")
         except Exception as e:
             print(f"An error occurred: {str(e)}")
-
-
 
     # STEP 1: Create a GCS bucket by the project_name, to store the APK that would eventually be created along with the version.json file
     version_url = create_public_bucket_if_not_exists_and_upload_version(cloud_storage_credential_path, cloud_storage_bucket_name, version)
@@ -767,6 +758,7 @@ class MyApp extends StatelessWidget {{
     apk_url = build_and_upload_release_apk_and_update_version(cloud_storage_credential_path, cloud_storage_bucket_name, frontend_flutter_app_path, version)
     return apk_url
 
+
 def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config):
 
     modal_backend_config['modals']['users'] = {
@@ -784,9 +776,9 @@ def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_
             "conditional_options": {},
             "scopes": {
                 "create": True,
-                "read": ["id","username","password","type", "created_at","updated_at"],
-                "read_summary": ["id","username","password","type"],
-                "update": ["username","password","type"],
+                "read": ["id", "username", "password", "type", "created_at", "updated_at"],
+                "read_summary": ["id", "username", "password", "type"],
+                "update": ["username", "password", "type"],
                 "delete": True
             },
             "validation_rules": {
@@ -830,21 +822,19 @@ def update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_
 
     return modal_frontend_config
 
-def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, cloud_storage_bucket_name, version, deploy_web, deploy_flutter):
 
+def main(project_name, frontend_local_deploy_path, frontend_flutter_app_path, host, backend_domain, frontend_domain, modals, modal_backend_config, non_user_modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, cloud_storage_credential_path, cloud_storage_bucket_name, version, deploy_web, deploy_flutter):
 
     modal_frontend_config = update_modal_frontend_config_with_user_modal(modal_backend_config, non_user_modal_frontend_config)
 
-    
     if deploy_flutter:
         apk_url = create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
-        #print(apk_url)
+        # print(apk_url)
 
     if deploy_web:
         apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
         create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
-    
-    #apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
-    #create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
-    #create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)
 
+    # apk_url = f"https://storage.googleapis.com/{cloud_storage_bucket_name}/app-release.apk"
+    # create_and_deploy_flutter_frontend(project_name, frontend_flutter_app_path, backend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, cloud_storage_credential_path, cloud_storage_bucket_name, version)
+    # create_and_deploy_next_js_frontend(project_name, frontend_local_deploy_path, host, backend_domain, frontend_domain, modals, modal_frontend_config, open_ai_key, open_ai_json_mode_model, netlify_key, vercel_key, apk_url)

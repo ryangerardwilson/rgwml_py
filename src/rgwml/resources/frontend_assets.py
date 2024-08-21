@@ -73,7 +73,7 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
   }}, [rowData, columns]);
 
   const evalCondition = useCallback((condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+    const conditionToEvaluate = condition.replace(/(\\w+)/g, (match) => {{
       if (formData.hasOwnProperty(match)) {{
         return `formData['${{match}}']`;
       }}
@@ -377,10 +377,10 @@ export const getUserIDFromCookies = (): string | undefined => {{
 
 
 export const fetchData = async (
-  apiHost: string, 
-  modal: string, 
-  routeKey: string, 
-  setData: React.Dispatch<React.SetStateAction<any[]>>, 
+  apiHost: string,
+  modal: string,
+  routeKey: string,
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
   setColumns: React.Dispatch<React.SetStateAction<any[]>>
 ) => {{
 
@@ -474,14 +474,14 @@ DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dat
     // Return the original value if the input is not a valid date string
     return dateTime;
   }}
-  
+
   const year = date.getFullYear();
   const month = ('0' + (date.getMonth() + 1)).slice(-2);
   const day = ('0' + date.getDate()).slice(-2);
   const hours = ('0' + date.getHours()).slice(-2);
   const minutes = ('0' + date.getMinutes()).slice(-2);
   const seconds = ('0' + date.getSeconds()).slice(-2);
-  
+
   return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
 }};
 
@@ -1091,7 +1091,7 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
   }}, [columns]);
 
   const evalCondition = useCallback((condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
+    const conditionToEvaluate = condition.replace(/(\\w+)/g, (match) => {{
       if (formData.hasOwnProperty(match)) {{
         return `formData['${{match}}']`;
       }}
@@ -1382,9 +1382,9 @@ export async function handleCreateOperation(apiHost: string, modal: string, file
     // Filter out unwanted columns
     const unwantedColumns = ['id', 'user_id', 'created_at', 'updated_at'];
     const columns = Object.keys(firstRow).filter(col => !unwantedColumns.includes(col));
-    
+
     // Filter out unwanted data from each row
-    const bulkValues = parsedData.data.map((row: any) => 
+    const bulkValues = parsedData.data.map((row: any) =>
       columns.map(column => row[column])
     );
 
@@ -1565,12 +1565,12 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                     break; // Skip this rule if the field is not required and value is empty
                 }}
                 const uniqueDigits = new Set(value.split('')).size;
-                if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
+                if (!/^[6789]\\d{{9}}$/.test(value) || uniqueDigits < 4) {{
                     return `${{field}} must be a valid Indian mobile number.`;
                 }}
                 break;
             case 'IS_YYYY-MM-DD':
-                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 break;
@@ -1578,7 +1578,7 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                 if (!isRequired && !value) {{
                     break; // Skip this rule if the field is not required and value is empty
                 }}
-                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 if (new Date(value) <= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
@@ -1589,7 +1589,7 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                 if (!isRequired && !value) {{
                     break; // Skip this rule if the field is not required and value is empty
                 }}
-                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
+                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 if (new Date(value) >= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
@@ -1899,7 +1899,7 @@ const BulkOperationsForm: React.FC = () => {{
 
 const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
   event.preventDefault();
-  
+
   const missingFields = validateForm();
   if (missingFields.length > 0) {{
     alert(`Please fill all required fields: ${{missingFields.join(', ')}}`);
@@ -1916,7 +1916,7 @@ const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
     alert('API host and modal must be selected.');
     return;
   }}
-  
+
   try {{
     if (operation === 'read') {{
       await handleReadOperation(apiHost, modal, timeLimit || '');
@@ -2301,4 +2301,3 @@ export function middleware(request: NextRequest) {{
 export const config = {{
   matcher: ['/', '/login','/users','/customers','/partners'],
 }};'''
-
