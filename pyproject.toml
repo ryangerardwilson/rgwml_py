@@ -44,9 +44,7 @@ dependencies = [
     "openai",
     "filetype",
     "tqdm",
-    "lxml_html_clean",
     "requests-html",
-    "torch",
     "transformers",
     "openai-whisper",
 ]
