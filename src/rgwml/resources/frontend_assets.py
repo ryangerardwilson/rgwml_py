@@ -73,7 +73,7 @@ const EditModal: React.FC<EditModalProps> = ({{ modalName, apiHost, columns, row
   }}, [rowData, columns]);
 
   const evalCondition = useCallback((condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\\w+)/g, (match) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
       if (formData.hasOwnProperty(match)) {{
         return `formData['${{match}}']`;
       }}
@@ -353,6 +353,7 @@ export default EditModal;'''
 
 DIR__COMPONENTS__FILE__CRUD_UTILS__TSX = '''// src/components/crudUtils.tsx
 import modalConfig from './modalConfig';
+import {{ NextRouter }} from 'next/router';
 
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {{
   setCreateModalOpen(true);
@@ -403,8 +404,7 @@ export const fetchData = async (
   }}
 }};
 
-
-export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number) => {{
+export const handleDelete = async (router: NextRouter, apiHost: string, modal: string, id: number, userId: number) => {{
   try {{
     const response = await fetch(`${{apiHost}}delete/${{modal}}/${{id}}`, {{
       method: 'DELETE',
@@ -414,17 +414,17 @@ export const handleDelete = async (apiHost: string, modal: string, id: number, u
       body: JSON.stringify({{ user_id: userId }}),
     }});
     const result = await response.json();
-    /*
+
     if (result.status === 'success') {{
-      setData(data.filter((row: any) => row[0] !== id));
+      alert('Record deleted successfully');
+      router.reload(); // Refresh the page after a successful deletion
+    }} else {{
+      console.error('Failed to delete data:', result);
     }}
-    */
   }} catch (error) {{
     console.error('Error deleting data:', error);
   }}
 }};
-
-
 
 export const handleEdit = (
   row: {{ [key: string]: any }},
@@ -474,14 +474,14 @@ DIR__COMPONENTS__FILE__FORMAT_UTILS__TSX = '''export const formatDateTime = (dat
     // Return the original value if the input is not a valid date string
     return dateTime;
   }}
-
+  
   const year = date.getFullYear();
   const month = ('0' + (date.getMonth() + 1)).slice(-2);
   const day = ('0' + date.getDate()).slice(-2);
   const hours = ('0' + date.getHours()).slice(-2);
   const minutes = ('0' + date.getMinutes()).slice(-2);
   const seconds = ('0' + date.getSeconds()).slice(-2);
-
+  
   return `${{year}}-${{month}}-${{day}} ${{hours}}:${{minutes}}:${{seconds}}`;
 }};
 
@@ -530,6 +530,7 @@ DIR__COMPONENTS__FILE__SEARCH_UTILS__TSX = '''export const handleSearchSubmit = 
 }};'''
 
 DIR__COMPONENTS__FILE__DYNAMIC_TABLE__TSX = '''import React, {{ useState, useEffect, useMemo, useCallback }} from 'react';
+import {{ useRouter }} from 'next/router';
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
 import SearchInput from './SearchInput';
@@ -545,6 +546,7 @@ interface DynamicTableProps {{
 const DynamicTable: React.FC<DynamicTableProps> = ({{ modal }}) => {{
 
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+  const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
@@ -603,7 +605,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ modal }}) => {{
 
   return (
     <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
-      <div className="mb-4">
+      <div className="mb-4"> 
         {{readRoutes.length > 0 && (
           <div className="flex space-x-4">
             {{readRoutes.map((route) => (
@@ -673,9 +675,9 @@ const DynamicTable: React.FC<DynamicTableProps> = ({{ modal }}) => {{
                   </button>
                   {{modalConfig[modal]?.scopes.delete && (
                     <button
-                      onClick={{() => handleDelete(apiHost as string, modal, row[0], row[1])}}
+                      onClick={{() => handleDelete(router, apiHost as string, modal, row[0], row[1])}}
                       className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
-                    >
+                    > 
                       Delete
                     </button>
                   )}}
@@ -1091,7 +1093,7 @@ const CreateModal: React.FC<CreateModalProps> = ({{ modalName, apiHost, columns,
   }}, [columns]);
 
   const evalCondition = useCallback((condition: string) => {{
-    const conditionToEvaluate = condition.replace(/(\\w+)/g, (match) => {{
+    const conditionToEvaluate = condition.replace(/(\w+)/g, (match) => {{
       if (formData.hasOwnProperty(match)) {{
         return `formData['${{match}}']`;
       }}
@@ -1382,9 +1384,9 @@ export async function handleCreateOperation(apiHost: string, modal: string, file
     // Filter out unwanted columns
     const unwantedColumns = ['id', 'user_id', 'created_at', 'updated_at'];
     const columns = Object.keys(firstRow).filter(col => !unwantedColumns.includes(col));
-
+    
     // Filter out unwanted data from each row
-    const bulkValues = parsedData.data.map((row: any) =>
+    const bulkValues = parsedData.data.map((row: any) => 
       columns.map(column => row[column])
     );
 
@@ -1565,12 +1567,12 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                     break; // Skip this rule if the field is not required and value is empty
                 }}
                 const uniqueDigits = new Set(value.split('')).size;
-                if (!/^[6789]\\d{{9}}$/.test(value) || uniqueDigits < 4) {{
+                if (!/^[6789]\d{{9}}$/.test(value) || uniqueDigits < 4) {{
                     return `${{field}} must be a valid Indian mobile number.`;
                 }}
                 break;
             case 'IS_YYYY-MM-DD':
-                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 break;
@@ -1578,7 +1580,7 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                 if (!isRequired && !value) {{
                     break; // Skip this rule if the field is not required and value is empty
                 }}
-                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 if (new Date(value) <= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
@@ -1589,7 +1591,7 @@ DIR__COMPONENTS__FILE__VALIDATION_UTILS__TSX = '''export const validateField = (
                 if (!isRequired && !value) {{
                     break; // Skip this rule if the field is not required and value is empty
                 }}
-                if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(value)) {{
+                if (!/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(value)) {{
                     return `${{field}} must be in YYYY-MM-DD format.`;
                 }}
                 if (new Date(value) >= new Date(new Date().toDateString())) {{ // Ensure only the date part is compared
@@ -1899,7 +1901,7 @@ const BulkOperationsForm: React.FC = () => {{
 
 const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
   event.preventDefault();
-
+  
   const missingFields = validateForm();
   if (missingFields.length > 0) {{
     alert(`Please fill all required fields: ${{missingFields.join(', ')}}`);
@@ -1916,7 +1918,7 @@ const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {{
     alert('API host and modal must be selected.');
     return;
   }}
-
+  
   try {{
     if (operation === 'read') {{
       await handleReadOperation(apiHost, modal, timeLimit || '');
@@ -2301,3 +2303,4 @@ export function middleware(request: NextRequest) {{
 export const config = {{
   matcher: ['/', '/login','/users','/customers','/partners'],
 }};'''
+

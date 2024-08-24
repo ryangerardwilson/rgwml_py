@@ -264,10 +264,10 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            # database = db_preset.get('database', '')
+            database = db_preset['database']
 
             # client = ClickHouseClient(host=host, user=username, password=password, database=database)
-            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
+            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password, database=database)
             data = client.query(query)
             rows = data.result_rows
             columns = data.column_names

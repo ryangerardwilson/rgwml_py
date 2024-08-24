@@ -371,7 +371,7 @@ def update_entry(modal_name, entry_id):
         return {{"error": f"Modal {{modal_name}} not found in modal_map"}}
 
     columns_str = modal_details.get('columns', '')
-    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at', 'username']]
+    columns = [col for col in columns_str.split(",") if col not in ['id', 'created_at', 'updated_at']]
 
     set_clauses = []
     params = []

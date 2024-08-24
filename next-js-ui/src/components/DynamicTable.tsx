@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/router';
 import CreateModal from './CreateModal';
 import EditModal from './EditModal';
 import SearchInput from './SearchInput';
@@ -14,6 +15,7 @@ interface DynamicTableProps {
 const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
 
   const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+  const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
@@ -72,7 +74,7 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
 
   return (
     <div className="bg-black border border-yellow-100/30 rounded-lg text-yellow-100 p-4 text-sm">
-      <div className="mb-4">
+      <div className="mb-4"> 
         {readRoutes.length > 0 && (
           <div className="flex space-x-4">
             {readRoutes.map((route) => (
@@ -142,9 +144,9 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
                   </button>
                   {modalConfig[modal]?.scopes.delete && (
                     <button
-                      onClick={() => handleDelete(apiHost as string, modal, row[0], row[1])}
+                      onClick={() => handleDelete(router, apiHost as string, modal, row[0], row[1])}
                       className="bg-black border border-yellow-100/30 text-yellow-100/50 hover:bg-yellow-100/70 hover:text-black hover:border-black py-1 px-2 rounded-lg mr-2"
-                    >
+                    > 
                       Delete
                     </button>
                   )}
@@ -208,3 +210,5 @@ const DynamicTable: React.FC<DynamicTableProps> = ({ modal }) => {
 };
 
 export default DynamicTable;
+
+

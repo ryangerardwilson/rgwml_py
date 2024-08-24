@@ -1,5 +1,6 @@
 // src/components/crudUtils.tsx
 import modalConfig from './modalConfig';
+import { NextRouter } from 'next/router';
 
 export const handleCreate = (setCreateModalOpen: (open: boolean) => void) => {
   setCreateModalOpen(true);
@@ -24,10 +25,10 @@ export const getUserIDFromCookies = (): string | undefined => {
 
 
 export const fetchData = async (
-  apiHost: string, 
-  modal: string, 
-  routeKey: string, 
-  setData: React.Dispatch<React.SetStateAction<any[]>>, 
+  apiHost: string,
+  modal: string,
+  routeKey: string,
+  setData: React.Dispatch<React.SetStateAction<any[]>>,
   setColumns: React.Dispatch<React.SetStateAction<any[]>>
 ) => {
 
@@ -50,8 +51,7 @@ export const fetchData = async (
   }
 };
 
-
-export const handleDelete = async (apiHost: string, modal: string, id: number, userId: number) => {
+export const handleDelete = async (router: NextRouter, apiHost: string, modal: string, id: number, userId: number) => {
   try {
     const response = await fetch(`${apiHost}delete/${modal}/${id}`, {
       method: 'DELETE',
@@ -61,17 +61,17 @@ export const handleDelete = async (apiHost: string, modal: string, id: number, u
       body: JSON.stringify({ user_id: userId }),
     });
     const result = await response.json();
-    /*
+
     if (result.status === 'success') {
-      setData(data.filter((row: any) => row[0] !== id));
+      alert('Record deleted successfully');
+      router.reload(); // Refresh the page after a successful deletion
+    } else {
+      console.error('Failed to delete data:', result);
     }
-    */
   } catch (error) {
     console.error('Error deleting data:', error);
   }
 };
-
-
 
 export const handleEdit = (
   row: { [key: string]: any },
@@ -109,3 +109,4 @@ export const closeEditModal = (
   }
   setEditModalOpen(false);
 };
+
