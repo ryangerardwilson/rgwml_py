@@ -1637,6 +1637,89 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
+    def tg(self, bot_name, message=None, as_file=True, remove_after_send=True):
+        """Send the DataFrame via Telegram using the specified bot name."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+
+        def get_config(config_path):
+            """Load the configuration file."""
+            with open(config_path, 'r') as file:
+                return json.load(file)
+
+        config_path = locate_config_file()
+        config = get_config(config_path)
+        
+        # Retrieve bot configuration
+        bot_config = next((bot for bot in config['telegram_bot_presets'] if bot['name'] == bot_name), None)
+        
+        if not bot_config:
+            raise ValueError(f"No bot found with the name {bot_name}")
+
+        # Prepare the DataFrame
+        if self.df is None:
+            raise ValueError("No DataFrame loaded. Please load a DataFrame first.")
+
+        if as_file:
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            file_name = f"df_{timestamp}.csv"
+
+            # Save DataFrame as a CSV file
+            self.df.to_csv(file_name, index=False)
+
+            # Send the file via Telegram Bot API
+            with open(file_name, 'rb') as file:
+                payload = {
+                    'chat_id': bot_config['chat_id'],
+                    'caption': message if message else ''
+                }
+                files = {
+                    'document': file
+                }
+                response = requests.post(
+                    f"https://api.telegram.org/bot{bot_config['bot_token']}/sendDocument",
+                    data=payload,
+                    files=files
+                )
+
+            # Remove the file after sending
+            if remove_after_send and os.path.exists(file_name):
+                os.remove(file_name)
+        else:
+            # Prepare DataFrame as string
+            df_str = self.df.to_string()
+
+            # Prepare the payload
+            payload = {
+                'chat_id': bot_config['chat_id'],
+                'text': message + "\n\n" + df_str if message else df_str,
+                'parse_mode': 'HTML'
+            }
+
+            # Send the message via Telegram Bot API
+            response = requests.post(
+                f"https://api.telegram.org/bot{bot_config['bot_token']}/sendMessage",
+                data=payload
+            )
+
+        # Check for errors
+        if not response.ok:
+            raise Exception(f"Error sending message: {response.text}")
+
+        print("Message sent successfully.")
+        return self
+
+
     def ds(self, path=None):
         """PERSIST::[d.ds('/filename/or/path')] Dask Save the DataFrame as a HDF5 or CSV file."""
         if self.df is None:
