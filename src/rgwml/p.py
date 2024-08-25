@@ -40,6 +40,7 @@ from slack_sdk import WebClient
 import sqlite3
 import subprocess
 
+
 class p:
 
     def __init__(self, df=None, source=None):
@@ -333,12 +334,10 @@ class p:
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-        # Read configuration file
         config_path = locate_config_file()
         with open(config_path, 'r') as f:
             config = json.load(f)
 
-        # Find the matching db_preset
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
         if not db_preset:
@@ -354,11 +353,9 @@ class p:
         db_path = db_preset['db_path']
 
         try:
-            # Create a temporary file to store the downloaded database
             with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
                 temp_db_file_path = temp_db_file.name
 
-            # Use scp to copy the remote SQLite database to the temporary file
             scp_command = [
                 "scp",
                 "-i", ssh_key_path,
@@ -368,11 +365,9 @@ class p:
 
             subprocess.run(scp_command, check=True)
 
-            # Connect to the downloaded SQLite database
             with sqlite3.connect(temp_db_file_path) as conn:
                 self.df = pd.read_sql_query(query, conn)
 
-            # Clean up temporary file
             os.remove(temp_db_file_path)
 
         except subprocess.CalledProcessError as e:
@@ -401,12 +396,10 @@ class p:
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-        # Read configuration file
         config_path = locate_config_file()
         with open(config_path, 'r') as f:
             config = json.load(f)
 
-        # Find the matching db_preset
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
         if not db_preset:
@@ -422,11 +415,9 @@ class p:
         db_path = db_preset['db_path']
 
         try:
-            # Create a temporary file to store the downloaded database
             with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
                 temp_db_file_path = temp_db_file.name
 
-            # Use scp to copy the remote SQLite database to the temporary file
             scp_command = [
                 "scp",
                 "-i", ssh_key_path,
@@ -439,15 +430,12 @@ class p:
             alteration_keywords = ('insert', 'update', 'delete', 'create', 'alter', 'drop', 'rename')
             alteration_query = query.strip().lower().startswith(alteration_keywords)
 
-            # Connect to the downloaded SQLite database
             with sqlite3.connect(temp_db_file_path) as conn:
                 if alteration_query:
-                    # Execute the alteration query
                     conn.execute(query)
                     conn.commit()
                     self.df = pd.DataFrame()
 
-                    # Copy the modified database file back to the remote server
                     scp_command = [
                         "scp",
                         "-i", ssh_key_path,
@@ -457,10 +445,8 @@ class p:
 
                     subprocess.run(scp_command, check=True)
                 else:
-                    # Load the query result into a DataFrame
                     self.df = pd.read_sql_query(query, conn)
 
-            # Clean up temporary file
             os.remove(temp_db_file_path)
 
         except subprocess.CalledProcessError as e:
@@ -1362,14 +1348,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-    def fslf(self, sqlite_path, query):
-        """LOAD::[d.fslf('/absolute/path/to/db.sqlite', 'SELECT * FROM tablename')] From SQLite file."""
-        self.source = os.path.abspath(sqlite_path)  # Set the source to the absolute path of the SQLite database
+    def fslp(self, sqlite_path, query):
+        """LOAD::[d.fslp('/absolute/path/to/db.sqlite', 'SELECT * FROM tablename')] From SQLite path."""
+        self.source = os.path.abspath(sqlite_path)
 
         try:
-            # Connect to the SQLite database
             with sqlite3.connect(sqlite_path) as conn:
-                # Load the query result into a DataFrame
                 self.df = pd.read_sql_query(query, conn)
 
         except sqlite3.Error as e:
@@ -1825,7 +1809,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-
         def get_config(config_path):
             """Load the configuration file."""
             with open(config_path, 'r') as file:
@@ -1833,10 +1816,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         config_path = locate_config_file()
         config = get_config(config_path)
-        
+
         # Retrieve bot configuration
         bot_config = next((bot for bot in config['telegram_bot_presets'] if bot['name'] == bot_name), None)
-        
+
         if not bot_config:
             raise ValueError(f"No bot found with the name {bot_name}")
 
