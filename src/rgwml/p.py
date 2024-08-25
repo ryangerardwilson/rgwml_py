@@ -37,6 +37,8 @@ from transformers import pipeline, logging
 import warnings
 import re
 from slack_sdk import WebClient
+import sqlite3
+import subprocess
 
 class p:
 
@@ -310,6 +312,162 @@ class p:
         # Convert to DataFrame
         df = pd.DataFrame(rows, columns=columns)
         self.df = df
+        self.pr()
+        gc.collect()
+        return self
+
+    def fslh(self, db_preset_name, query):
+        """LOAD::[d.fslh('preset_name', 'SELECT * FROM tablename')] From SQLite host."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Read configuration file
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        if db_type != 'sqlite3':
+            raise ValueError(f"{db_preset_name}: db_type '{db_type}' is not supported by this method")
+
+        host = db_preset['host']
+        ssh_key_path = db_preset['ssh_key_path']
+        ssh_user = db_preset['ssh_user']
+        db_path = db_preset['db_path']
+
+        try:
+            # Create a temporary file to store the downloaded database
+            with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
+                temp_db_file_path = temp_db_file.name
+
+            # Use scp to copy the remote SQLite database to the temporary file
+            scp_command = [
+                "scp",
+                "-i", ssh_key_path,
+                f"{ssh_user}@{host}:{db_path}",
+                temp_db_file_path
+            ]
+
+            subprocess.run(scp_command, check=True)
+
+            # Connect to the downloaded SQLite database
+            with sqlite3.connect(temp_db_file_path) as conn:
+                self.df = pd.read_sql_query(query, conn)
+
+            # Clean up temporary file
+            os.remove(temp_db_file_path)
+
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"SCP error: {e}")
+        except sqlite3.Error as e:
+            raise ValueError(f"SQLite error: {e}")
+
+        self.pr()
+        gc.collect()
+        return self
+
+    def sldbq(self, db_preset_name, query):
+        """DATABASE::[d.sldbq('preset_name', 'SQL QUERY')] SQLite Database Query. Execute and handle both SELECT and alteration queries."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Read configuration file
+        config_path = locate_config_file()
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Find the matching db_preset
+        db_presets = config.get('db_presets', [])
+        db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
+        if not db_preset:
+            raise ValueError(f"No matching db_preset found for {db_preset_name}")
+
+        db_type = db_preset['db_type']
+        if db_type != 'sqlite3':
+            raise ValueError(f"{db_preset_name}: db_type '{db_type}' is not supported by this method")
+
+        host = db_preset['host']
+        ssh_key_path = db_preset['ssh_key_path']
+        ssh_user = db_preset['ssh_user']
+        db_path = db_preset['db_path']
+
+        try:
+            # Create a temporary file to store the downloaded database
+            with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
+                temp_db_file_path = temp_db_file.name
+
+            # Use scp to copy the remote SQLite database to the temporary file
+            scp_command = [
+                "scp",
+                "-i", ssh_key_path,
+                f"{ssh_user}@{host}:{db_path}",
+                temp_db_file_path
+            ]
+
+            subprocess.run(scp_command, check=True)
+
+            alteration_keywords = ('insert', 'update', 'delete', 'create', 'alter', 'drop', 'rename')
+            alteration_query = query.strip().lower().startswith(alteration_keywords)
+
+            # Connect to the downloaded SQLite database
+            with sqlite3.connect(temp_db_file_path) as conn:
+                if alteration_query:
+                    # Execute the alteration query
+                    conn.execute(query)
+                    conn.commit()
+                    self.df = pd.DataFrame()
+
+                    # Copy the modified database file back to the remote server
+                    scp_command = [
+                        "scp",
+                        "-i", ssh_key_path,
+                        temp_db_file_path,
+                        f"{ssh_user}@{host}:{db_path}"
+                    ]
+
+                    subprocess.run(scp_command, check=True)
+                else:
+                    # Load the query result into a DataFrame
+                    self.df = pd.read_sql_query(query, conn)
+
+            # Clean up temporary file
+            os.remove(temp_db_file_path)
+
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"SCP error: {e}")
+        except sqlite3.Error as e:
+            raise ValueError(f"SQLite error: {e}")
+
         self.pr()
         gc.collect()
         return self
@@ -1199,6 +1357,23 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             self.df = pd.read_pickle(file_path)
         else:
             raise ValueError(f"Unsupported file extension: {file_extension}")
+
+        self.pr()
+        gc.collect()
+        return self
+
+    def fslf(self, sqlite_path, query):
+        """LOAD::[d.fslf('/absolute/path/to/db.sqlite', 'SELECT * FROM tablename')] From SQLite file."""
+        self.source = os.path.abspath(sqlite_path)  # Set the source to the absolute path of the SQLite database
+
+        try:
+            # Connect to the SQLite database
+            with sqlite3.connect(sqlite_path) as conn:
+                # Load the query result into a DataFrame
+                self.df = pd.read_sql_query(query, conn)
+
+        except sqlite3.Error as e:
+            raise ValueError(f"SQLite error: {e}")
 
         self.pr()
         gc.collect()
