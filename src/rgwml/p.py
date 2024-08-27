@@ -2589,10 +2589,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 raise ValueError(f"Column '{y_column}' not found in data frame.")
 
             plt.subplot(num_columns, 1, i)
-            self.df[y_column].hist(bins=30, alpha=0.7)
+            data = self.df[y_column]
+
+            # Sort the values and count frequencies
+            sorted_value_counts = data.value_counts().sort_index()
+
+            # Plot the frequencies
+            sorted_value_counts.plot(kind='bar', alpha=0.7)
+
+            # Set the x-axis labels correctly
             plt.xlabel(y_column)
             plt.ylabel('Frequency')
             plt.title(f'Distribution of {y_column}')
+            plt.xticks(rotation=45)
 
         plt.tight_layout()
 
@@ -2614,6 +2623,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
+
     def pqq(self, y, save_path=None):
         """PLOT::[d.pqq(y='Column1, Column2, Column3')] Plot Q-Q plots for the specified columns. Optional param: image_save_path (str)"""
         if isinstance(y, str):
@@ -2633,8 +2643,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             if y_column not in self.df.columns:
                 raise ValueError(f"Column '{y_column}' not found in data frame.")
 
+            # Attempt to convert column to numeric, forcing non-numeric values to NaN
+            data = pd.to_numeric(self.df[y_column], errors='coerce')
+
+            if data.isnull().all():
+                raise ValueError(f"Column '{y_column}' contains no numeric data.")
+
             plt.subplot(num_columns, 1, i)
-            stats.probplot(self.df[y_column], dist="norm", plot=plt)
+            stats.probplot(data.dropna(), dist="norm", plot=plt)
             plt.title(f'Q-Q Plot of {y_column}')
 
         plt.tight_layout()
@@ -2656,6 +2672,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Failed to open image: {e}")
 
         return self
+
 
     def pcr(self, y, save_path=None):
         """PLOT::[d.pcr(y='Column1, Column2, Column3')] Plot correlation heatmap for the specified columns. Optional param: image_save_path (str)"""
