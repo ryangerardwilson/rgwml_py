@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.193"
+version = "0.0.195"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -48,6 +48,7 @@ dependencies = [
     "transformers",
     "openai-whisper",
     "slack-sdk",
+    "lxml[html_clean]"
 ]
 
 dynamic = ["scripts"]

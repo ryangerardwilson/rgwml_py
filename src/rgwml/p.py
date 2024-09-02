@@ -794,6 +794,98 @@ SELECT TOP 100 * FROM your_table_name ORDER BY your_date_column DESC;
     -- Delete a table
     DROP TABLE your_table_name;
             """
+        elif db_type == 'sqlite':
+            help_text = """
+-- DATABASE COMMANDS
+
+    -- Show all databases
+    -- SQLite does not support multiple databases in the same way MySQL does. You work directly with single database files.
+    -- To list all tables in the current database:
+    .tables
+
+    -- Create a new database
+    -- Simply connect to a new database file:
+    sqlite3 new_database_name.db
+
+    -- Delete a database
+    -- Delete the database file using command line or file system operations:
+    rm database_name.db (On Unix-based systems)
+    del database_name.db (On Windows)
+
+    -- Rename a database
+    -- Rename the database file using command line or file system operations:
+    mv old_database_name.db new_database_name.db (On Unix-based systems)
+    ren old_database_name.db new_database_name.db (On Windows)
+
+-- TABLE COMMANDS
+
+    -- Show all tables
+    .tables
+
+    -- Describe a table
+    PRAGMA table_info(your_table_name);
+
+    -- Show column data types
+    PRAGMA table_info(your_table_name);
+
+    -- Select the most recent 100 records
+    SELECT * FROM your_table_name ORDER BY your_date_column DESC LIMIT 100;
+
+    -- Rename a table
+    ALTER TABLE old_table_name RENAME TO new_table_name;
+
+    -- Remove a column from a table
+    -- SQLite does not support direct removal of a column. 
+    -- You would need to recreate the table without the column.
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE new_table_name AS SELECT column1, column2 FROM old_table_name;
+    DROP TABLE old_table_name;
+    ALTER TABLE new_table_name RENAME TO old_table_name;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+
+    -- Change the order of columns
+    -- This also requires recreating the table:
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE new_table_name AS SELECT column3, column1, column2 FROM old_table_name;
+    DROP TABLE old_table_name;
+    ALTER TABLE new_table_name RENAME TO old_table_name;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+
+    -- Change the data type of a column
+    -- SQLite does not support direct modification of column data types.
+    -- You need to recreate the table with the desired data type.
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE new_table_name (id new_data_type, column1 type1, column2 type2);
+    INSERT INTO new_table_name (id, column1, column2) SELECT id, column1, column2 FROM old_table_name;
+    DROP TABLE old_table_name;
+    ALTER TABLE new_table_name RENAME TO old_table_name;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+
+    -- Create a new table
+    CREATE TABLE new_table_name (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        column1 TEXT, 
+        column2 TEXT, 
+        column3 TEXT, 
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Update a record in a table
+    UPDATE your_table_name SET column1 = value1, column2 = value2 WHERE condition;
+
+    -- Delete a record from a table
+    DELETE FROM your_table_name WHERE condition;
+
+    -- Delete a table
+    DROP TABLE your_table_name;
+            """
         elif db_type == 'clickhouse':
             help_text = """
 -- Show all databases
