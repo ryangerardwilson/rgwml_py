@@ -835,7 +835,7 @@ SELECT TOP 100 * FROM your_table_name ORDER BY your_date_column DESC;
     ALTER TABLE old_table_name RENAME TO new_table_name;
 
     -- Remove a column from a table
-    -- SQLite does not support direct removal of a column. 
+    -- SQLite does not support direct removal of a column.
     -- You would need to recreate the table without the column.
     PRAGMA foreign_keys=off;
     BEGIN TRANSACTION;
@@ -869,11 +869,11 @@ SELECT TOP 100 * FROM your_table_name ORDER BY your_date_column DESC;
 
     -- Create a new table
     CREATE TABLE new_table_name (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        column1 TEXT, 
-        column2 TEXT, 
-        column3 TEXT, 
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP, 
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        column1 TEXT,
+        column2 TEXT,
+        column3 TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -1618,14 +1618,106 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def prc(self, column_pairs):
-        """INSPECT::[d.prc([('column1','column2'), ('column3','column4')])] Print correlation for multiple pairs."""
-        if self.df is not None:
+        """INSPECT::[d.prc([('zone_2_mins','gut_intake_count'),('zone_2_mins / distance','gut_intake_count'), ('delta(weight)','gut_intake_count')])] Print correlation for multiple pairs, pair ratios, as well as a deltas of one column corelated to another."""
+
+        def extract_columns(column):
+            """Extract actual columns from the column specification (delta, ratio)."""
+            columns = set()
+            if column.startswith('delta(') and column.endswith(')'):
+                columns.add(column[len('delta('):-1].strip())
+            elif '/' in column:
+                num, denom = map(str.strip, column.split('/'))
+                columns.add(num)
+                columns.add(denom)
+            else:
+                columns.add(column)
+            return columns
+
+        def preprocess_and_filter(df, column_pairs):
+            """Exclude rows where all specified columns' values are 0."""
+            columns_to_check = set()
             for col1, col2 in column_pairs:
-                if col1 in self.df.columns and col2 in self.df.columns:
-                    correlation = self.df[col1].corr(self.df[col2])
+                columns_to_check.update(extract_columns(col1))
+                columns_to_check.update(extract_columns(col2))
+
+            columns_to_check_list = list(columns_to_check)  # Convert set to list
+
+            # Ensure relevant columns are numeric
+            for column in columns_to_check_list:
+                df[column] = pd.to_numeric(df[column], errors='coerce')
+
+            # Exclude rows where all specified column values are 0
+            df_filtered = df[(df[columns_to_check_list] != 0).any(axis=1)]
+
+            # print("Rows after preprocessing (excluding rows where all values in specified columns are 0):")
+            # print(df_filtered)
+            return df_filtered
+
+        def is_numeric(series):
+            """Check if a pandas Series contains numeric data."""
+            return pd.to_numeric(series, errors='coerce').notnull().all()
+
+        def parse_column(df, column):
+            """Parse a column name, handling ratios if necessary, and return the numeric series."""
+            column = column.strip()
+            if column.startswith('delta(') and column.endswith(')'):
+                col_name = column[len('delta('):-1].strip()
+                if col_name in df.columns:
+                    series = df[col_name]
+
+                    # print(f"Rows considered for delta({col_name}):")
+                    # print(series)
+
+                    series_diff = series.diff().dropna()
+
+                    if not series_diff.empty:
+                        return series_diff
+                    else:
+                        print(f"The specified column '{column}' contains non-numeric data or insufficient valid differences.")
+                        return None
+            elif '/' in column:
+                num, denom = map(str.strip, column.split('/'))  # Split and strip spaces
+                if num in df.columns and denom in df.columns:
+                    num_series = pd.to_numeric(df[num], errors='coerce')
+                    denom_series = pd.to_numeric(df[denom], errors='coerce')
+                    if is_numeric(num_series) and is_numeric(denom_series):
+                        return num_series / denom_series
+                    else:
+                        print(f"One or both of the columns in ratio '{column}' are not numeric.")
+                        return None
+            elif column in df.columns:
+                series = pd.to_numeric(df[column], errors='coerce')
+                if is_numeric(series):
+                    return series
+                else:
+                    print(f"The specified column '{column}' contains non-numeric data.")
+                    return None
+            print(f"The specified column '{column}' does not exist in the DataFrame.")
+            return None
+
+        if self.df is not None:
+            # Preprocess the DataFrame and filter out rows
+            self.df = preprocess_and_filter(self.df, column_pairs)
+
+            # print(f"Columns in DataFrame: {self.df.columns.tolist()}")
+            for col1, col2 in column_pairs:
+                # print(f"Checking columns: {col1}, {col2}")
+
+                col1_series = parse_column(self.df, col1)
+                col2_series = parse_column(self.df, col2)
+
+                if col1_series is not None and col2_series is not None:
+                    if col1_series.isnull().all() or col2_series.isnull().all():
+                        # print(f"Table columns for '{col1}' or '{col2}' converted to NaNs after coercion.")
+                        continue
+
+                    # Ensure the same length after dropping NaNs from individual series
+                    combined = pd.concat([col1_series, col2_series], axis=1, join='inner').dropna()
+
+                    correlation = combined.iloc[:, 0].corr(combined.iloc[:, 1])
                     print(f"The correlation between '{col1}' and '{col2}' is {correlation}.")
                 else:
-                    print(f"One or both of the specified columns ('{col1}', '{col2}') do not exist in the DataFrame.")
+                    print(f"One or both of the specified columns ('{col1}', '{col2}') could not be parsed for correlation.")
         else:
             print("The DataFrame is empty.")
 
@@ -2715,7 +2807,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
-
     def pqq(self, y, save_path=None):
         """PLOT::[d.pqq(y='Column1, Column2, Column3')] Plot Q-Q plots for the specified columns. Optional param: image_save_path (str)"""
         if isinstance(y, str):
@@ -2764,7 +2855,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Failed to open image: {e}")
 
         return self
-
 
     def pcr(self, y, save_path=None):
         """PLOT::[d.pcr(y='Column1, Column2, Column3')] Plot correlation heatmap for the specified columns. Optional param: image_save_path (str)"""
