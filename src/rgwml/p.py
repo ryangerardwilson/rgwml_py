@@ -1618,106 +1618,24 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def prc(self, column_pairs):
-        """INSPECT::[d.prc([('zone_2_mins','gut_intake_count'),('zone_2_mins / distance','gut_intake_count'), ('delta(weight)','gut_intake_count')])] Print correlation for multiple pairs, pair ratios, as well as a deltas of one column corelated to another."""
-
-        def extract_columns(column):
-            """Extract actual columns from the column specification (delta, ratio)."""
-            columns = set()
-            if column.startswith('delta(') and column.endswith(')'):
-                columns.add(column[len('delta('):-1].strip())
-            elif '/' in column:
-                num, denom = map(str.strip, column.split('/'))
-                columns.add(num)
-                columns.add(denom)
-            else:
-                columns.add(column)
-            return columns
-
-        def preprocess_and_filter(df, column_pairs):
-            """Exclude rows where all specified columns' values are 0."""
-            columns_to_check = set()
-            for col1, col2 in column_pairs:
-                columns_to_check.update(extract_columns(col1))
-                columns_to_check.update(extract_columns(col2))
-
-            columns_to_check_list = list(columns_to_check)  # Convert set to list
-
-            # Ensure relevant columns are numeric
-            for column in columns_to_check_list:
-                df[column] = pd.to_numeric(df[column], errors='coerce')
-
-            # Exclude rows where all specified column values are 0
-            df_filtered = df[(df[columns_to_check_list] != 0).any(axis=1)]
-
-            # print("Rows after preprocessing (excluding rows where all values in specified columns are 0):")
-            # print(df_filtered)
-            return df_filtered
-
-        def is_numeric(series):
-            """Check if a pandas Series contains numeric data."""
-            return pd.to_numeric(series, errors='coerce').notnull().all()
-
-        def parse_column(df, column):
-            """Parse a column name, handling ratios if necessary, and return the numeric series."""
-            column = column.strip()
-            if column.startswith('delta(') and column.endswith(')'):
-                col_name = column[len('delta('):-1].strip()
-                if col_name in df.columns:
-                    series = df[col_name]
-
-                    # print(f"Rows considered for delta({col_name}):")
-                    # print(series)
-
-                    series_diff = series.diff().dropna()
-
-                    if not series_diff.empty:
-                        return series_diff
-                    else:
-                        print(f"The specified column '{column}' contains non-numeric data or insufficient valid differences.")
-                        return None
-            elif '/' in column:
-                num, denom = map(str.strip, column.split('/'))  # Split and strip spaces
-                if num in df.columns and denom in df.columns:
-                    num_series = pd.to_numeric(df[num], errors='coerce')
-                    denom_series = pd.to_numeric(df[denom], errors='coerce')
-                    if is_numeric(num_series) and is_numeric(denom_series):
-                        return num_series / denom_series
-                    else:
-                        print(f"One or both of the columns in ratio '{column}' are not numeric.")
-                        return None
-            elif column in df.columns:
-                series = pd.to_numeric(df[column], errors='coerce')
-                if is_numeric(series):
-                    return series
-                else:
-                    print(f"The specified column '{column}' contains non-numeric data.")
-                    return None
-            print(f"The specified column '{column}' does not exist in the DataFrame.")
-            return None
-
+        """INSPECT::[d.prc([('column1','column2'), ('column3','column4')])] Print correlation for multiple pairs."""
         if self.df is not None:
-            # Preprocess the DataFrame and filter out rows
-            self.df = preprocess_and_filter(self.df, column_pairs)
-
-            # print(f"Columns in DataFrame: {self.df.columns.tolist()}")
             for col1, col2 in column_pairs:
-                # print(f"Checking columns: {col1}, {col2}")
+                if col1 in self.df.columns and col2 in self.df.columns:
+                    # Convert columns to numeric, which will handle strings parseable as numbers
+                    try:
+                        numeric_col1 = pd.to_numeric(self.df[col1], errors='coerce')
+                        numeric_col2 = pd.to_numeric(self.df[col2], errors='coerce')
 
-                col1_series = parse_column(self.df, col1)
-                col2_series = parse_column(self.df, col2)
-
-                if col1_series is not None and col2_series is not None:
-                    if col1_series.isnull().all() or col2_series.isnull().all():
-                        # print(f"Table columns for '{col1}' or '{col2}' converted to NaNs after coercion.")
-                        continue
-
-                    # Ensure the same length after dropping NaNs from individual series
-                    combined = pd.concat([col1_series, col2_series], axis=1, join='inner').dropna()
-
-                    correlation = combined.iloc[:, 0].corr(combined.iloc[:, 1])
-                    print(f"The correlation between '{col1}' and '{col2}' is {correlation}.")
+                        correlation = numeric_col1.corr(numeric_col2)
+                        if pd.notnull(correlation):  # Check if correlation is not NaN
+                            print(f"The correlation between '{col1}' and '{col2}' is {correlation}.")
+                        else:
+                            print(f"Cannot calculate correlation between '{col1}' and '{col2}' due to insufficient numeric data.")
+                    except Exception as e:
+                        print(f"Error processing columns '{col1}' and '{col2}': {e}")
                 else:
-                    print(f"One or both of the specified columns ('{col1}', '{col2}') could not be parsed for correlation.")
+                    print(f"One or both of the specified columns ('{col1}', '{col2}') do not exist in the DataFrame.")
         else:
             print("The DataFrame is empty.")
 
@@ -2241,6 +2159,146 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             self.pr()
         else:
             raise ValueError("No DataFrame to append a boolean column. Please load a file first using the frm or frml method.")
+        gc.collect()
+        return self
+
+    def acc(self, operation, new_col_name):
+        """APPEND::[d.acc('column1 / column2','col1_2_ratio') OR d.acc('column1 * column2','col1_2_product') OR d.acc('column1 + column2','col1_2_sum') OR d.acc('column1 - column2','col1_2_diff') OR d.acc('log(column1)', 'col1_log')] Append Computational Column. Available binary operations: /, *, +, -, **, %. Available unary operations: log, log10, sqrt, abs, sin, cos, tan."""
+        if self.df is not None:
+            try:
+                # Check if it's a unary operation with parentheses
+                if '(' in operation and ')' in operation:
+                    operator, col = operation.split('(')[0], operation.split('(')[1].replace(')', '')
+                    if col in self.df.columns:
+                        numeric_col = pd.to_numeric(self.df[col], errors='coerce')
+
+                        if operator == 'log':
+                            self.df[new_col_name] = np.log(numeric_col)
+                        elif operator == 'log10':
+                            self.df[new_col_name] = np.log10(numeric_col)
+                        elif operator == 'sqrt':
+                            self.df[new_col_name] = np.sqrt(numeric_col)
+                        elif operator == 'abs':
+                            self.df[new_col_name] = numeric_col.abs()
+                        elif operator == 'sin':
+                            self.df[new_col_name] = np.sin(numeric_col)
+                        elif operator == 'cos':
+                            self.df[new_col_name] = np.cos(numeric_col)
+                        elif operator == 'tan':
+                            self.df[new_col_name] = np.tan(numeric_col)
+                        else:
+                            raise ValueError(f"Unsupported operation '{operator}'. Supported unary operators are log, log10, sqrt, abs, sin, cos, tan.")
+
+                    else:
+                        raise ValueError(f"The specified column '{col}' does not exist in the DataFrame.")
+                else:
+                    # Extract column names
+                    col1, operator, col2 = operation.split()[0], operation.split()[1], operation.split()[2]
+
+                    if col1 in self.df.columns and col2 in self.df.columns:
+                        numeric_col1 = pd.to_numeric(self.df[col1], errors='coerce')
+                        numeric_col2 = pd.to_numeric(self.df[col2], errors='coerce')
+
+                        if operator == '/':
+                            self.df[new_col_name] = numeric_col1 / numeric_col2
+                        elif operator == '*':
+                            self.df[new_col_name] = numeric_col1 * numeric_col2
+                        elif operator == '+':
+                            self.df[new_col_name] = numeric_col1 + numeric_col2
+                        elif operator == '-':
+                            self.df[new_col_name] = numeric_col1 - numeric_col2
+                        elif operator == '**':
+                            self.df[new_col_name] = numeric_col1 ** numeric_col2
+                        elif operator == '%':
+                            self.df[new_col_name] = numeric_col1 % numeric_col2
+                        else:
+                            raise ValueError(f"Unsupported operation '{operator}'. Supported operators are /, *, +, -, **, %.")
+                    else:
+                        raise ValueError(f"One or both of the specified columns ('{col1}', '{col2}') do not exist in the DataFrame.")
+
+                # Print the DataFrame to ensure the new column has been added
+                self.pr()
+            except Exception as e:
+                raise ValueError(f"Error while performing operation '{operation}': {e}")
+        else:
+            raise ValueError("No DataFrame to append a computational column. Please load a file first using the frm or frml method.")
+
+        gc.collect()
+        return self
+
+    def arcc(self, column, new_col_name, ref='previous'):
+        """APPEND::[d.arcc('column1', 'column1_rel_change', ref='previous') OR d.arcc('column1', 'column1_rel_change', ref='next')] Append relative changes column method."""
+        if self.df is not None:
+            if column in self.df.columns:
+                # Convert to numeric, coercing errors to NaN
+                numeric_col = pd.to_numeric(self.df[column], errors='coerce')
+
+                # Calculate actual difference
+                if ref == 'previous':
+                    self.df[new_col_name] = numeric_col.diff().fillna(0)
+                elif ref == 'next':
+                    self.df[new_col_name] = numeric_col.diff(-1).fillna(0)
+                else:
+                    raise ValueError("Unsupported reference value. Use 'previous' or 'next'.")
+
+                # Print the DataFrame to ensure the new column has been added
+                self.pr()
+            else:
+                raise ValueError(f"The specified column '{column}' does not exist in the DataFrame.")
+        else:
+            raise ValueError("No DataFrame to append a computational column. Please load a file first.")
+
+        gc.collect()
+        return self
+
+    def arpcc(self, column, new_col_name, ref='previous'):
+        """APPEND::[d.arcc('column1', 'column1_rel_change', ref='previous') OR d.arcc('column1', 'column1_rel_change', ref='next')] Append relative percentage changes column. A column that shows the relative change of each row vis-a-vis their previous/succeeding value."""
+        if self.df is not None:
+            if column in self.df.columns:
+                # Convert to numeric, coercing errors to NaN
+                numeric_col = pd.to_numeric(self.df[column], errors='coerce')
+
+                # Calculate percentage change
+                if ref == 'previous':
+                    self.df[new_col_name] = numeric_col.pct_change().fillna(0)
+                elif ref == 'next':
+                    self.df[new_col_name] = numeric_col.pct_change(-1).fillna(0)
+                else:
+                    raise ValueError("Unsupported reference value. Use 'previous' or 'next'.")
+
+                # Print the DataFrame to ensure the new column has been added
+                self.pr()
+            else:
+                raise ValueError(f"The specified column '{column}' does not exist in the DataFrame.")
+        else:
+            raise ValueError("No DataFrame to append a computational column. Please load a file first using the frm or frml method.")
+
+        gc.collect()
+        return self
+
+    def dc(self, column, steps=1, direction='up'):
+        """TINKER::[d.dc('column1', steps=1, direction='up') OR d.dc('column1', steps=3, direction='down')] Drag a column's starting value up or down by a specified number of rows, moving the rest of the values accordingly."""
+        if self.df is not None:
+            if column in self.df.columns:
+                numeric_col = pd.to_numeric(self.df[column], errors='coerce')
+                if direction == 'up':
+                    shifted_col = numeric_col.shift(-steps)
+                    shifted_col[-steps:] = None  # Set trailing rows to None
+                elif direction == 'down':
+                    shifted_col = numeric_col.shift(steps)
+                    shifted_col[:steps] = None  # Set leading rows to None
+                else:
+                    raise ValueError("Unsupported direction. Use 'up' or 'down'.")
+
+                self.df[column] = shifted_col
+
+                # Print the DataFrame to ensure the column has been dragged
+                self.pr()
+            else:
+                raise ValueError(f"The specified column '{column}' does not exist in the DataFrame.")
+        else:
+            raise ValueError("No DataFrame to perform drag column operation. Please load a file first.")
+
         gc.collect()
         return self
 
