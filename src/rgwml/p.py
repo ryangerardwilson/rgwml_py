@@ -2036,12 +2036,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         service = authenticate_service_account(credentials_path, sender_email)
 
         if as_file:
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            file_name = f"df_{timestamp}.csv"
-
-            # Save DataFrame as a CSV file
-            self.df.to_csv(file_name, index=False)
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
+                tmp_file_name = tmp_file.name
+                # Save DataFrame as a CSV file
+                self.df.to_csv(tmp_file_name, index=False)
 
             # Create email with attachment
             message = MIMEMultipart()
@@ -2051,16 +2050,17 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             message.attach(MIMEText(body if body else 'Please find the CSV file attached.'))
 
             # Attach file
-            with open(file_name, 'rb') as file:
+            with open(tmp_file_name, 'rb') as file:
                 part = MIMEBase('application', 'octet-stream')
                 part.set_payload(file.read())
                 encoders.encode_base64(part)
-                part.add_header('Content-Disposition', f'attachment; filename={file_name}')
+                part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(tmp_file_name)}')
                 message.attach(part)
 
-            # Remove the file after attaching
-            if remove_after_send and os.path.exists(file_name):
-                os.remove(file_name)
+            # Remove the temporary file after attaching
+            if remove_after_send and os.path.exists(tmp_file_name):
+                os.remove(tmp_file_name)
+
         else:
             # Create email body as plain text
             df_str = self.df.to_string()
@@ -2074,8 +2074,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         email_body = {'raw': raw}
 
         try:
-            service.users().messages().send(userId="me", body=email_body).execute()
-            print("Email with Message Id {sent_message['id']} successfully sent.")
+            sent_message = service.users().messages().send(userId="me", body=email_body).execute()
+            print(f"Email with Message Id {sent_message['id']} successfully sent.")
         except Exception as error:
             raise Exception(f"Error sending email: {error}")
         return self
