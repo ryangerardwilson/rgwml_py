@@ -39,6 +39,15 @@ import re
 from slack_sdk import WebClient
 import sqlite3
 import subprocess
+import smtplib
+from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from email import encoders
+import base64
 
 
 class p:
@@ -1977,6 +1986,98 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             raise Exception(f"Error sending message: {response.text}")
 
         print("Message sent successfully.")
+        return self
+
+    def gm(self, preset_name, to_email, subject=None, body=None, as_file=True, remove_after_send=True):
+        """SHARE::[d.gm("preset-name", "to_email@example.com", "email subject", "custom message body")] Gmail via specified preset."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def get_config(config_path):
+            """Load the configuration file."""
+            with open(config_path, 'r') as file:
+                config = file.read()
+                try:
+                    return json.loads(config)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON format in config file: {e}")
+
+        def authenticate_service_account(service_account_credentials_path, sender_email_id):
+            """Authenticate the service account and return a Gmail API service instance."""
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_credentials_path,
+                scopes=['https://www.googleapis.com/auth/gmail.send'],
+                subject=sender_email_id
+            )
+            service = build('gmail', 'v1', credentials=credentials)
+            return service
+
+        config_path = locate_config_file()
+        config = get_config(config_path)
+
+        # Retrieve Gmail preset configuration
+        gmail_config = next((preset for preset in config['gmail_bot_presets'] if preset['name'] == preset_name), None)
+
+        if not gmail_config:
+            raise ValueError(f"No preset found with the name {preset_name}")
+
+        # Email details
+        sender_email = gmail_config['name']
+        credentials_path = gmail_config['service_account_credentials_path']
+
+        service = authenticate_service_account(credentials_path, sender_email)
+
+        if as_file:
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            file_name = f"df_{timestamp}.csv"
+
+            # Save DataFrame as a CSV file
+            self.df.to_csv(file_name, index=False)
+
+            # Create email with attachment
+            message = MIMEMultipart()
+            message['to'] = to_email
+            message['from'] = sender_email
+            message['subject'] = subject if subject else 'DataFrame CSV File'
+            message.attach(MIMEText(body if body else 'Please find the CSV file attached.'))
+
+            # Attach file
+            with open(file_name, 'rb') as file:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(file.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', f'attachment; filename={file_name}')
+                message.attach(part)
+
+            # Remove the file after attaching
+            if remove_after_send and os.path.exists(file_name):
+                os.remove(file_name)
+        else:
+            # Create email body as plain text
+            df_str = self.df.to_string()
+            full_body = body + "\n\n" + df_str if body else df_str
+            message = MIMEText(full_body)
+            message['to'] = to_email
+            message['from'] = sender_email
+            message['subject'] = subject if subject else 'DataFrame Content'
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        email_body = {'raw': raw}
+
+        try:
+            service.users().messages().send(userId="me", body=email_body).execute()
+            print("Email with Message Id {sent_message['id']} successfully sent.")
+        except Exception as error:
+            raise Exception(f"Error sending email: {error}")
         return self
 
     def slk(self, bot_name, message=None, as_file=True, remove_after_send=True):

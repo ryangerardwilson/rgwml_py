@@ -12,6 +12,9 @@ from google.oauth2 import id_token, service_account
 from google.auth.transport import requests as google_requests
 from googleapiclient.discovery import build
 import base64
+import random
+import string
+from email.mime.text import MIMEText
 
 
 class m:
@@ -119,7 +122,6 @@ class m:
             return jsonify({"error": error_message}), 500
 
     def validate_email(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
-
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -127,7 +129,6 @@ class m:
                 os.path.join(home_dir, "Documents"),
                 os.path.join(home_dir, "Downloads"),
             ]
-
             for path in search_paths:
                 for root, dirs, files in os.walk(path):
                     if filename in files:
@@ -150,16 +151,10 @@ class m:
             preset = get_gmail_bot_preset(config, preset_name)
             if not preset:
                 raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
-
-            credentials_path = preset.get("credentials_path")
-            gmail_id = preset.get("gmail_id")
-            credentials_type = preset.get("credentials_type")
-
-            if not credentials_path or not gmail_id or not credentials_type:
-                raise RuntimeError(
-                    f"Gmail credentials_path, gmail_id or credentials_type for '{preset_name}' not found in the configuration file. \n\n{credentials_path} \n\n {gmail_id} \n\n {credentials_type}"
-                )
-            return credentials_path, gmail_id, credentials_type
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
 
         def is_valid_email(email):
             regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
@@ -180,15 +175,54 @@ class m:
                                 creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                               )''')
 
-        config = load_config()
-        credentials_path, gmail_id, credentials_type = get_gmail_bot_details(config, gmail_bot_preset_name)
+        def generate_temp_password(length=12):
+            characters = string.ascii_letters + string.digits + string.punctuation
+            return ''.join(random.choice(characters) for i in range(length))
 
+        def send_email(sender_email_id, service_account_credentials_path, recipient_email, subject, message_text):
+            """Send an email using the Gmail API via a service account with domain-wide delegation.
+
+            Args:
+                sender_email_id (str): The email address of the user to impersonate (the sender).
+                service_account_credentials_path (str): Path to the service account key file.
+                recipient_email (str): Email address of the recipient.
+                subject (str): Subject of the email.
+                message_text (str): Text content of the email.
+            """
+            def authenticate_service_account(service_account_credentials_path, sender_email_id):
+                """Authenticate the service account and return a Gmail API service instance."""
+                credentials = service_account.Credentials.from_service_account_file(
+                    service_account_credentials_path,
+                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    subject=sender_email_id
+                )
+                service = build('gmail', 'v1', credentials=credentials)
+                return service
+
+            service = authenticate_service_account(service_account_credentials_path, sender_email_id)
+
+            message = MIMEText(message_text)
+            message['to'] = recipient_email
+            message['from'] = sender_email_id
+            message['subject'] = subject
+
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            email_body = {'raw': raw}
+
+            message = service.users().messages().send(userId="me", body=email_body).execute()
+
+        # Load configuration
+        config = load_config()
+        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        sender_email_id = gmail_bot_preset_name
+
+        # Extract email from the request
         request_body_json = request.json
         email = request_body_json.get('email')
 
+        # Validate email
         if not email:
             return jsonify(success=False, message="Email is required"), 400
-
         if not is_valid_email(email):
             return jsonify(success=False, message="Invalid email address"), 400
 
@@ -209,21 +243,29 @@ class m:
             elif email.endswith('@gmail.com'):  # user[0] corresponds to google_auth_user_id
                 return jsonify(success=False, message="Please use 'Sign in with Gmail' instead, when signing in with a Gmail Id"), 400
 
-            if user:
-                return jsonify(success=True, message="now_confirm_password"), 200
+            # Generate a temporary password
+            temp_password = generate_temp_password()
 
             # Store the email and temp password in the user_pending_validation table
             cursor.execute(
-                """INSERT OR IGNORE INTO user_pending_validation (email)
-                   VALUES (?)""",
-                (email,)
+                """INSERT OR IGNORE INTO user_pending_validation (email, temp_password)
+                   VALUES (?, ?)""",
+                (email, temp_password)
             )
             conn.commit()
 
-            return jsonify(success=True, message="now_set_password"), 200
+            # Send the temporary password via email
+            email_subject = "Your Temporary Password"
+            email_message = f"Your temporary password is: {temp_password}. Use this to verify your email. Then, you will be redirected to create a new password."
+
+            # self.send_telegram_message(invoking_function_name, f"PRE EMAIL DEBUG: \n\n{sender_email_id} \n\n {service_account_credentials_path} \n\n {email} \n\n {email_subject} \n\n {email_message}", telegram_bot_preset_name)
+            send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
+            # self.send_telegram_message(invoking_function_name, debug_message, telegram_bot_preset_name)
+
+            return jsonify(success=True, message="Temporary password sent. Check your email."), 200
 
         except Exception as e:
-            self.send_telegram_message(invoking_function_name, f"111 error: {e}", telegram_bot_preset_name)
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
             return jsonify(error=str(e)), 500
 
         finally:
