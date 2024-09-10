@@ -20,7 +20,7 @@ from email.mime.text import MIMEText
 class m:
 
     def google_auth(self, invoking_function_name, request, google_client_id, sqlite_db_path, post_authentication_redirect_url,
-                    telegram_bot_preset_name, cookie_domain):
+                    telegram_bot_preset_name):
 
         def verify_token(token, google_client_id):
             try:
@@ -29,8 +29,7 @@ class m:
             except ValueError:
                 return None
 
-        def create_tables(sqlite_db_path):
-            conn = sqlite3.connect(sqlite_db_path)
+        def create_tables(conn):
             try:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -39,7 +38,10 @@ class m:
                         google_auth_user_id TEXT UNIQUE,
                         email TEXT,
                         name TEXT,
-                        picture TEXT
+                        picture TEXT,
+                        password TEXT,
+                        active_token TEXT,
+                        creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
                 cursor.execute('''
@@ -51,8 +53,9 @@ class m:
                     )
                 ''')
                 conn.commit()
-            finally:
-                conn.close()
+            except Exception as e:
+                conn.rollback()
+                raise e
 
         request_body_json = request.json
         token = request_body_json.get('token')
@@ -68,9 +71,9 @@ class m:
                     id_in_user_table = None
                     email_in_user_table = None
 
-                    create_tables(sqlite_db_path)
-
                     conn = sqlite3.connect(sqlite_db_path)
+                    create_tables(conn)
+
                     self.send_telegram_message(invoking_function_name, "STEP2", telegram_bot_preset_name)
 
                     try:
@@ -81,10 +84,11 @@ class m:
                             (google_auth_user_id, email, name, picture))
                         self.send_telegram_message(invoking_function_name, "STEP3", telegram_bot_preset_name)
 
-                        cursor.execute("SELECT id, email FROM user WHERE google_auth_user_id = ?", (google_auth_user_id,))
+                        cursor.execute("SELECT id, email, name FROM user WHERE google_auth_user_id = ?", (google_auth_user_id,))
                         result = cursor.fetchone()
                         id_in_user_table = result[0]
                         email_in_user_table = result[1]
+                        name_in_user_table = result[2]
 
                         self.send_telegram_message(invoking_function_name, "STEP4", telegram_bot_preset_name)
 
@@ -92,6 +96,10 @@ class m:
 
                         self.send_telegram_message(invoking_function_name, "STEP5", telegram_bot_preset_name)
                         conn.commit()
+
+
+
+
                     except Exception as e:
                         conn.rollback()
                         raise e
@@ -100,16 +108,13 @@ class m:
 
                     response_data = {
                         'success': True,
-                        'user': idinfo,
-                        'id_in_user_table': id_in_user_table,
-                        'email_in_user_table': email_in_user_table,
+                        #'user': idinfo,
+                        'user_id': id_in_user_table,
+                        'user_email': email_in_user_table,
+                        'user_name': name_in_user_table,
                         'url': post_authentication_redirect_url
                     }
                     response = make_response(jsonify(response_data), 200)
-                    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-                    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-                    response.headers.add('Content-Type', 'text/html; charset=UTF-8')
-                    response.headers.add('Set-Cookie', f"authToken={token}; Domain={cookie_domain}; HttpOnly; Path=/; SameSite=None; Secure")
                     return response
                 else:
                     return jsonify({'success': False, 'message': 'Invalid token'}), 400
@@ -120,6 +125,7 @@ class m:
             self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
+
 
     def validate_email(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
         def locate_config_file(filename="rgwml.config"):
@@ -166,7 +172,10 @@ class m:
                                 google_auth_user_id TEXT UNIQUE,
                                 email TEXT UNIQUE,
                                 name TEXT,
-                                picture TEXT
+                                picture TEXT,
+                                password TEXT,
+                                active_token TEXT,
+                                creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                               )''')
             cursor.execute('''CREATE TABLE IF NOT EXISTS user_pending_validation (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,15 +189,6 @@ class m:
             return ''.join(random.choice(characters) for i in range(length))
 
         def send_email(sender_email_id, service_account_credentials_path, recipient_email, subject, message_text):
-            """Send an email using the Gmail API via a service account with domain-wide delegation.
-
-            Args:
-                sender_email_id (str): The email address of the user to impersonate (the sender).
-                service_account_credentials_path (str): Path to the service account key file.
-                recipient_email (str): Email address of the recipient.
-                subject (str): Subject of the email.
-                message_text (str): Text content of the email.
-            """
             def authenticate_service_account(service_account_credentials_path, sender_email_id):
                 """Authenticate the service account and return a Gmail API service instance."""
                 credentials = service_account.Credentials.from_service_account_file(
@@ -200,17 +200,13 @@ class m:
                 return service
 
             service = authenticate_service_account(service_account_credentials_path, sender_email_id)
-
             message = MIMEText(message_text)
             message['to'] = recipient_email
             message['from'] = sender_email_id
             message['subject'] = subject
-
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
-
             message = service.users().messages().send(userId="me", body=email_body).execute()
-
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
@@ -245,15 +241,31 @@ class m:
 
             # Generate a temporary password
             temp_password = generate_temp_password()
-
-            # Store the email and temp password in the user_pending_validation table
+            # Look for existing email
             cursor.execute(
-                """INSERT OR IGNORE INTO user_pending_validation (email, temp_password)
-                   VALUES (?, ?)""",
-                (email, temp_password)
+                """SELECT COUNT(*) FROM user_pending_validation WHERE email = ?""",
+                (email,)
             )
-            conn.commit()
+            exists = cursor.fetchone()[0]
 
+
+            # If email exists, update the row
+            if exists:
+                cursor.execute(
+                    """UPDATE user_pending_validation
+                       SET temp_password = ?, creation_time = CURRENT_TIMESTAMP
+                       WHERE email = ?""",
+                    (temp_password, email)
+                )
+            # If email does not exist, insert a new row
+            else:
+                cursor.execute(
+                    """INSERT INTO user_pending_validation (email, temp_password)
+                       VALUES (?, ?)""",
+                    (email, temp_password)
+                )
+
+            conn.commit()
             # Send the temporary password via email
             email_subject = "Your Temporary Password"
             email_message = f"Your temporary password is: {temp_password}. Use this to verify your email. Then, you will be redirected to create a new password."
@@ -270,6 +282,268 @@ class m:
 
         finally:
             conn.close()
+
+    def validate_password(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_config():
+            config_path = locate_config_file()
+            with open(config_path, "r") as file:
+                return json.load(file)
+
+        def get_gmail_bot_preset(config, preset_name):
+            presets = config.get("gmail_bot_presets", [])
+            for preset in presets:
+                if preset.get("name") == preset_name:
+                    return preset
+            return None
+
+        def get_gmail_bot_details(config, preset_name):
+            preset = get_gmail_bot_preset(config, preset_name)
+            if not preset:
+                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
+
+        # Load configuration
+        config = load_config()
+        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        sender_email_id = gmail_bot_preset_name
+
+        # Extract email and temp_password from the request
+        request_body_json = request.json
+        email = request_body_json.get('email')
+        temp_password = request_body_json.get('temp_password')
+
+        # Validate input
+        if not email or not temp_password:
+            return jsonify(success=False, message="Email and temporary password are required"), 400
+
+        try:
+            conn = sqlite3.connect(sqlite_db_path)
+            cursor = conn.cursor()
+            
+            # Check if the email and temp_password match with the records in the user_pending_validation table
+            cursor.execute(
+                """SELECT temp_password, creation_time
+                   FROM user_pending_validation
+                   WHERE email = ?""",
+                (email,)
+            )
+            record = cursor.fetchone()
+            
+            if not record:
+                return jsonify(success=False, message="Email not found. Please request a new temporary password."), 404
+
+            stored_temp_password, creation_time = record
+            
+            if stored_temp_password != temp_password:
+                return jsonify(success=False, message="Invalid temporary password."), 400
+
+            # Remove Validation item from user_pending_validation once confirmed
+            """
+            cursor.execute(
+                "DELETE FROM user_pending_validation WHERE email = ?",
+                (email,)
+            )
+            """
+
+            conn.commit()
+
+            return jsonify(success=True, message="Temporary password validated. Please proceed to set a new password."), 200
+
+        except Exception as e:
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
+            return jsonify(error=str(e)), 500
+
+        finally:
+            conn.close()
+
+
+    def set_first_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_config():
+            config_path = locate_config_file()
+            with open(config_path, "r") as file:
+                return json.load(file)
+
+
+        def get_gmail_bot_preset(config, preset_name):
+            presets = config.get("gmail_bot_presets", [])
+            for preset in presets:
+                if preset.get("name") == preset_name:
+                    return preset
+            return None
+
+        def get_gmail_bot_details(config, preset_name):
+            preset = get_gmail_bot_preset(config, preset_name)
+            if not preset:
+                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
+
+        def send_email(sender_email_id, service_account_credentials_path, recipient_email, subject, message_text):
+            def authenticate_service_account(service_account_credentials_path, sender_email_id):
+                """Authenticate the service account and return a Gmail API service instance."""
+                credentials = service_account.Credentials.from_service_account_file(
+                    service_account_credentials_path,
+                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    subject=sender_email_id
+                )
+                service = build('gmail', 'v1', credentials=credentials)
+                return service
+
+            service = authenticate_service_account(service_account_credentials_path, sender_email_id)
+            message = MIMEText(message_text)
+            message['to'] = recipient_email
+            message['from'] = sender_email_id
+            message['subject'] = subject
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            email_body = {'raw': raw}
+            message = service.users().messages().send(userId="me", body=email_body).execute()
+
+        def generate_auth_token(length=32):
+            characters = string.ascii_letters + string.digits
+            return ''.join(random.choice(characters) for i in range(length))
+
+
+
+        # Extract email, temp_password, and new password from the request
+        request_body_json = request.json
+        email = request_body_json.get('email')
+        temp_password = request_body_json.get('temp_password')
+        new_password = request_body_json.get('new_password')
+
+        # Validate input
+        if not email or not temp_password or not new_password:
+            return jsonify(success=False, message="Email, temporary password, and new password are required"), 400
+
+        def is_valid_password(password):
+            # Password validation logic e.g., minimum length, contains special characters, etc.
+            if len(password) < 8:
+                return False
+            return True  # You can add more complex validation logic here
+
+        if not is_valid_password(new_password):
+            return jsonify(success=False, message="Invalid password. Ensure it meets the complexity requirements."), 400
+
+        try:
+            conn = sqlite3.connect(sqlite_db_path)
+            cursor = conn.cursor()
+
+            # Load configuration
+            config = load_config()
+            service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+            sender_email_id = gmail_bot_preset_name
+
+            # Check if the email and temp_password match with the records in the user_pending_validation table
+            cursor.execute(
+                """SELECT temp_password
+                   FROM user_pending_validation
+                   WHERE email = ?""",
+                (email,)
+            )
+            record = cursor.fetchone()
+
+            if not record:
+                return jsonify(success=False, message="No temporary password found for this email. Please request a new one."), 404
+
+            stored_temp_password = record[0]
+
+            if stored_temp_password != temp_password:
+                return jsonify(success=False, message="Invalid temporary password."), 400
+
+
+            # Generate a new authToken
+            auth_token = generate_auth_token()
+
+            # Create or update user with the email, new password, and auth token
+            cursor.execute(
+                """INSERT INTO user (email, password, active_token)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(email) DO UPDATE SET password=excluded.password, active_token=excluded.active_token;
+                """,
+                (email, new_password, auth_token)
+            )
+
+            # Clean up pending validation once the password has been set
+            cursor.execute(
+                """DELETE FROM user_pending_validation
+                   WHERE email = ?""",
+                (email,)
+            )
+
+            conn.commit()
+
+            # Send the new password via email
+            email_subject = "Your New Password"
+            email_message = f"Your new password has been set successfully. Your new password is: {new_password}. Please keep it safe."
+            send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
+
+
+            # Fetch the user_id and name of the newly created or updated user
+            cursor.execute(
+                """SELECT id, name
+                   FROM user
+                   WHERE email = ?;
+                """,
+                (email,)
+            )
+            user_record = cursor.fetchone()
+            user_id = user_record[0]
+            username = user_record[1]
+
+            # Generate a new authToken
+            # auth_token = generate_auth_token()
+
+            return jsonify(
+                success=True,
+                message="Password has been set and sent to your email successfully.",
+                user_id=user_id,
+                user_email=email,
+                user_name=username,
+                authToken=auth_token,
+                url=post_authentication_redirect_url
+            ), 200
+            # return jsonify(success=True, message="Password has been set and sent to your email successfully."), 200
+
+        except Exception as e:
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
+            return jsonify(error=str(e)), 500
+
+        finally:
+            conn.close()
+
+
+
 
     def insert_log(self, invoking_function_name, message, sqlite_db_path, telegram_bot_preset_name):
 
@@ -362,24 +636,52 @@ class m:
 
     def send_secure_data(self, invoking_function_name, secure_data, sqlite_db_path, telegram_bot_preset_name, google_client_id):
 
-        def verify_token(token, google_client_id):
+        def verify_google_token(token, google_client_id):
             try:
                 idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), google_client_id)
                 return idinfo  # Return user profile information
             except ValueError:
                 return None
 
+        def verify_email_token(user_id, token):
+            try:
+                # self.send_telegram_message(invoking_function_name, f"Debug: user_id: {user_id} \n\n token: {token}", telegram_bot_preset_name)
+                conn = sqlite3.connect(sqlite_db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT active_token
+                       FROM user
+                       WHERE id = ?""",
+                    (user_id,)
+                )
+                record = cursor.fetchone()
+                # self.send_telegram_message(invoking_function_name, f"Debug: record[0]: {record[0]}", telegram_bot_preset_name)
+                if record and record[0] == token:
+                    return True
+                return False
+            except Exception as e:
+                self.insert_log(invoking_function_name, f"Database error: {e}", sqlite_db_path, telegram_bot_preset_name)
+                self.send_telegram_message(invoking_function_name, f"Database error: {e}", telegram_bot_preset_name)
+                return False
+            finally:
+                conn.close()
+
         try:
-            # secure_token = request.cookies.get('authToken')  # Get the token from cookies
             auth_header = request.headers.get('Authorization')
+            auth_type = request.headers.get('AuthTokenType')
+            user_id = request.headers.get('UserId')
             if auth_header and auth_header.startswith('Bearer '):
                 secure_token = auth_header.split(' ')[1]  # Extract the token part
             else:
                 secure_token = None
 
-            idinfo = verify_token(secure_token, google_client_id)
-            if not secure_token or idinfo is None:
-                return jsonify({'error': 'Unauthorized'}), 401  # Return a JSON response with 401 status
+            if auth_type == 'google_auth':
+                idinfo = verify_google_token(secure_token, google_client_id)
+                if not secure_token or idinfo is None:
+                    return jsonify({'error': 'Unauthorized'}), 401  # Return a JSON response with 401 status
+            elif auth_type == 'email_login':
+                if not user_id or not verify_email_token(user_id, secure_token):
+                    return jsonify({'error': 'Unauthorized'}), 401  # Return a JSON response with 401 status
 
             response_data = {'data': secure_data}
             response = make_response(jsonify(response_data), 200)
@@ -392,3 +694,5 @@ class m:
             self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
+
+
