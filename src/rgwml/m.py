@@ -49,6 +49,8 @@ class m:
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER,
                         login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        latitude REAL,
+                        longitude REAL,
                         FOREIGN KEY (user_id) REFERENCES user (id)
                     )
                 ''')
@@ -59,6 +61,9 @@ class m:
 
         request_body_json = request.json
         token = request_body_json.get('token')
+        user_latitude = request_body_json.get('userLatitude')
+        user_longitude = request_body_json.get('userLongitude')
+        
         try:
             if token:
                 idinfo = verify_token(token, google_client_id)
@@ -92,13 +97,11 @@ class m:
 
                         self.send_telegram_message(invoking_function_name, "STEP4", telegram_bot_preset_name)
 
-                        cursor.execute("INSERT INTO user_login_logs (user_id) VALUES (?)", (id_in_user_table,))
+                        cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
+                                       (id_in_user_table, user_latitude, user_longitude))
 
                         self.send_telegram_message(invoking_function_name, "STEP5", telegram_bot_preset_name)
                         conn.commit()
-
-
-
 
                     except Exception as e:
                         conn.rollback()
@@ -108,7 +111,6 @@ class m:
 
                     response_data = {
                         'success': True,
-                        #'user': idinfo,
                         'user_id': id_in_user_table,
                         'user_email': email_in_user_table,
                         'user_name': name_in_user_table,
@@ -125,6 +127,7 @@ class m:
             self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
+
 
 
     def validate_email(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
@@ -177,6 +180,16 @@ class m:
                                 active_token TEXT,
                                 creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                               )''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_login_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    latitude REAL,
+                    longitude REAL,
+                    FOREIGN KEY (user_id) REFERENCES user (id)
+                )
+            ''')
             cursor.execute('''CREATE TABLE IF NOT EXISTS user_pending_validation (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 email TEXT UNIQUE,
@@ -372,7 +385,6 @@ class m:
         finally:
             conn.close()
 
-
     def set_first_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
 
         def locate_config_file(filename="rgwml.config"):
@@ -392,7 +404,6 @@ class m:
             config_path = locate_config_file()
             with open(config_path, "r") as file:
                 return json.load(file)
-
 
         def get_gmail_bot_preset(config, preset_name):
             presets = config.get("gmail_bot_presets", [])
@@ -434,13 +445,13 @@ class m:
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
-
-
-        # Extract email, temp_password, and new password from the request
+        # Extract email, temp_password, new password, and user location from the request
         request_body_json = request.json
         email = request_body_json.get('email')
         temp_password = request_body_json.get('temp_password')
         new_password = request_body_json.get('new_password')
+        user_latitude = request_body_json.get('userLatitude')
+        user_longitude = request_body_json.get('userLongitude')
 
         # Validate input
         if not email or not temp_password or not new_password:
@@ -481,7 +492,6 @@ class m:
             if stored_temp_password != temp_password:
                 return jsonify(success=False, message="Invalid temporary password."), 400
 
-
             # Generate a new authToken
             auth_token = generate_auth_token()
 
@@ -493,6 +503,22 @@ class m:
                 """,
                 (email, new_password, auth_token)
             )
+
+            # Fetch the user_id and name of the newly created or updated user
+            cursor.execute(
+                """SELECT id, name
+                   FROM user
+                   WHERE email = ?;
+                """,
+                (email,)
+            )
+            user_record = cursor.fetchone()
+            user_id = user_record[0]
+            username = user_record[1]
+
+            # Insert login log with user location
+            cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
+                           (user_id, user_latitude, user_longitude))
 
             # Clean up pending validation once the password has been set
             cursor.execute(
@@ -508,22 +534,6 @@ class m:
             email_message = f"Your new password has been set successfully. Your new password is: {new_password}. Please keep it safe."
             send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
 
-
-            # Fetch the user_id and name of the newly created or updated user
-            cursor.execute(
-                """SELECT id, name
-                   FROM user
-                   WHERE email = ?;
-                """,
-                (email,)
-            )
-            user_record = cursor.fetchone()
-            user_id = user_record[0]
-            username = user_record[1]
-
-            # Generate a new authToken
-            # auth_token = generate_auth_token()
-
             return jsonify(
                 success=True,
                 message="Password has been set and sent to your email successfully.",
@@ -533,7 +543,6 @@ class m:
                 authToken=auth_token,
                 url=post_authentication_redirect_url
             ), 200
-            # return jsonify(success=True, message="Password has been set and sent to your email successfully."), 200
 
         except Exception as e:
             self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
@@ -541,9 +550,6 @@ class m:
 
         finally:
             conn.close()
-
-
-
 
     def insert_log(self, invoking_function_name, message, sqlite_db_path, telegram_bot_preset_name):
 
