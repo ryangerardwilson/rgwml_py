@@ -36,7 +36,7 @@ class m:
                     CREATE TABLE IF NOT EXISTS user (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         google_auth_user_id TEXT UNIQUE,
-                        email TEXT,
+                        email TEXT UNIQUE,
                         name TEXT,
                         picture TEXT,
                         password TEXT,
@@ -251,6 +251,8 @@ class m:
                 return jsonify(success=False, message="Please use 'Sign in with Gmail'. Your account is attached to your Gmail Id."), 400
             elif email.endswith('@gmail.com'):  # user[0] corresponds to google_auth_user_id
                 return jsonify(success=False, message="Please use 'Sign in with Gmail' instead, when signing in with a Gmail Id"), 400
+            elif user:
+                return jsonify(success=True, message="User confirmed. Seek password"), 200
 
             # Generate a temporary password
             temp_password = generate_temp_password()
@@ -262,12 +264,10 @@ class m:
             exists = cursor.fetchone()[0]
 
 
-            # If email exists, update the row
+            # If email exists, seek the password
             if exists:
                 cursor.execute(
-                    """UPDATE user_pending_validation
-                       SET temp_password = ?, creation_time = CURRENT_TIMESTAMP
-                       WHERE email = ?""",
+                    "UPDATE user_pending_validation SET temp_password = ?, creation_time = CURRENT_TIMESTAMP WHERE email = ?",
                     (temp_password, email)
                 )
             # If email does not exist, insert a new row
@@ -296,6 +296,7 @@ class m:
         finally:
             conn.close()
 
+    # Validates temp password
     def validate_password(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -385,6 +386,124 @@ class m:
         finally:
             conn.close()
 
+    def validate_user_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_config():
+            config_path = locate_config_file()
+            with open(config_path, "r") as file:
+                return json.load(file)
+
+        def get_gmail_bot_preset(config, preset_name):
+            presets = config.get("gmail_bot_presets", [])
+            for preset in presets:
+                if preset.get("name") == preset_name:
+                    return preset
+            return None
+
+        def get_gmail_bot_details(config, preset_name):
+            preset = get_gmail_bot_preset(config, preset_name)
+            if not preset:
+                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
+
+        def generate_auth_token(length=32):
+            characters = string.ascii_letters + string.digits
+            return ''.join(random.choice(characters) for i in range(length))
+
+
+        # Load configuration
+        config = load_config()
+        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        sender_email_id = gmail_bot_preset_name
+
+        # Extract email, password, latitude and longitude from the request
+        request_body_json = request.json
+        email = request_body_json.get('email')
+        password = request_body_json.get('password')
+        user_latitude = request_body_json.get('userLatitude')
+        user_longitude = request_body_json.get('userLongitude')
+
+        # Validate input
+        if not email or not password or not user_latitude or not user_longitude:
+            return jsonify(success=False, message="Email, password, latitude, and longitude are required"), 400
+
+        try:
+            conn = sqlite3.connect(sqlite_db_path)
+            cursor = conn.cursor()
+
+            # Check if the email and password match with the records in the user table
+            cursor.execute(
+                """SELECT id, name, password
+                   FROM user
+                   WHERE email = ?""",
+                (email,)
+            )
+            record = cursor.fetchone()
+
+            if not record:
+                return jsonify(success=False, message="Email not found."), 404
+
+            user_id, user_name, stored_password = record
+
+            if stored_password != password:
+                return jsonify(success=False, message="Invalid password."), 400
+
+            # Insert login log with user location
+            cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
+                           (user_id, user_latitude, user_longitude))
+
+
+            # Generate a new authToken
+            auth_token = generate_auth_token()
+
+            cursor.execute(
+                """UPDATE user
+                   SET active_token = ?
+                   WHERE id = ?;
+                """,
+                (auth_token, user_id)
+            )
+
+            conn.commit()
+
+            return jsonify(
+                success=True,
+                message="Password validated successfully.",
+                user_id=user_id,
+                user_email=email,
+                user_name=user_name,
+                authToken=auth_token,
+                url=post_authentication_redirect_url
+            ), 200
+
+        except Exception as e:
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
+            return jsonify(error=str(e)), 500
+
+        finally:
+            conn.close()
+
+
+
+
+
+
+
     def set_first_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
 
         def locate_config_file(filename="rgwml.config"):
@@ -445,6 +564,13 @@ class m:
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
+        def is_valid_password(password):
+            # Password validation logic e.g., minimum length, contains special characters, etc.
+            if len(password) < 8:
+                return False
+            return True  # You can add more complex validation logic here
+
+
         # Extract email, temp_password, new password, and user location from the request
         request_body_json = request.json
         email = request_body_json.get('email')
@@ -456,12 +582,6 @@ class m:
         # Validate input
         if not email or not temp_password or not new_password:
             return jsonify(success=False, message="Email, temporary password, and new password are required"), 400
-
-        def is_valid_password(password):
-            # Password validation logic e.g., minimum length, contains special characters, etc.
-            if len(password) < 8:
-                return False
-            return True  # You can add more complex validation logic here
 
         if not is_valid_password(new_password):
             return jsonify(success=False, message="Invalid password. Ensure it meets the complexity requirements."), 400
