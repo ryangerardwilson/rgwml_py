@@ -6,7 +6,7 @@ import requests
 import time
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import request, jsonify, make_response
 from google.oauth2 import id_token, service_account
 from google.auth.transport import requests as google_requests
@@ -651,7 +651,7 @@ class m:
 
             # Send the new password via email
             email_subject = "Your New Password"
-            email_message = f"Your new password has been set successfully. Your new password is: {new_password}. Please keep it safe."
+            email_message = f"Your new password has been set successfully. Your new password is: {new_password} \n\nPlease keep it safe."
             send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
 
             return jsonify(
@@ -759,6 +759,324 @@ class m:
 
         response = requests.post(url, json=payload)
         response.raise_for_status()
+
+    def send_reset_password_link(self, invoking_function_name, request, sqlite_db_path, reset_password_page_url, gmail_bot_preset_name, telegram_bot_preset_name):
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_config():
+            config_path = locate_config_file()
+            with open(config_path, "r") as file:
+                return json.load(file)
+
+        def get_gmail_bot_preset(config, preset_name):
+            presets = config.get("gmail_bot_presets", [])
+            for preset in presets:
+                if preset.get("name") == preset_name:
+                    return preset
+            return None
+
+        def get_gmail_bot_details(config, preset_name):
+            preset = get_gmail_bot_preset(config, preset_name)
+            if not preset:
+                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
+
+        def is_valid_email(email):
+            regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+            return re.match(regex, email)
+
+        def create_tables_if_not_exist(cursor):
+            cursor.execute('''CREATE TABLE IF NOT EXISTS user (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                google_auth_user_id TEXT UNIQUE,
+                                email TEXT UNIQUE,
+                                name TEXT,
+                                picture TEXT,
+                                password TEXT,
+                                active_token TEXT,
+                                creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                              )''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_login_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    latitude REAL,
+                    longitude REAL,
+                    FOREIGN KEY (user_id) REFERENCES user (id)
+                )
+            ''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS user_pending_validation (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                email TEXT UNIQUE,
+                                temp_password TEXT,
+                                creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                              )''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                email TEXT UNIQUE,
+                                token TEXT,
+                                expiration_time TIMESTAMP
+                              )''')
+
+        def generate_reset_token(length=32):
+            return secrets.token_urlsafe(length)
+
+        def send_email(sender_email_id, service_account_credentials_path, recipient_email, subject, message_text):
+            def authenticate_service_account(service_account_credentials_path, sender_email_id):
+                """Authenticate the service account and return a Gmail API service instance."""
+                credentials = service_account.Credentials.from_service_account_file(
+                    service_account_credentials_path,
+                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    subject=sender_email_id
+                )
+                service = build('gmail', 'v1', credentials=credentials)
+                return service
+
+            service = authenticate_service_account(service_account_credentials_path, sender_email_id)
+            message = MIMEText(message_text)
+            message['to'] = recipient_email
+            message['from'] = sender_email_id
+            message['subject'] = subject
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            email_body = {'raw': raw}
+            message = service.users().messages().send(userId="me", body=email_body).execute()
+
+        # Load configuration
+        config = load_config()
+        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        sender_email_id = gmail_bot_preset_name
+
+        # Extract email from the request
+        request_body_json = request.json
+        email = request_body_json.get('email')
+
+        # Validate email
+        if not email:
+            return jsonify(success=False, message="Email is required"), 400
+        if not is_valid_email(email):
+            return jsonify(success=False, message="Invalid email address"), 400
+
+        try:
+            conn = sqlite3.connect(sqlite_db_path)
+            cursor = conn.cursor()
+
+            # Create necessary tables if they do not exist
+            create_tables_if_not_exist(cursor)
+
+            # Check if the email exists in the user table
+            cursor.execute("SELECT * FROM user WHERE email = ?", (email,))
+            user = cursor.fetchone()
+
+            if not user:
+                return jsonify(success=False, message="No user found with this email"), 404
+
+            # Generate a unique reset token
+            reset_token = generate_reset_token()
+            expiration_time = datetime.now() + timedelta(hours=1)  # Token will be valid for 1 hour
+
+            # Insert or update the reset token in the database
+            cursor.execute(
+                """INSERT INTO password_reset_tokens (email, token, expiration_time)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(email) DO UPDATE SET token=excluded.token, expiration_time=excluded.expiration_time""",
+                (email, reset_token, expiration_time)
+            )
+            conn.commit()
+
+            # Send the reset token via email
+            reset_link = f"{reset_password_page_url}?token={reset_token}"
+            email_subject = "Password Reset Request"
+            email_message = f"Click on the following link to reset your password: {reset_link}\n\nThis link is valid for 1 hour."
+
+            send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
+
+            return jsonify(success=True, message="Password reset link sent. Check your email."), 200
+
+        except Exception as e:
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
+            return jsonify(error=str(e)), 500
+
+        finally:
+            conn.close()
+
+    def reset_password_and_login(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [
+                os.path.join(home_dir, "Desktop"),
+                os.path.join(home_dir, "Documents"),
+                os.path.join(home_dir, "Downloads"),
+            ]
+            for path in search_paths:
+                for root, dirs, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_config():
+            config_path = locate_config_file()
+            with open(config_path, "r") as file:
+                return json.load(file)
+
+        def get_gmail_bot_preset(config, preset_name):
+            presets = config.get("gmail_bot_presets", [])
+            for preset in presets:
+                if preset.get("name") == preset_name:
+                    return preset
+            return None
+
+        def get_gmail_bot_details(config, preset_name):
+            preset = get_gmail_bot_preset(config, preset_name)
+            if not preset:
+                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
+            service_account_credentials_path = preset.get("service_account_credentials_path")
+            if not service_account_credentials_path:
+                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
+            return service_account_credentials_path
+
+        def send_email(sender_email_id, service_account_credentials_path, recipient_email, subject, message_text):
+            def authenticate_service_account(service_account_credentials_path, sender_email_id):
+                """Authenticate the service account and return a Gmail API service instance."""
+                credentials = service_account.Credentials.from_service_account_file(
+                    service_account_credentials_path,
+                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    subject=sender_email_id
+                )
+                service = build('gmail', 'v1', credentials=credentials)
+                return service
+
+            service = authenticate_service_account(service_account_credentials_path, sender_email_id)
+            message = MIMEText(message_text)
+            message['to'] = recipient_email
+            message['from'] = sender_email_id
+            message['subject'] = subject
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+            email_body = {'raw': raw}
+            message = service.users().messages().send(userId="me", body=email_body).execute()
+
+        def generate_auth_token(length=32):
+            characters = string.ascii_letters + string.digits
+            return ''.join(random.choice(characters) for i in range(length))
+
+        def is_valid_password(password):
+            # Password validation logic e.g., minimum length, contains special characters, etc.
+            if len(password) < 8:
+                return False
+            return True  # You can add more complex validation logic here
+
+        # Extract token, new password, and user location from the request
+        request_body_json = request.json
+        token = request_body_json.get('token')
+        new_password = request_body_json.get('new_password')
+        user_latitude = request_body_json.get('userLatitude')
+        user_longitude = request_body_json.get('userLongitude')
+
+        # Validate input
+        if not token or not new_password:
+            return jsonify(success=False, message="Token and new password are required"), 400
+
+        if not is_valid_password(new_password):
+            return jsonify(success=False, message="Invalid password. Ensure it meets the complexity requirements."), 400
+
+        try:
+            conn = sqlite3.connect(sqlite_db_path)
+            cursor = conn.cursor()
+
+            # Load configuration
+            config = load_config()
+            service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+            sender_email_id = gmail_bot_preset_name
+
+            # Check if the token exists and has not expired
+            cursor.execute(
+                """SELECT email, expiration_time
+                   FROM password_reset_tokens
+                   WHERE token = ?""",
+                (token,)
+            )
+            record = cursor.fetchone()
+
+            if not record:
+                return jsonify(success=False, message="Invalid or expired token"), 400
+
+            email, expiration_time = record
+
+            if datetime.strptime(expiration_time, '%Y-%m-%d %H:%M:%S.%f') < datetime.now():
+                return jsonify(success=False, message="Invalid or expired token"), 400
+
+            # Generate a new authToken
+            auth_token = generate_auth_token()
+
+            # Create or update user with the email, new password, and auth token
+            cursor.execute(
+                """INSERT INTO user (email, password, active_token)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(email) DO UPDATE SET password=excluded.password, active_token=excluded.active_token;
+                """,
+                (email, new_password, auth_token)
+            )
+
+            # Fetch the user_id and name of the newly created or updated user
+            cursor.execute(
+                """SELECT id, name
+                   FROM user
+                   WHERE email = ?;
+                """,
+                (email,)
+            )
+            user_record = cursor.fetchone()
+            user_id = user_record[0]
+            username = user_record[1]
+
+            # Insert login log with user location
+            cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
+                           (user_id, user_latitude, user_longitude))
+
+            # Clean up reset token once the password has been set
+            cursor.execute(
+                """DELETE FROM password_reset_tokens
+                   WHERE token = ?""",
+                (token,)
+            )
+
+            conn.commit()
+
+            # Send the new password via email
+            email_subject = "Your New Password"
+            email_message = f"Your new password has been set successfully to: {new_password} \n\nPlease keep it safe."
+            send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
+
+            return jsonify(
+                success=True,
+                message="Password has been set and updated successfully.",
+                user_id=user_id,
+                user_email=email,
+                user_name=username,
+                authToken=auth_token,
+                url=post_authentication_redirect_url
+            ), 200
+
+        except Exception as e:
+            self.send_telegram_message(invoking_function_name, f"Error: {e}", telegram_bot_preset_name)
+            return jsonify(error=str(e)), 500
+
+        finally:
+            conn.close()
 
     def send_secure_data(self, invoking_function_name, secure_data, sqlite_db_path, telegram_bot_preset_name, google_client_id):
 
