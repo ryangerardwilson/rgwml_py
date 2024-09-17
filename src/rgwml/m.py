@@ -1078,7 +1078,7 @@ class m:
         finally:
             conn.close()
 
-    def send_secure_data(self, invoking_function_name, secure_data, sqlite_db_path, telegram_bot_preset_name, google_client_id):
+    def send_secure_data(self, invoking_function_name, request, secure_data, sqlite_db_path, telegram_bot_preset_name, google_client_id):
 
         def verify_google_token(token, google_client_id):
             try:
