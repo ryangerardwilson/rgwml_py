@@ -1139,4 +1139,60 @@ class m:
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
 
+    def is_user_valid(self, invoking_function_name, request, sqlite_db_path, google_client_id, telegram_bot_preset_name):
+
+        def verify_google_token(token, google_client_id):
+            try:
+                idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), google_client_id)
+                return idinfo is not None  # Return True if the token is valid
+            except ValueError:
+                return False
+
+        def verify_email_token(user_id, token):
+            try:
+                # self.send_telegram_message(invoking_function_name, f"Debug: user_id: {user_id} \n\n token: {token}", telegram_bot_preset_name)
+                conn = sqlite3.connect(sqlite_db_path)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT active_token
+                       FROM user
+                       WHERE id = ?""",
+                    (user_id,)
+                )
+                record = cursor.fetchone()
+                # self.send_telegram_message(invoking_function_name, f"Debug: record[0]: {record[0]}", telegram_bot_preset_name)
+                if record and record[0] == token:
+                    return True
+                return False
+            except Exception as e:
+                self.insert_log(invoking_function_name, f"Database error: {e}", sqlite_db_path, telegram_bot_preset_name)
+                self.send_telegram_message(invoking_function_name, f"Database error: {e}", telegram_bot_preset_name)
+                return False
+            finally:
+                conn.close()
+
+        try:
+            auth_header = request.headers.get('Authorization')
+            auth_type = request.headers.get('AuthTokenType')
+            user_id = request.headers.get('UserId')
+            
+            if auth_header and auth_header.startswith('Bearer '):
+                secure_token = auth_header.split(' ')[1]  # Extract the token part
+            else:
+                secure_token = None
+
+            if auth_type == 'google_auth':
+                if secure_token and verify_google_token(secure_token, google_client_id):
+                    return True
+            elif auth_type == 'email_login':
+                if user_id and verify_email_token(user_id, secure_token):
+                    return True
+
+            return False
+
+        except Exception as e:
+            error_message = f"[ERROR::{invoking_function_name}] Error: {e}"
+            self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
+            self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
+            return jsonify({"error": error_message}), 500
 
