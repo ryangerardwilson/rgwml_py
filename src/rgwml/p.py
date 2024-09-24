@@ -2877,12 +2877,18 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def plc(self, y, x=None, save_path=None):
         """PLOT::[d.plc(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name for the x axis eg. 'Column5', image_save_path (str)"""
         y = y.replace(' ', '').split(',')
+        
+        # Ensure the y columns are numeric
+        for y_column in y:
+            self.df[y_column] = pd.to_numeric(self.df[y_column], errors='coerce')
+
         plt.figure(figsize=(10, 6))
 
         if x is None:
             x_data = self.df.index
             x_label = 'index'
         else:
+            self.df[x] = pd.to_numeric(self.df[x], errors='coerce')
             x_data = self.df[x]
             x_label = x
 
@@ -2911,6 +2917,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Failed to open image: {e}")
 
         return self
+
 
     def pdist(self, y, save_path=None):
         """PLOT::[d.pdist(y='Column1, Column2, Column3')] Plot distribution histograms for the specified columns. Optional param: image_save_path (str)"""
