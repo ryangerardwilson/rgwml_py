@@ -1617,13 +1617,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
                 print("\nAGGREGATED DATAFRAME")
                 print(aggregated_df)
-            print(aggregated_df)
+            # print(aggregated_df)
 
 
             # Compute descriptive statistics on the aggregated data
-            description = aggregated_df.describe()
-            print("\nPANDAS DESCRIBE")
-            print(description)
+            # description = aggregated_df.describe()
+            # print("\nPANDAS DESCRIBE")
+            # print(description)
 
             # Select numeric columns after aggregation
             numeric_columns = aggregated_df.select_dtypes(include=['number']).columns
@@ -1714,7 +1714,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 'accv3l10pct': avg_cum_change_value_last_3_10pct  # Average Cumulative Change Over Last 3 10-Percentile Intervals
             })
 
-            print("\nRGWML STATISTICS")
+            # print("\nRGWML STATISTICS")
             print(sum_stats)
 
             # Print the key and calculation formulas
