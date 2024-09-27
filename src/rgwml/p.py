@@ -1558,17 +1558,172 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-    def des(self):
-        """INSPECT::[d.d()]Describe."""
+    def des(self, date_column_name=None, date_level_aggregation_operation=None):
+        """INSPECT::[d.des(date_column_name='date',date_level_aggregation_operation='SUM')] Describe and calculate additional statistics. Optional: date_column_name, date_level_aggregation_operation (options: SUM, COUNT, MEAN, MEDIAN)"""
         if self.df is not None:
-            description = self.df.describe()
+            # Make a copy of the original DataFrame to avoid modifying it
+            working_df = self.df.copy()
+
+            # Convert object columns to numeric where possible
+            for col in working_df.columns:
+                if working_df[col].dtype == 'object' and col != date_column_name:
+                    working_df[col] = pd.to_numeric(working_df[col], errors='coerce')
+
+            if date_column_name and date_level_aggregation_operation:
+                if date_column_name in working_df.columns:
+                    # Convert date column to datetime
+                    working_df[date_column_name] = pd.to_datetime(working_df[date_column_name], errors='coerce')
+
+                    # Determine valid aggregation operations
+                    valid_operations = ["SUM", "COUNT", "MEAN", "MEDIAN"]
+                    if date_level_aggregation_operation.upper() in valid_operations:
+                        # Select numeric columns for aggregation
+                        numeric_columns = working_df.select_dtypes(include=['number']).columns
+
+                        # Perform the specified aggregation
+                        if date_level_aggregation_operation.upper() == "SUM":
+                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].sum(numeric_only=True).reset_index()
+                        elif date_level_aggregation_operation.upper() == "COUNT":
+                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].count().reset_index()
+                        elif date_level_aggregation_operation.upper() == "MEAN":
+                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].mean().reset_index()
+                        elif date_level_aggregation_operation.upper() == "MEDIAN":
+                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].median().reset_index()
+                    else:
+                        raise ValueError(f"Invalid aggregation operation: {date_level_aggregation_operation}. Must be one of {valid_operations}.")
+                else:
+                    raise ValueError(f"Date column '{date_column_name}' not found in DataFrame.")
+            else:
+                aggregated_df = working_df
+
+            # print(aggregated_df)
+
+            # Compute descriptive statistics on the aggregated data
+            description = aggregated_df.describe()
+            print("PANDAS DESCRIBE")
             print(description)
-            self.df = description
+
+            # Select numeric columns after aggregation
+            numeric_columns = aggregated_df.select_dtypes(include=['number']).columns
+
+            # Calculate Aggregate Sum
+            sum_values = aggregated_df[numeric_columns].sum()
+            count = aggregated_df[numeric_columns].count()
+
+            # Initialize structures to hold various statistics
+            net_change = pd.Series(index=numeric_columns, dtype='float64')
+            avg_change_rate = pd.Series(index=numeric_columns, dtype='float64')
+            med_change_rate = pd.Series(index=numeric_columns, dtype='float64')
+            avg_change_value_abs = pd.Series(index=numeric_columns, dtype='float64')
+            med_change_value_abs = pd.Series(index=numeric_columns, dtype='float64')
+            avg_change_value = pd.Series(index=numeric_columns, dtype='float64')
+            med_change_value = pd.Series(index=numeric_columns, dtype='float64')
+
+            # Initialize structures to hold cumulative change values
+            avg_cum_change_value = pd.Series(index=numeric_columns, dtype='float64')
+            med_cum_change_value = pd.Series(index=numeric_columns, dtype='float64')
+            avg_cum_change_value_percentile = pd.Series(index=numeric_columns, dtype='float64')
+            med_cum_change_value_percentile = pd.Series(index=numeric_columns, dtype='float64')
+            avg_change_rate_last_3_10pct = pd.Series(index=numeric_columns, dtype='float64')
+            avg_cum_change_value_last_3_10pct = pd.Series(index=numeric_columns, dtype='float64')
+            avg_change_rate_percentile = pd.Series(index=numeric_columns, dtype='float64')
+
+            # Calculate various statistics
+            for column in numeric_columns:
+                column_diff = aggregated_df[column].diff().dropna()  # Calculate differences and drop NaN
+                abs_column_diff = column_diff.abs()
+
+                net_change[column] = column_diff.sum()  # Total change
+                avg_change_rate[column] = column_diff.mean()  # Average change rate
+                med_change_rate[column] = column_diff.median()  # Median change rate
+                avg_change_value_abs[column] = abs_column_diff.mean()  # Average absolute change value
+                med_change_value_abs[column] = abs_column_diff.median()  # Median absolute change value
+                avg_change_value[column] = column_diff.mean()  # Average non-absolute change value
+                med_change_value[column] = column_diff.median()  # Median non-absolute change value
+
+                # Calculate cumulative values
+                cum_sum = aggregated_df[column].cumsum()
+                cum_sum_diff = cum_sum.diff().dropna()
+
+                avg_cum_change_value[column] = cum_sum_diff.mean()
+                med_cum_change_value[column] = cum_sum_diff.median()
+
+                # Calculate percentile intervals
+                rows = len(aggregated_df[column].dropna())
+                if rows >= 10:  # Ensure that the column has at least 10 non-NaN values
+                    interval_indices = np.linspace(0, rows-1, 11, dtype=int)
+                    interval_cum_sums = cum_sum.iloc[interval_indices]
+                    interval_diffs = aggregated_df[column].iloc[interval_indices].diff().dropna()
+                    change_rates = interval_diffs / interval_cum_sums.iloc[:-1].values
+
+                    avg_cum_change_value_percentile[column] = interval_diffs.mean()
+                    med_cum_change_value_percentile[column] = interval_diffs.median()
+                    avg_change_rate_percentile[column] = change_rates.mean()
+
+                    # Get the average change rate over the last 3 10-percentile intervals
+                    last_3_avg_changes = interval_diffs.iloc[-3:]
+                    avg_change_rate_last_3_10pct[column] = last_3_avg_changes.mean()
+
+                    # Calculate the average cumulative change value over the last 3 10-percentile intervals
+                    last_3_cum_changes = interval_cum_sums.diff().dropna().iloc[-3:]
+                    avg_cum_change_value_last_3_10pct[column] = last_3_cum_changes.mean()
+                else:
+                    avg_cum_change_value_percentile[column] = np.nan
+                    med_cum_change_value_percentile[column] = np.nan
+                    avg_change_rate_last_3_10pct[column] = np.nan
+                    avg_cum_change_value_last_3_10pct[column] = np.nan
+                    avg_change_rate_percentile[column] = np.nan
+
+            # Prepare the sum statistics DataFrame
+            sum_stats = pd.DataFrame({
+                'as': sum_values,
+                'nc': net_change,
+                'acr': avg_change_rate,
+                'mcr': med_change_rate,
+                'acr10pct': avg_change_rate_percentile,  # Average Change Rate Over 10 Percentile Intervals
+                'acr3l10pct': avg_change_rate_last_3_10pct,  # Average Change Rate Over Last 3 10-Percentile Intervals
+                'aacv': avg_change_value_abs,
+                'macv': med_change_value_abs,
+                'acv': avg_change_value,
+                'mcv': med_change_value,
+                'accv': avg_cum_change_value,
+                'mccv': med_cum_change_value,
+                'acv10pct': avg_cum_change_value_percentile,
+                'mcv10pct': med_cum_change_value_percentile,
+                'accv3l10pct': avg_cum_change_value_last_3_10pct  # Average Cumulative Change Over Last 3 10-Percentile Intervals
+            })
+
+            print("\nRGWML STATISTICS")
+            print(sum_stats)
+
+            # Assign the description and sum_stats back to the DataFrameInspector object if needed
+            # self.df_description = description
+            # self.df_sum_stats = sum_stats
+
+            # Print the key and calculation formulas
+            print("\nKey and Calculation Formulas:")
+            print("  as: Aggregate Sum (sum of all values in the column)")
+            print("  nc: Net Change (sum of consecutive differences: Σ(diff(column)))")
+            print("  acr: Average Change Rate (mean of consecutive differences: mean(diff(column)))")
+            print("  mcr: Median Change Rate (median of consecutive differences: median(diff(column)))")
+            print("  acr10pct: Average Change Rate Over 10 Percentile Intervals (mean of change rates over 10 percentile intervals)")
+            print("  acr3l10pct: Average Change Rate Over Last 3 10-Percentile Intervals (mean of changes over last 3 intervals)")
+            print("  aacv: Average Absolute Change Value (mean of absolute differences: mean(abs(diff(column))))")
+            print("  macv: Median Absolute Change Value (median of absolute differences: median(abs(diff(column))))")
+            print("  acv: Average Change Value (mean of consecutive differences: mean(diff(column)))")
+            print("  mcv: Median Change Value (median of consecutive differences: median(diff(column)))")
+            print("  accv: Average Cumulative Change Value (mean of cumulative differences: mean(diff(cumsum(column))))")
+            print("  mccv: Median Cumulative Change Value (median of cumulative differences: median(diff(cumsum(column))))")
+            print("  acv10pct: Average Cumulative Change Value Over 10 Percentile Intervals")
+            print("  mcv10pct: Median Cumulative Change Value Over 10 Percentile Intervals")
+            print("  accv3l10pct: Average Cumulative Change Over Last 3 10-Percentile Intervals")
+
         else:
-            raise ValueError("No DataFrame to describe. Please load a file first using the frm or frml method.")
+            raise ValueError("No DataFrame to describe. Please load a DataFrame first.")
 
         gc.collect()
         return self
+
 
     def fnr(self, n):
         """INSPECT::[d.fnr('n')] First n rows."""
