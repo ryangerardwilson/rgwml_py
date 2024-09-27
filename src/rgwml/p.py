@@ -1688,8 +1688,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 'mcv': med_change_value,
                 'accv': avg_cum_change_value,
                 'mccv': med_cum_change_value,
-                'acv10pct': avg_cum_change_value_percentile,
-                'mcv10pct': med_cum_change_value_percentile,
+                'accv10pct': avg_cum_change_value_percentile,
+                'mccv10pct': med_cum_change_value_percentile,
                 'accv3l10pct': avg_cum_change_value_last_3_10pct  # Average Cumulative Change Over Last 3 10-Percentile Intervals
             })
 
@@ -1714,8 +1714,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print("  mcv: Median Change Value (median of consecutive differences: median(diff(column)))")
             print("  accv: Average Cumulative Change Value (mean of cumulative differences: mean(diff(cumsum(column))))")
             print("  mccv: Median Cumulative Change Value (median of cumulative differences: median(diff(cumsum(column))))")
-            print("  acv10pct: Average Cumulative Change Value Over 10 Percentile Intervals")
-            print("  mcv10pct: Median Cumulative Change Value Over 10 Percentile Intervals")
+            print("  accv10pct: Average Cumulative Change Value Over 10 Percentile Intervals")
+            print("  mccv10pct: Median Cumulative Change Value Over 10 Percentile Intervals")
             print("  accv3l10pct: Average Cumulative Change Over Last 3 10-Percentile Intervals")
 
         else:
