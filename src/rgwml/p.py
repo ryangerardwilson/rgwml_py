@@ -1558,8 +1558,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-    def des(self, date_column_name=None, date_level_aggregation_operation=None):
-        """INSPECT::[d.des(date_column_name='date',date_level_aggregation_operation='SUM')] Describe and calculate additional statistics. Optional: date_column_name, date_level_aggregation_operation (options: SUM, COUNT, MEAN, MEDIAN)"""
+    def des(self, date_column_name=None, column_aggregation_operations=None):
+        """
+        INSPECT::[d.des(date_column_name='date', column_aggregation_operations={'weight': 'MEAN'})]
+        Describe and calculate additional statistics. Optional: date_column_name, column_aggregation_operations
+        where column_aggregation_operations={'column_name': 'operation'} and operation can be SUM, COUNT, MEAN, MEDIAN.
+        """
+
+        # Set default aggregation operation
+        default_aggregation_operation = "SUM"
+
+        # Allowed aggregation operations
+        valid_operations = ["SUM", "COUNT", "MEAN", "MEDIAN"]
+
         if self.df is not None:
             # Make a copy of the original DataFrame to avoid modifying it
             working_df = self.df.copy()
@@ -1569,38 +1580,49 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 if working_df[col].dtype == 'object' and col != date_column_name:
                     working_df[col] = pd.to_numeric(working_df[col], errors='coerce')
 
-            if date_column_name and date_level_aggregation_operation:
+            # Initialize dataframe to hold aggregated results
+            aggregated_df = working_df
+
+            if date_column_name:
                 if date_column_name in working_df.columns:
                     # Convert date column to datetime
                     working_df[date_column_name] = pd.to_datetime(working_df[date_column_name], errors='coerce')
 
-                    # Determine valid aggregation operations
-                    valid_operations = ["SUM", "COUNT", "MEAN", "MEDIAN"]
-                    if date_level_aggregation_operation.upper() in valid_operations:
-                        # Select numeric columns for aggregation
-                        numeric_columns = working_df.select_dtypes(include=['number']).columns
+                    # Group by the date column
+                    grouped = working_df.groupby(date_column_name)
 
-                        # Perform the specified aggregation
-                        if date_level_aggregation_operation.upper() == "SUM":
-                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].sum(numeric_only=True).reset_index()
-                        elif date_level_aggregation_operation.upper() == "COUNT":
-                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].count().reset_index()
-                        elif date_level_aggregation_operation.upper() == "MEAN":
-                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].mean().reset_index()
-                        elif date_level_aggregation_operation.upper() == "MEDIAN":
-                            aggregated_df = working_df.groupby(date_column_name)[numeric_columns].median().reset_index()
-                    else:
-                        raise ValueError(f"Invalid aggregation operation: {date_level_aggregation_operation}. Must be one of {valid_operations}.")
-                else:
-                    raise ValueError(f"Date column '{date_column_name}' not found in DataFrame.")
-            else:
-                aggregated_df = working_df
+                    # Initialize a dictionary for storing aggregation functions
+                    agg_funcs = {}
 
-            # print(aggregated_df)
+                    for col in working_df.select_dtypes(include=['number']).columns:
+                        if column_aggregation_operations and col in column_aggregation_operations:
+                            operation = column_aggregation_operations[col].upper()
+                        else:
+                            operation = default_aggregation_operation
+
+                        if operation not in valid_operations:
+                            raise ValueError(f"Invalid column-level aggregation operation: {operation}. Must be one of {valid_operations}.")
+
+                        if operation == "SUM":
+                            agg_funcs[col] = 'sum'
+                        elif operation == "COUNT":
+                            agg_funcs[col] = 'count'
+                        elif operation == "MEAN":
+                            agg_funcs[col] = 'mean'
+                        elif operation == "MEDIAN":
+                            agg_funcs[col] = 'median'
+
+                    # Perform aggregation
+                    aggregated_df = grouped.agg(agg_funcs).reset_index()
+
+                print("\nAGGREGATED DATAFRAME")
+                print(aggregated_df)
+            print(aggregated_df)
+
 
             # Compute descriptive statistics on the aggregated data
             description = aggregated_df.describe()
-            print("PANDAS DESCRIBE")
+            print("\nPANDAS DESCRIBE")
             print(description)
 
             # Select numeric columns after aggregation
@@ -1608,7 +1630,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             # Calculate Aggregate Sum
             sum_values = aggregated_df[numeric_columns].sum()
-            count = aggregated_df[numeric_columns].count()
 
             # Initialize structures to hold various statistics
             net_change = pd.Series(index=numeric_columns, dtype='float64')
@@ -1696,10 +1717,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print("\nRGWML STATISTICS")
             print(sum_stats)
 
-            # Assign the description and sum_stats back to the DataFrameInspector object if needed
-            # self.df_description = description
-            # self.df_sum_stats = sum_stats
-
             # Print the key and calculation formulas
             print("\nKey and Calculation Formulas:")
             print("  as: Aggregate Sum (sum of all values in the column)")
@@ -1723,6 +1740,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         gc.collect()
         return self
+
 
 
     def fnr(self, n):
