@@ -49,7 +49,7 @@ from email import encoders
 import base64
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class p:
 
@@ -3738,38 +3738,77 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             file_id = gdrive_url.split('id=')[-1]
             return f"https://drive.google.com/uc?export=download&id={file_id}"
 
-        open_ai_key = load_key('open_ai_key')
-        client = OpenAI(api_key=open_ai_key)
+        def download_and_process_image(image_url):
+            if "drive.google.com" in image_url:
+                image_url = convert_google_drive_url(image_url)
 
-        # Prepare the batch input file
-        batch_input_data = []
-        for idx, row in self.df.iterrows():
-            value_to_analyze = row[column_to_analyse]
-
-            if is_image_url_analysis:
-                image_url = value_to_analyze
-
-                # Convert Google Drive link to direct download link
-                if "drive.google.com" in image_url:
-                    image_url = convert_google_drive_url(image_url)
-
-                # Download the image to a temporary file
+            try:
                 response = requests.get(image_url)
-                print(f"Response code: {response.status_code} for URL: {image_url}")
-                print(f"Content type: {response.headers.get('Content-Type')}")
-
                 if response.status_code == 200 and response.content:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
                         tmp_img_file.write(response.content)
                         tmp_img_file.flush()
 
                     try:
-                        # Convert the image to JPEG base64
                         image = Image.open(tmp_img_file.name)
                         with BytesIO() as output_buffer:
                             image.convert("RGB").save(output_buffer, format="JPEG")
                             base64_image = base64.b64encode(output_buffer.getvalue()).decode("utf-8")
+                            return base64_image  # Return the processed image as base64
+                    except UnidentifiedImageError:
+                        print(f"Failed to identify image file for URL: {image_url}")
+                        return None
+                    finally:
+                        os.unlink(tmp_img_file.name)
+                else:
+                    print(f"Failed to download image from {image_url}")
+                    return None
+            except Exception as e:
+                print(f"Exception during image download or processing: {e}")
+                return None
 
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        batch_input_data = []
+
+        # Use ThreadPoolExecutor for concurrent execution
+        with ThreadPoolExecutor() as executor:
+            future_to_index = {}
+            for idx, row in self.df.iterrows():
+                if is_image_url_analysis:
+                    value_to_analyze = row[column_to_analyse]
+                    if isinstance(value_to_analyze, str):
+                        future = executor.submit(download_and_process_image, value_to_analyze)
+                        future_to_index[future] = idx
+                    else:
+                        print(f"Invalid data for image URL at index {idx}: {value_to_analyze}")
+                        continue
+                else:
+                    analysis_prompt = f"{prompt} Data: {row[column_to_analyse]}"
+                    messages = [
+                        {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
+                        {"role": "user", "content": analysis_prompt}
+                    ]
+
+                    request_data = {
+                        "custom_id": f"request-{idx}",
+                        "method": "POST",
+                        "url": "/v1/chat/completions",
+                        "body": {
+                            "model": model,
+                            "messages": messages,
+                            "max_tokens": 1000
+                        }
+                    }
+                    batch_input_data.append(request_data)
+
+            # Process the futures as they complete
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    base64_image = future.result()
+                    if base64_image:
                         analysis_content = [
                             {
                                 "type": "text",
@@ -3787,33 +3826,20 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                             {"role": "user", "content": analysis_content}
                         ]
 
-                    except UnidentifiedImageError:
-                        print(f"Failed to identify image file for URL: {image_url} at {tmp_img_file.name}")
-                        continue  # Skip this row if the image cannot be identified
-                    finally:
-                        os.unlink(tmp_img_file.name)  # Ensure the file is deleted even if the above fails
-                else:
-                    print(f"Failed to download image from {image_url}")
-                    continue  # Skip this row if image download fails
-            else:
-                analysis_prompt = f"{prompt} Data: {value_to_analyze}"
-                messages = [
-                    {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
-                    {"role": "user", "content": analysis_prompt}
-                ]
-
-            request_data = {
-                "custom_id": f"request-{idx}",
-                "method": "POST",
-                "url": "/v1/chat/completions",
-                "body": {
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": 1000
-                }
-            }
-            batch_input_data.append(request_data)
-
+                        request_data = {
+                            "custom_id": f"request-{idx}",
+                            "method": "POST",
+                            "url": "/v1/chat/completions",
+                            "body": {
+                                "model": model,
+                                "messages": messages,
+                                "max_tokens": 1000
+                            }
+                        }
+                        batch_input_data.append(request_data)
+                except Exception as e:
+                    print(f"Error processing image at index {idx}: {e}")
+        
         # Write the batch input data to a .jsonl file
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
         with open(batch_input_file_path, 'w') as batch_input_file:
@@ -3839,6 +3865,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(f"Batch ID for {job_name}: {batch.id}")
 
         return batch.id
+
 
     def oaibl(self):
         """OPENAI::[d.oaibl()] OpenAI Batch list. Lists OpenAI batch jobs."""
