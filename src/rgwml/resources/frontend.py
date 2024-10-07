@@ -6,19 +6,21 @@ import requests
 from google.cloud import storage
 from .frontend_assets import *
 
+
 def create_nextjs_project(project_path, use_src):
     src_flag = '--src-dir' if use_src else ''
     subprocess.run(['npx', 'create-next-app@latest', project_path, '--typescript', '--no-eslint', '--tailwind', '--app', '--no-import-alias', src_flag], check=True)
     os.chdir(project_path)
-    
+
     # Remove .eslintrc.json if it exists
     eslintrc_path = os.path.join(project_path, '.eslintrc.json')
     if os.path.exists(eslintrc_path):
         os.remove(eslintrc_path)
-    
+
     subprocess.run(['npm', 'install', '-D', 'tailwindcss', 'postcss', 'autoprefixer', 'papaparse'], check=True)
     subprocess.run(['npm', 'i', '--save-dev', '@types/papaparse'], check=True)
     subprocess.run(['npx', 'tailwindcss', 'init', '-p'], check=True)
+
 
 def configure_tailwind(use_src):
     content_paths = [

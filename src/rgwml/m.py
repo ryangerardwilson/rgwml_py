@@ -63,7 +63,7 @@ class m:
         token = request_body_json.get('token')
         user_latitude = request_body_json.get('userLatitude')
         user_longitude = request_body_json.get('userLongitude')
-        
+
         try:
             if token:
                 idinfo = verify_token(token, google_client_id)
@@ -127,8 +127,6 @@ class m:
             self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
-
-
 
     def validate_email(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
         def locate_config_file(filename="rgwml.config"):
@@ -263,7 +261,6 @@ class m:
             )
             exists = cursor.fetchone()[0]
 
-
             # If email exists, seek the password
             if exists:
                 cursor.execute(
@@ -349,7 +346,7 @@ class m:
         try:
             conn = sqlite3.connect(sqlite_db_path)
             cursor = conn.cursor()
-            
+
             # Check if the email and temp_password match with the records in the user_pending_validation table
             cursor.execute(
                 """SELECT temp_password, creation_time
@@ -358,12 +355,12 @@ class m:
                 (email,)
             )
             record = cursor.fetchone()
-            
+
             if not record:
                 return jsonify(success=False, message="Email not found. Please request a new temporary password."), 404
 
             stored_temp_password, creation_time = record
-            
+
             if stored_temp_password != temp_password:
                 return jsonify(success=False, message="Invalid temporary password."), 400
 
@@ -425,7 +422,6 @@ class m:
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
-
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
@@ -467,7 +463,6 @@ class m:
             cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
                            (user_id, user_latitude, user_longitude))
 
-
             # Generate a new authToken
             auth_token = generate_auth_token()
 
@@ -497,12 +492,6 @@ class m:
 
         finally:
             conn.close()
-
-
-
-
-
-
 
     def set_first_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
 
@@ -569,7 +558,6 @@ class m:
             if len(password) < 8:
                 return False
             return True  # You can add more complex validation logic here
-
 
         # Extract email, temp_password, new password, and user location from the request
         request_body_json = request.json
@@ -1175,7 +1163,7 @@ class m:
             auth_header = request.headers.get('Authorization')
             auth_type = request.headers.get('AuthTokenType')
             user_id = request.headers.get('UserId')
-            
+
             if auth_header and auth_header.startswith('Bearer '):
                 secure_token = auth_header.split(' ')[1]  # Extract the token part
             else:
@@ -1195,4 +1183,3 @@ class m:
             self.insert_log(invoking_function_name, error_message, sqlite_db_path, telegram_bot_preset_name)
             self.send_telegram_message(invoking_function_name, error_message, telegram_bot_preset_name)
             return jsonify({"error": error_message}), 500
-

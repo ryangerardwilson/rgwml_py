@@ -17,7 +17,6 @@ from google.oauth2 import service_account
 import pandas_gbq
 import xgboost as xgb
 import matplotlib.pyplot as plt
-from PIL import Image
 import scipy.stats as stats
 import seaborn as sns
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering, MeanShift, SpectralClustering, Birch
@@ -48,6 +47,8 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from email import encoders
 import base64
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 
 
 class p:
@@ -1619,7 +1620,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 print(aggregated_df)
             # print(aggregated_df)
 
-
             # Compute descriptive statistics on the aggregated data
             # description = aggregated_df.describe()
             # print("\nPANDAS DESCRIBE")
@@ -1672,7 +1672,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 # Calculate percentile intervals
                 rows = len(aggregated_df[column].dropna())
                 if rows >= 10:  # Ensure that the column has at least 10 non-NaN values
-                    interval_indices = np.linspace(0, rows-1, 11, dtype=int)
+                    interval_indices = np.linspace(0, rows - 1, 11, dtype=int)
                     interval_cum_sums = cum_sum.iloc[interval_indices]
                     interval_diffs = aggregated_df[column].iloc[interval_indices].diff().dropna()
                     change_rates = interval_diffs / interval_cum_sums.iloc[:-1].values
@@ -1740,8 +1740,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         gc.collect()
         return self
-
-
 
     def fnr(self, n):
         """INSPECT::[d.fnr('n')] First n rows."""
@@ -3050,7 +3048,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def plc(self, y, x=None, save_path=None):
         """PLOT::[d.plc(y='Column1, Column2, Column3')] Plot line chart. Optional param: x (str), i.e. a single column name for the x axis eg. 'Column5', image_save_path (str)"""
         y = y.replace(' ', '').split(',')
-        
+
         # Ensure the y columns are numeric
         for y_column in y:
             self.df[y_column] = pd.to_numeric(self.df[y_column], errors='coerce')
@@ -3090,7 +3088,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Failed to open image: {e}")
 
         return self
-
 
     def pdist(self, y, save_path=None):
         """PLOT::[d.pdist(y='Column1, Column2, Column3')] Plot distribution histograms for the specified columns. Optional param: image_save_path (str)"""
@@ -3716,6 +3713,133 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return batch.id
 
+    def oaiba(self, job_name, model, column_to_analyse, prompt, new_column_name, is_image_url_analysis=False):
+        """OPENAI::[batch_id = d.oaiba('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price', is_image_url_analysis=True)] Get OpenAI Batch Analysis. Returns a batch id with optional image URL analysis."""
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            return config.get(key_name)
+
+        def convert_google_drive_url(gdrive_url):
+            # Extract the file ID from the Google Drive URL
+            file_id = gdrive_url.split('id=')[-1]
+            return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+        open_ai_key = load_key('open_ai_key')
+        client = OpenAI(api_key=open_ai_key)
+
+        # Prepare the batch input file
+        batch_input_data = []
+        for idx, row in self.df.iterrows():
+            value_to_analyze = row[column_to_analyse]
+
+            if is_image_url_analysis:
+                image_url = value_to_analyze
+
+                # Convert Google Drive link to direct download link
+                if "drive.google.com" in image_url:
+                    image_url = convert_google_drive_url(image_url)
+
+                # Download the image to a temporary file
+                response = requests.get(image_url)
+                print(f"Response code: {response.status_code} for URL: {image_url}")
+                print(f"Content type: {response.headers.get('Content-Type')}")
+
+                if response.status_code == 200 and response.content:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
+                        tmp_img_file.write(response.content)
+                        tmp_img_file.flush()
+
+                    try:
+                        # Convert the image to JPEG base64
+                        image = Image.open(tmp_img_file.name)
+                        with BytesIO() as output_buffer:
+                            image.convert("RGB").save(output_buffer, format="JPEG")
+                            base64_image = base64.b64encode(output_buffer.getvalue()).decode("utf-8")
+
+                        analysis_content = [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                        messages = [
+                            {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
+                            {"role": "user", "content": analysis_content}
+                        ]
+
+                    except UnidentifiedImageError:
+                        print(f"Failed to identify image file for URL: {image_url} at {tmp_img_file.name}")
+                        continue  # Skip this row if the image cannot be identified
+                    finally:
+                        os.unlink(tmp_img_file.name)  # Ensure the file is deleted even if the above fails
+                else:
+                    print(f"Failed to download image from {image_url}")
+                    continue  # Skip this row if image download fails
+            else:
+                analysis_prompt = f"{prompt} Data: {value_to_analyze}"
+                messages = [
+                    {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
+                    {"role": "user", "content": analysis_prompt}
+                ]
+
+            request_data = {
+                "custom_id": f"request-{idx}",
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 1000
+                }
+            }
+            batch_input_data.append(request_data)
+
+        # Write the batch input data to a .jsonl file
+        batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
+        with open(batch_input_file_path, 'w') as batch_input_file:
+            for request in batch_input_data:
+                batch_input_file.write(json.dumps(request) + '\n')
+
+        # Upload the batch input file
+        batch_input_file = client.files.create(
+            file=open(batch_input_file_path, "rb"),
+            purpose="batch"
+        )
+
+        # Create the batch
+        batch_input_file_id = batch_input_file.id
+        batch = client.batches.create(
+            input_file_id=batch_input_file_id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+            metadata={
+                "description": job_name
+            }
+        )
+        print(f"Batch ID for {job_name}: {batch.id}")
+
+        return batch.id
+
     def oaibl(self):
         """OPENAI::[d.oaibl()] OpenAI Batch list. Lists OpenAI batch jobs."""
 
@@ -3971,6 +4095,75 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
                 # Save the DataFrame
                 self.s(file_path)
+            else:
+                raise ValueError("No output file ID found for the completed batch.")
+        else:
+            print(f"Batch job {batch_id} status: {status}")
+
+        self.pr()
+        return self
+
+    def oaihbid(self, batch_id, batch_column_name):
+        """OPENAI::[d.oaihbid('your_batch_id', 'your_batch_column_name')] OpenAI harvest by batch ID. Check the status of the batch job using the given batch ID and process the results."""
+
+        def download_output_file(output_file_id, open_ai_key):
+            client = OpenAI(api_key=open_ai_key)
+
+            # Retrieve the file metadata
+            file_metadata = client.files.retrieve(output_file_id)
+            print(file_metadata)
+
+            # Retrieve the file content
+            response = client.files.content(output_file_id)
+            file_content = response.read()  # Read the content of the response
+
+            # Write the content to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                tmp_file.write(file_content)
+                tmp_file_path = tmp_file.name
+
+            return tmp_file_path
+
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def load_key(key_name):
+            config_path = locate_config_file()
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config.get(key_name)
+
+        # If the open_ai_key is not provided, load it from the config file
+        # if open_ai_key is None:
+        open_ai_key = load_key('open_ai_key')
+
+        status, output_file_id = self.goaibs(batch_id)
+
+        if status == 'completed':
+            print(f"Batch job {batch_id} completed")
+            if output_file_id:
+                tmp_file_path = download_output_file(output_file_id, open_ai_key)
+                new_column_data = []
+                with open(tmp_file_path, 'r') as f:
+                    for line in f:
+                        result = json.loads(line)
+                        if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
+                            message_content = result['response']['body']['choices'][0]['message']['content']
+                            analysis_result = json.loads(message_content)[batch_column_name]
+                            new_column_data.append(analysis_result)
+                        else:
+                            print(f"Skipping invalid result: {result}")
+                self.df[batch_column_name] = new_column_data
+
+                # Optionally save the DataFrame to a file or take further action
+                # self.s(file_path)
             else:
                 raise ValueError("No output file ID found for the completed batch.")
         else:
