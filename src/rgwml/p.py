@@ -1770,10 +1770,17 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def tnuv(self, n, columns):
         """INSPECT::[d.tnuv(n, ['col1', 'col2'])] Top n unique values for specified columns."""
         if self.df is not None:
+            report = {}
             for column in columns:
                 if column in self.df.columns:
-                    top_n = self.df[column].value_counts().nlargest(n)
-                    print(f"Top {n} unique values for column '{column}':\n{top_n}\n")
+                    frequency = self.df[column].value_counts(dropna=False)
+                    frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+                    top_n_values = frequency.nlargest(n)
+
+                    # Format output similar to pnfl
+                    report[column] = {str(value): str(count) for value, count in top_n_values.items()}
+
+                    print(f"Top {n} unique values for column '{column}':\n{json.dumps(report[column], indent=2)}\n")
                 else:
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
@@ -1785,10 +1792,17 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def bnuv(self, n, columns):
         """INSPECT::[d.bnuv(n, ['col1', 'col2'])] Bottom n unique values for specified columns."""
         if self.df is not None:
+            report = {}
             for column in columns:
                 if column in self.df.columns:
-                    bottom_n = self.df[column].value_counts().nsmallest(n)
-                    print(f"Bottom {n} unique values for column '{column}':\n{bottom_n}\n")
+                    frequency = self.df[column].value_counts(dropna=False)
+                    frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+                    bottom_n_values = frequency.nsmallest(n)
+
+                    # Format output similar to pnfl
+                    report[column] = {str(value): str(count) for value, count in bottom_n_values.items()}
+
+                    print(f"Bottom {n} unique values for column '{column}':\n{json.dumps(report[column], indent=2)}\n")
                 else:
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
@@ -3561,9 +3575,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def pnfl(self, n, columns, order_by="FREQ_DESC"):
-        """INSPECT::[d.pnfl(5,'Column1,Columns')] Print n frequency linear. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)"""
-
-        # Split columns string into a list
+        """INSPECT::[d.pnfl(5,'Column1,Columns')] Print n frequency linear."""
         columns = [col.strip() for col in columns.split(",")]
 
         def generate_linear_report(df, columns, limit, order_by):
@@ -3573,7 +3585,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 if current_col not in df.columns:
                     continue
 
-                # Handle NaN, NaT, and None values correctly based on the column type
                 if pd.api.types.is_numeric_dtype(df[current_col]):
                     missing_value_str = 'NaN'
                 elif pd.api.types.is_datetime64_any_dtype(df[current_col]):
@@ -3588,10 +3599,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     frequency = frequency.nlargest(limit)
                 sorted_frequency = sort_frequency(frequency, order_by)
 
-                col_report = {}
-                for value, count in sorted_frequency.items():
-                    value_str = str(value) if not pd.isna(value) else missing_value_str
-                    col_report[value_str] = str(count)
+                col_report = {str(value) if not pd.isna(value) else missing_value_str: str(count)
+                              for value, count in sorted_frequency.items()}
 
                 report[current_col] = col_report
 
@@ -3607,11 +3616,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             else:  # Default to "FREQ_DESC"
                 return dict(sorted(frequency.items(), key=lambda item: item[1], reverse=True))
 
-        # Generate report
         report = generate_linear_report(self.df, columns, n, order_by)
         print(json.dumps(report, indent=2))
 
         return self
+
 
     def rtc(self, columns_to_retain):
         """TINKER::[d.rtc(['column1','column2'])] Retain columns specified and drop the rest."""
@@ -3713,8 +3722,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return batch.id
 
-    def oaiba(self, job_name, model, column_to_analyse, prompt, new_column_name, is_image_url_analysis=False):
-        """OPENAI::[batch_id = d.oaiba('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price', is_image_url_analysis=True)] Get OpenAI Batch Analysis. Returns a batch id with optional image URL analysis."""
+    def oaibiua(self, job_name, model, column_to_analyse, prompt, new_column_name):
+        """OPENAI::[batch_id = d.oaibia('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price')] Get OpenAI Batch Image URL Analysis. Returns a batch id with optional image URL analysis."""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -3734,15 +3743,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             return config.get(key_name)
 
         def convert_google_drive_url(gdrive_url):
-            # Extract the file ID from the Google Drive URL
             file_id = gdrive_url.split('id=')[-1]
             return f"https://drive.google.com/uc?export=download&id={file_id}"
 
         def download_and_process_image(image_url):
-            if "drive.google.com" in image_url:
-                image_url = convert_google_drive_url(image_url)
-
             try:
+                if "drive.google.com" in image_url:
+                    image_url = convert_google_drive_url(image_url)
+
                 response = requests.get(image_url)
                 if response.status_code == 200 and response.content:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
@@ -3754,41 +3762,50 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         with BytesIO() as output_buffer:
                             image.convert("RGB").save(output_buffer, format="JPEG")
                             base64_image = base64.b64encode(output_buffer.getvalue()).decode("utf-8")
-                            return base64_image  # Return the processed image as base64
+                            return base64_image
                     except UnidentifiedImageError:
                         print(f"Failed to identify image file for URL: {image_url}")
-                        return None
                     finally:
                         os.unlink(tmp_img_file.name)
-                else:
-                    print(f"Failed to download image from {image_url}")
-                    return None
             except Exception as e:
                 print(f"Exception during image download or processing: {e}")
-                return None
+            return ""  # Return an empty string on error
 
         open_ai_key = load_key('open_ai_key')
         client = OpenAI(api_key=open_ai_key)
 
         batch_input_data = []
 
-        # Use ThreadPoolExecutor for concurrent execution
         with ThreadPoolExecutor() as executor:
             future_to_index = {}
             for idx, row in self.df.iterrows():
-                if is_image_url_analysis:
-                    value_to_analyze = row[column_to_analyse]
-                    if isinstance(value_to_analyze, str):
-                        future = executor.submit(download_and_process_image, value_to_analyze)
-                        future_to_index[future] = idx
-                    else:
-                        print(f"Invalid data for image URL at index {idx}: {value_to_analyze}")
-                        continue
+                value_to_analyze = row[column_to_analyse]
+                if isinstance(value_to_analyze, str):
+                    future = executor.submit(download_and_process_image, value_to_analyze)
+                    future_to_index[future] = idx
                 else:
-                    analysis_prompt = f"{prompt} Data: {row[column_to_analyse]}"
+                    print(f"Invalid data for image URL at index {idx}: {value_to_analyze}")
+                    continue
+
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    base64_image = future.result()
+                    analysis_content = [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
                     messages = [
                         {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
-                        {"role": "user", "content": analysis_prompt}
+                        {"role": "user", "content": analysis_content}
                     ]
 
                     request_data = {
@@ -3802,57 +3819,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         }
                     }
                     batch_input_data.append(request_data)
-
-            # Process the futures as they complete
-            for future in as_completed(future_to_index):
-                idx = future_to_index[future]
-                try:
-                    base64_image = future.result()
-                    if base64_image:
-                        analysis_content = [
-                            {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                        messages = [
-                            {"role": "system", "content": f"You are a helpful assistant. Return the analysis result for the input in this json format: {{\"{new_column_name}\": \"your_response\"}}."},
-                            {"role": "user", "content": analysis_content}
-                        ]
-
-                        request_data = {
-                            "custom_id": f"request-{idx}",
-                            "method": "POST",
-                            "url": "/v1/chat/completions",
-                            "body": {
-                                "model": model,
-                                "messages": messages,
-                                "max_tokens": 1000
-                            }
-                        }
-                        batch_input_data.append(request_data)
                 except Exception as e:
                     print(f"Error processing image at index {idx}: {e}")
-        
-        # Write the batch input data to a .jsonl file
+
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
         with open(batch_input_file_path, 'w') as batch_input_file:
             for request in batch_input_data:
                 batch_input_file.write(json.dumps(request) + '\n')
 
-        # Upload the batch input file
         batch_input_file = client.files.create(
             file=open(batch_input_file_path, "rb"),
             purpose="batch"
         )
 
-        # Create the batch
         batch_input_file_id = batch_input_file.id
         batch = client.batches.create(
             input_file_id=batch_input_file_id,
@@ -3865,6 +3844,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(f"Batch ID for {job_name}: {batch.id}")
 
         return batch.id
+
 
 
     def oaibl(self):
@@ -4167,8 +4147,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 config = json.load(f)
             return config.get(key_name)
 
-        # If the open_ai_key is not provided, load it from the config file
-        # if open_ai_key is None:
         open_ai_key = load_key('open_ai_key')
 
         status, output_file_id = self.goaibs(batch_id)
@@ -4177,20 +4155,43 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Batch job {batch_id} completed")
             if output_file_id:
                 tmp_file_path = download_output_file(output_file_id, open_ai_key)
-                new_column_data = []
+                
+                # Prepare a full column with default None values
+                data_length = len(self.df.index)
+                new_column_data = [None] * data_length
+                
                 with open(tmp_file_path, 'r') as f:
                     for line in f:
-                        result = json.loads(line)
-                        if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
-                            message_content = result['response']['body']['choices'][0]['message']['content']
-                            analysis_result = json.loads(message_content)[batch_column_name]
-                            new_column_data.append(analysis_result)
-                        else:
-                            print(f"Skipping invalid result: {result}")
+                        try:
+                            result = json.loads(line)
+                            if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
+                                custom_id = result.get('custom_id', '')
+                                # Extract the index from custom_id, e.g., 'request-8'
+                                match = re.search(r'request-(\d+)', custom_id)
+                                if not match:
+                                    continue
+                                
+                                # Convert the string index to an integer
+                                index = int(match.group(1))
+                                
+                                # Ensure the extracted index is within the DataFrame's bounds
+                                if 0 <= index < data_length:
+                                    message_content = result['response']['body']['choices'][0]['message']['content']
+                                    # Check and process content wrapped in backticks
+                                    match = re.search(r'```json\s*(\{.*?\})\s*```', message_content, re.DOTALL)
+                                    if match:
+                                        message_content = match.group(1)
+                                    
+                                    analysis_result = json.loads(message_content).get(batch_column_name, None)
+                                    new_column_data[index] = analysis_result
+                            else:
+                                print(f"Skipping invalid result: {result}")
+                        except json.JSONDecodeError as e:
+                            print(f"Error decoding JSON: {e}")
+
+                # Assign the new column data to the DataFrame
                 self.df[batch_column_name] = new_column_data
 
-                # Optionally save the DataFrame to a file or take further action
-                # self.s(file_path)
             else:
                 raise ValueError("No output file ID found for the completed batch.")
         else:
@@ -4198,6 +4199,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         self.pr()
         return self
+
 
     def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4):
         """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40), chunk_size (parallel processing of rows in chunks, default is 4)"""
