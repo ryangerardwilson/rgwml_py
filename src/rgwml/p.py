@@ -2199,7 +2199,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             """Authenticate the service account and return a Gmail API service instance."""
             credentials = service_account.Credentials.from_service_account_file(
                 service_account_credentials_path,
-                scopes=['https://www.googleapis.com/auth/gmail.send'],
+                scopes=['https://mail.google.com/'],
                 subject=sender_email_id
             )
             service = build('gmail', 'v1', credentials=credentials)
