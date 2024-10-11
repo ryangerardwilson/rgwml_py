@@ -1450,6 +1450,101 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
+    def fm(self, preset_name, email_count=50):
+        """LOAD::[d.fm('preset-name', 50)] From mail. Fetch recent emails into a DataFrame."""
+        
+        def locate_config_file(filename="rgwml.config"):
+            home_dir = os.path.expanduser("~")
+            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
+
+            for path in search_paths:
+                for root, _, files in os.walk(path):
+                    if filename in files:
+                        return os.path.join(root, filename)
+            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        def get_config(config_path):
+            """Load the configuration file."""
+            with open(config_path, 'r') as file:
+                config = file.read()
+                try:
+                    return json.loads(config)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON format in config file: {e}")
+
+        def authenticate_service_account(service_account_credentials_path, sender_email_id):
+            """Authenticate the service account and return a Gmail API service instance."""
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_credentials_path,
+                scopes=['https://mail.google.com/'],
+                subject=sender_email_id
+            )
+            service = build('gmail', 'v1', credentials=credentials)
+            return service
+
+        config_path = locate_config_file()
+        config = get_config(config_path)
+
+        # Retrieve Gmail preset configuration
+        gmail_config = next((preset for preset in config['gmail_bot_presets'] if preset['name'] == preset_name), None)
+
+        if not gmail_config:
+            raise ValueError(f"No preset found with the name {preset_name}")
+
+        # Email details
+        sender_email = gmail_config['name']
+        credentials_path = gmail_config['service_account_credentials_path']
+
+        service = authenticate_service_account(credentials_path, sender_email)
+
+        # Fetch emails
+        messages_response = service.users().messages().list(
+            userId='me', maxResults=email_count
+        ).execute()
+
+        messages = messages_response.get('messages', [])
+
+        email_data = []
+
+        for message_metadata in messages:
+            msg_id = message_metadata['id']
+            message = service.users().messages().get(userId='me', id=msg_id, format='metadata').execute()
+
+            headers = message['payload'].get('headers', [])
+            # print(headers)
+
+            # Extract required data
+            email_from = next((header['value'] for header in headers if header['name'].lower() == 'from'), None)
+            # print(f'Extracted From: {email_from}')
+            email_subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), None)
+            email_date = next((header['value'] for header in headers if header['name'].lower() == 'date'), None)
+
+            # Adjust date format, removing unwanted text and converting to UTC
+            if email_date:
+                email_date = email_date.split(" (")[0]  # Remove any suffix like " (UTC)"
+                email_date = pd.to_datetime(email_date, format='%a, %d %b %Y %H:%M:%S %z', errors='coerce')
+                email_date = email_date.tz_convert('Asia/Kolkata')  # Convert to UTC
+            
+            email_data.append({
+                'received_at': email_date,
+                'from': email_from,
+                'subject': email_subject,
+            })
+
+        # Create DataFrame
+        self.df = pd.DataFrame(email_data)
+
+        # Sort DataFrame by `received_at` in descending order
+        self.df.sort_values(by='received_at', ascending=False, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
+
+        self.pr()
+        gc.collect()
+
+        return self
+
+
+
     def fslp(self, sqlite_path, query):
         """LOAD::[d.fslp('/absolute/path/to/db.sqlite', 'SELECT * FROM tablename')] From SQLite path."""
         self.source = os.path.abspath(sqlite_path)
@@ -2230,7 +2325,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Create email with attachment
             message = MIMEMultipart()
             message['to'] = to_email
-            message['from'] = sender_email
+            message['from'] = f"{sender_email} <{sender_email}>"
             message['subject'] = subject if subject else 'DataFrame CSV File'
             message.attach(MIMEText(body if body else 'Please find the CSV file attached.'))
 
@@ -2252,7 +2347,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             full_body = body + "\n\n" + df_str if body else df_str
             message = MIMEText(full_body)
             message['to'] = to_email
-            message['from'] = sender_email
+            message['from'] = f"{sender_email} <{sender_email}>"
             message['subject'] = subject if subject else 'DataFrame Content'
 
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
