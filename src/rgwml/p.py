@@ -1862,25 +1862,34 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
+
+
     def tnuv(self, n, columns):
         """INSPECT::[d.tnuv(n, ['col1', 'col2'])] Top n unique values for specified columns."""
         if self.df is not None:
             report = {}
             for column in columns:
                 if column in self.df.columns:
-                    frequency = self.df[column].value_counts(dropna=False)
-                    frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+                    # Convert the column to string representation
+                    frequency = self.df[column].astype(str).value_counts(dropna=False)
+                    
+                    # Rename index for missing or special values
+                    frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
+                    
+                    # Get the top n values
                     top_n_values = frequency.nlargest(n)
 
-                    # Format output similar to pnfl
+                    # Format output for reporting
                     report[column] = {str(value): str(count) for value, count in top_n_values.items()}
 
+                    # Print report for the current column
                     print(f"Top {n} unique values for column '{column}':\n{json.dumps(report[column], indent=2)}\n")
                 else:
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
 
+        # Ensure garbage collection if needed
         gc.collect()
         return self
 
@@ -1890,21 +1899,30 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             report = {}
             for column in columns:
                 if column in self.df.columns:
-                    frequency = self.df[column].value_counts(dropna=False)
-                    frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+                    # Convert the column to string representation
+                    frequency = self.df[column].astype(str).value_counts(dropna=False)
+                    
+                    # Rename index for missing or special values
+                    frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
+                    
+                    # Get the bottom n values
                     bottom_n_values = frequency.nsmallest(n)
-
-                    # Format output similar to pnfl
+                    
+                    # Format output for reporting
                     report[column] = {str(value): str(count) for value, count in bottom_n_values.items()}
 
+                    # Print report for the current column
                     print(f"Bottom {n} unique values for column '{column}':\n{json.dumps(report[column], indent=2)}\n")
                 else:
                     print(f"Column '{column}' does not exist in the DataFrame.")
         else:
             raise ValueError("No DataFrame to display. Please load a file first using the frm or frml method.")
 
+        # Ensure garbage collection if needed
         gc.collect()
         return self
+
+
 
     def prc(self, column_pairs):
         """INSPECT::[d.prc([('column1','column2'), ('column3','column4')])] Print correlation for multiple pairs."""
@@ -3600,7 +3618,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def pnfc(self, n, columns, order_by="FREQ_DESC"):
-        """INSPECT::[d.pnfc(5,'Column1,Columns')] Print n frequency cascading. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)"""
+        """INSPECT::[d.pnfc(5,'Column1,Columns')] Print n frequency cascading. Optional: order_by (str), which has options: ASC, DESC, FREQ_ASC, FREQ_DESC (default)."""
 
         # Split columns string into a list
         columns = [col.strip() for col in columns.split(",")]
@@ -3614,40 +3632,35 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             if current_col not in df.columns:
                 return None
 
-            # Handle NaN, NaT, and None values correctly based on the column type
-            df = df.copy()
+            # Convert the column to string representation
+            df[current_col] = df[current_col].astype(str)
 
-            if pd.api.types.is_numeric_dtype(df[current_col]):
-                missing_value_str = 'NaN'
-            elif pd.api.types.is_datetime64_any_dtype(df[current_col]):
-                missing_value_str = 'NaT'
-            else:
-                missing_value_str = 'None'
-
+            # Handle missing values by renaming indices
             frequency = df[current_col].value_counts(dropna=False)
-            frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
+            frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
 
+            # Limit to the top n values if specified
             if limit is not None:
                 frequency = frequency.nlargest(limit)
+            
+            # Sort the frequency data based on specified order
             sorted_frequency = sort_frequency(frequency, order_by)
 
             report = {}
             for value, count in sorted_frequency.items():
-                if pd.isna(value) or value in ['NaN', 'NaT', 'None']:
+                if value in ['NaN', 'NaT', 'None', 'Empty']:
                     filtered_df = df[df[current_col].isna()]
-                    value_str = missing_value_str
                 else:
                     filtered_df = df[df[current_col] == value]
-                    value_str = str(value)
 
                 if len(columns) > 1:
                     sub_report = generate_cascade_report(filtered_df, columns[1:], limit, order_by)
-                    report[value_str] = {
+                    report[value] = {
                         "count": str(count),
                         f"sub_distribution({columns[1]})": sub_report if sub_report else {}
                     }
                 else:
-                    report[value_str] = {
+                    report[value] = {
                         "count": str(count)
                     }
 
@@ -3669,6 +3682,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
+
     def pnfl(self, n, columns, order_by="FREQ_DESC"):
         """INSPECT::[d.pnfl(5,'Column1,Columns')] Print n frequency linear."""
         columns = [col.strip() for col in columns.split(",")]
@@ -3680,22 +3694,21 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 if current_col not in df.columns:
                     continue
 
-                if pd.api.types.is_numeric_dtype(df[current_col]):
-                    missing_value_str = 'NaN'
-                elif pd.api.types.is_datetime64_any_dtype(df[current_col]):
-                    missing_value_str = 'NaT'
-                else:
-                    missing_value_str = 'None'
-
-                frequency = df[current_col].value_counts(dropna=False)
-                frequency = frequency.rename(index={pd.NaT: 'NaT', None: 'None', float('nan'): 'NaN'})
-
+                # Convert the column to string representation
+                frequency = df[current_col].astype(str).value_counts(dropna=False)
+                
+                # Replace indices for missing values to be meaningful strings
+                frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
+                
+                # Limit to top n values if specified
                 if limit is not None:
                     frequency = frequency.nlargest(limit)
+                    
+                # Sort the frequency data based on the specified order
                 sorted_frequency = sort_frequency(frequency, order_by)
 
-                col_report = {str(value) if not pd.isna(value) else missing_value_str: str(count)
-                              for value, count in sorted_frequency.items()}
+                # Generate report for the column
+                col_report = {str(value): str(count) for value, count in sorted_frequency.items()}
 
                 report[current_col] = col_report
 
@@ -3818,7 +3831,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return batch.id
 
     def oaibiua(self, job_name, model, column_to_analyse, prompt, new_column_name):
-        """OPENAI::[batch_id = d.oaibia('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price')] Get OpenAI Batch Image URL Analysis. Returns a batch id with optional image URL analysis."""
+        """OPENAI::[batch_id = d.oaibiua('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price')] Get OpenAI Batch Image URL Analysis. Returns a batch id with optional image URL analysis."""
 
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
@@ -3841,6 +3854,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             file_id = gdrive_url.split('id=')[-1]
             return f"https://drive.google.com/uc?export=download&id={file_id}"
 
+        """
         def download_and_process_image(image_url):
             try:
                 if "drive.google.com" in image_url:
@@ -3865,6 +3879,42 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             except Exception as e:
                 print(f"Exception during image download or processing: {e}")
             return ""  # Return an empty string on error
+        """
+        def download_and_process_image(image_url):
+            try:
+                # Define common headers used by browsers
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+                }
+                
+                if "drive.google.com" in image_url:
+                    # Add additional logic specific to Google Drive
+                    image_url = convert_google_drive_url(image_url)
+                
+                # Make a GET request with headers
+                response = requests.get(image_url, headers=headers, allow_redirects=True)
+                
+                if response.status_code == 200 and response.content:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
+                        tmp_img_file.write(response.content)
+                        tmp_img_file.flush()
+                    
+                    try:
+                        with Image.open(tmp_img_file.name) as image:
+                            with BytesIO() as output_buffer:
+                                image.convert("RGB").save(output_buffer, format="JPEG")
+                                base64_image = base64.b64encode(output_buffer.getvalue()).decode("utf-8")
+                                return base64_image
+                    except UnidentifiedImageError:
+                        print(f"Failed to identify image file for URL: {image_url}")
+                    finally:
+                        os.unlink(tmp_img_file.name)
+            except requests.exceptions.RequestException as req_err:
+                print(f"Request exception: {req_err}")
+            except Exception as e:
+                print(f"Exception during image download or processing: {e}")
+            return ""  # Return an empty string on error
+
 
         open_ai_key = load_key('open_ai_key')
         client = OpenAI(api_key=open_ai_key)
@@ -3916,7 +3966,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     batch_input_data.append(request_data)
                 except Exception as e:
                     print(f"Error processing image at index {idx}: {e}")
-
+        
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
         with open(batch_input_file_path, 'w') as batch_input_file:
             for request in batch_input_data:
@@ -3939,7 +3989,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(f"Batch ID for {job_name}: {batch.id}")
 
         return batch.id
-
+        
 
 
     def oaibl(self):
