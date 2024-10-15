@@ -59,10 +59,21 @@ class m:
                 conn.rollback()
                 raise e
 
-        request_body_json = request.json
-        token = request_body_json.get('token')
-        user_latitude = request_body_json.get('userLatitude')
-        user_longitude = request_body_json.get('userLongitude')
+        # request_body_json = request.json
+        # token = request_body_json.get('token')
+        # user_latitude = request_body_json.get('userLatitude')
+        # user_longitude = request_body_json.get('userLongitude')
+
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
+        # Extract data from the determined request body
+        token = request_body.get('token')
+        user_latitude = request_body.get('userLatitude')
+        user_longitude = request_body.get('userLongitude')
 
         try:
             if token:
@@ -218,14 +229,24 @@ class m:
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
             message = service.users().messages().send(userId="me", body=email_body).execute()
+
+
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
+
+
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
         # Extract email from the request
-        request_body_json = request.json
-        email = request_body_json.get('email')
+        # request_body_json = request.json
+        email = request_body.get('email')
 
         # Validate email
         if not email:
@@ -329,15 +350,21 @@ class m:
                 raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
             return service_account_credentials_path
 
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
         # Extract email and temp_password from the request
-        request_body_json = request.json
-        email = request_body_json.get('email')
-        temp_password = request_body_json.get('temp_password')
+        # request_body_json = request.json
+        email = request_body.get('email')
+        temp_password = request_body.get('temp_password')
 
         # Validate input
         if not email or not temp_password:
@@ -422,17 +449,23 @@ class m:
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
         # Extract email, password, latitude and longitude from the request
-        request_body_json = request.json
-        email = request_body_json.get('email')
-        password = request_body_json.get('password')
-        user_latitude = request_body_json.get('userLatitude')
-        user_longitude = request_body_json.get('userLongitude')
+        # request_body_json = request.json
+        email = request_body.get('email')
+        password = request_body.get('password')
+        user_latitude = request_body.get('userLatitude')
+        user_longitude = request_body.get('userLongitude')
 
         # Validate input
         if not email or not password or not user_latitude or not user_longitude:
@@ -559,13 +592,20 @@ class m:
                 return False
             return True  # You can add more complex validation logic here
 
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
+
         # Extract email, temp_password, new password, and user location from the request
-        request_body_json = request.json
-        email = request_body_json.get('email')
-        temp_password = request_body_json.get('temp_password')
-        new_password = request_body_json.get('new_password')
-        user_latitude = request_body_json.get('userLatitude')
-        user_longitude = request_body_json.get('userLongitude')
+        # request_body_json = request.json
+        email = request_body.get('email')
+        temp_password = request_body.get('temp_password')
+        new_password = request_body.get('new_password')
+        user_latitude = request_body.get('userLatitude')
+        user_longitude = request_body.get('userLongitude')
 
         # Validate input
         if not email or not temp_password or not new_password:
@@ -844,14 +884,21 @@ class m:
             email_body = {'raw': raw}
             message = service.users().messages().send(userId="me", body=email_body).execute()
 
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
+
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
         # Extract email from the request
-        request_body_json = request.json
-        email = request_body_json.get('email')
+        # request_body_json = request.json
+        email = request_body.get('email')
 
         # Validate email
         if not email:
@@ -967,12 +1014,19 @@ class m:
                 return False
             return True  # You can add more complex validation logic here
 
+        # Attempt to extract data from JSON
+        if request.is_json:
+            request_body = request.json
+        else:  # Fall back to FormData
+            request_body = request.form
+
+
         # Extract token, new password, and user location from the request
-        request_body_json = request.json
-        token = request_body_json.get('token')
-        new_password = request_body_json.get('new_password')
-        user_latitude = request_body_json.get('userLatitude')
-        user_longitude = request_body_json.get('userLongitude')
+        # request_body_json = request.json
+        token = request_body.get('token')
+        new_password = request_body.get('new_password')
+        user_latitude = request_body.get('userLatitude')
+        user_longitude = request_body.get('userLongitude')
 
         # Validate input
         if not token or not new_password:
@@ -1099,6 +1153,8 @@ class m:
                 conn.close()
 
         try:
+
+
             auth_header = request.headers.get('Authorization')
             auth_type = request.headers.get('AuthTokenType')
             user_id = request.headers.get('UserId')
