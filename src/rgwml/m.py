@@ -59,21 +59,10 @@ class m:
                 conn.rollback()
                 raise e
 
-        # request_body_json = request.json
-        # token = request_body_json.get('token')
-        # user_latitude = request_body_json.get('userLatitude')
-        # user_longitude = request_body_json.get('userLongitude')
-
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
-        # Extract data from the determined request body
-        token = request_body.get('token')
-        user_latitude = request_body.get('userLatitude')
-        user_longitude = request_body.get('userLongitude')
+        operation_data = json.loads(request.form.get('operation_data'))
+        token = operation_data.get('token')
+        user_latitude = operation_data.get('userLatitude')
+        user_longitude = operation_data.get('userLongitude')
 
         try:
             if token:
@@ -215,7 +204,7 @@ class m:
                 """Authenticate the service account and return a Gmail API service instance."""
                 credentials = service_account.Credentials.from_service_account_file(
                     service_account_credentials_path,
-                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    scopes=['https://mail.google.com/'],
                     subject=sender_email_id
                 )
                 service = build('gmail', 'v1', credentials=credentials)
@@ -224,20 +213,12 @@ class m:
             service = authenticate_service_account(service_account_credentials_path, sender_email_id)
             message = MIMEText(message_text)
             message['to'] = recipient_email
-            message['from'] = sender_email_id
+            # message['from'] = sender_email_id
+            message['from'] = f"{sender_email_id} <{sender_email_id}>"
             message['subject'] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
             message = service.users().messages().send(userId="me", body=email_body).execute()
-
-
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
-
 
         # Load configuration
         config = load_config()
@@ -245,8 +226,11 @@ class m:
         sender_email_id = gmail_bot_preset_name
 
         # Extract email from the request
-        # request_body_json = request.json
-        email = request_body.get('email')
+        operation_data_raw = request.form.get('operation_data')
+        operation_data = json.loads(operation_data_raw)
+
+        # operation_data = json.loads(request.form.get('operation_data'))
+        email = operation_data.get('email')
 
         # Validate email
         if not email:
@@ -300,11 +284,7 @@ class m:
             # Send the temporary password via email
             email_subject = "Your Temporary Password"
             email_message = f"Your temporary password is: {temp_password}. Use this to verify your email. Then, you will be redirected to create a new password."
-
-            # self.send_telegram_message(invoking_function_name, f"PRE EMAIL DEBUG: \n\n{sender_email_id} \n\n {service_account_credentials_path} \n\n {email} \n\n {email_subject} \n\n {email_message}", telegram_bot_preset_name)
             send_email(sender_email_id, service_account_credentials_path, email, email_subject, email_message)
-            # self.send_telegram_message(invoking_function_name, debug_message, telegram_bot_preset_name)
-
             return jsonify(success=True, message="Temporary password sent. Check your email."), 200
 
         except Exception as e:
@@ -350,21 +330,14 @@ class m:
                 raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
             return service_account_credentials_path
 
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
-        # Extract email and temp_password from the request
-        # request_body_json = request.json
-        email = request_body.get('email')
-        temp_password = request_body.get('temp_password')
+        operation_data = json.loads(request.form.get('operation_data'))
+        email = operation_data.get('email')
+        temp_password = operation_data.get('temp_password')
 
         # Validate input
         if not email or not temp_password:
@@ -390,14 +363,6 @@ class m:
 
             if stored_temp_password != temp_password:
                 return jsonify(success=False, message="Invalid temporary password."), 400
-
-            # Remove Validation item from user_pending_validation once confirmed
-            """
-            cursor.execute(
-                "DELETE FROM user_pending_validation WHERE email = ?",
-                (email,)
-            )
-            """
 
             conn.commit()
 
@@ -449,23 +414,19 @@ class m:
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
         # Load configuration
         config = load_config()
         service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
         sender_email_id = gmail_bot_preset_name
 
-        # Extract email, password, latitude and longitude from the request
-        # request_body_json = request.json
-        email = request_body.get('email')
-        password = request_body.get('password')
-        user_latitude = request_body.get('userLatitude')
-        user_longitude = request_body.get('userLongitude')
+        operation_data_raw = request.form.get('operation_data')
+        operation_data = json.loads(operation_data_raw)
+
+        # operation_data = json.loads(request.form.get('operation_data'))
+        email = operation_data.get('email')
+        password = operation_data.get('password')
+        user_latitude = operation_data.get('userLatitude')
+        user_longitude = operation_data.get('userLongitude')
 
         # Validate input
         if not email or not password or not user_latitude or not user_longitude:
@@ -567,7 +528,7 @@ class m:
                 """Authenticate the service account and return a Gmail API service instance."""
                 credentials = service_account.Credentials.from_service_account_file(
                     service_account_credentials_path,
-                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    scopes=['https://mail.google.com/'],
                     subject=sender_email_id
                 )
                 service = build('gmail', 'v1', credentials=credentials)
@@ -576,7 +537,8 @@ class m:
             service = authenticate_service_account(service_account_credentials_path, sender_email_id)
             message = MIMEText(message_text)
             message['to'] = recipient_email
-            message['from'] = sender_email_id
+            # message['from'] = sender_email_id
+            message['from'] = f"{sender_email_id} <{sender_email_id}>"
             message['subject'] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
@@ -592,20 +554,12 @@ class m:
                 return False
             return True  # You can add more complex validation logic here
 
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
-
-        # Extract email, temp_password, new password, and user location from the request
-        # request_body_json = request.json
-        email = request_body.get('email')
-        temp_password = request_body.get('temp_password')
-        new_password = request_body.get('new_password')
-        user_latitude = request_body.get('userLatitude')
-        user_longitude = request_body.get('userLongitude')
+        operation_data = json.loads(request.form.get('operation_data'))
+        email = operation_data.get('email')
+        temp_password = operation_data.get('temp_password')
+        new_password = operation_data.get('new_password')
+        user_latitude = operation_data.get('userLatitude')
+        user_longitude = operation_data.get('userLongitude')
 
         # Validate input
         if not email or not temp_password or not new_password:
@@ -660,6 +614,7 @@ class m:
                 """,
                 (email,)
             )
+
             user_record = cursor.fetchone()
             user_id = user_record[0]
             username = user_record[1]
@@ -869,7 +824,7 @@ class m:
                 """Authenticate the service account and return a Gmail API service instance."""
                 credentials = service_account.Credentials.from_service_account_file(
                     service_account_credentials_path,
-                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    scopes=['https://mail.google.com/'],
                     subject=sender_email_id
                 )
                 service = build('gmail', 'v1', credentials=credentials)
@@ -878,18 +833,12 @@ class m:
             service = authenticate_service_account(service_account_credentials_path, sender_email_id)
             message = MIMEText(message_text)
             message['to'] = recipient_email
-            message['from'] = sender_email_id
+            # message['from'] = sender_email_id
+            message['from'] = f"{sender_email_id} <{sender_email_id}>"
             message['subject'] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
             message = service.users().messages().send(userId="me", body=email_body).execute()
-
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
 
         # Load configuration
         config = load_config()
@@ -897,8 +846,8 @@ class m:
         sender_email_id = gmail_bot_preset_name
 
         # Extract email from the request
-        # request_body_json = request.json
-        email = request_body.get('email')
+        operation_data = json.loads(request.form.get('operation_data'))
+        email = operation_data.get('email')
 
         # Validate email
         if not email:
@@ -989,7 +938,7 @@ class m:
                 """Authenticate the service account and return a Gmail API service instance."""
                 credentials = service_account.Credentials.from_service_account_file(
                     service_account_credentials_path,
-                    scopes=['https://www.googleapis.com/auth/gmail.send'],
+                    scopes=['https://mail.google.com/'],
                     subject=sender_email_id
                 )
                 service = build('gmail', 'v1', credentials=credentials)
@@ -998,7 +947,8 @@ class m:
             service = authenticate_service_account(service_account_credentials_path, sender_email_id)
             message = MIMEText(message_text)
             message['to'] = recipient_email
-            message['from'] = sender_email_id
+            # message['from'] = sender_email_id
+            message['from'] = f"{sender_email_id} <{sender_email_id}>"
             message['subject'] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
             email_body = {'raw': raw}
@@ -1014,19 +964,11 @@ class m:
                 return False
             return True  # You can add more complex validation logic here
 
-        # Attempt to extract data from JSON
-        if request.is_json:
-            request_body = request.json
-        else:  # Fall back to FormData
-            request_body = request.form
-
-
-        # Extract token, new password, and user location from the request
-        # request_body_json = request.json
-        token = request_body.get('token')
-        new_password = request_body.get('new_password')
-        user_latitude = request_body.get('userLatitude')
-        user_longitude = request_body.get('userLongitude')
+        operation_data = json.loads(request.form.get('operation_data'))
+        token = operation_data.get('token')
+        new_password = operation_data.get('new_password')
+        user_latitude = operation_data.get('userLatitude')
+        user_longitude = operation_data.get('userLongitude')
 
         # Validate input
         if not token or not new_password:
@@ -1153,7 +1095,6 @@ class m:
                 conn.close()
 
         try:
-
 
             auth_header = request.headers.get('Authorization')
             auth_type = request.headers.get('AuthTokenType')

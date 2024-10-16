@@ -51,6 +51,7 @@ from io import BytesIO
 from PIL import Image, UnidentifiedImageError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 class p:
 
     def __init__(self, df=None, source=None):
@@ -1452,7 +1453,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
     def fm(self, preset_name, email_count=50):
         """LOAD::[d.fm('preset-name', 50)] From mail. Fetch recent emails into a DataFrame."""
-        
+
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
@@ -1524,7 +1525,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 email_date = email_date.split(" (")[0]  # Remove any suffix like " (UTC)"
                 email_date = pd.to_datetime(email_date, format='%a, %d %b %Y %H:%M:%S %z', errors='coerce')
                 email_date = email_date.tz_convert('Asia/Kolkata')  # Convert to UTC
-            
+
             email_data.append({
                 'received_at': email_date,
                 'from': email_from,
@@ -1542,8 +1543,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
 
         return self
-
-
 
     def fslp(self, sqlite_path, query):
         """LOAD::[d.fslp('/absolute/path/to/db.sqlite', 'SELECT * FROM tablename')] From SQLite path."""
@@ -1862,8 +1861,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         gc.collect()
         return self
 
-
-
     def tnuv(self, n, columns):
         """INSPECT::[d.tnuv(n, ['col1', 'col2'])] Top n unique values for specified columns."""
         if self.df is not None:
@@ -1872,10 +1869,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 if column in self.df.columns:
                     # Convert the column to string representation
                     frequency = self.df[column].astype(str).value_counts(dropna=False)
-                    
+
                     # Rename index for missing or special values
                     frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
-                    
+
                     # Get the top n values
                     top_n_values = frequency.nlargest(n)
 
@@ -1901,13 +1898,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 if column in self.df.columns:
                     # Convert the column to string representation
                     frequency = self.df[column].astype(str).value_counts(dropna=False)
-                    
+
                     # Rename index for missing or special values
                     frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
-                    
+
                     # Get the bottom n values
                     bottom_n_values = frequency.nsmallest(n)
-                    
+
                     # Format output for reporting
                     report[column] = {str(value): str(count) for value, count in bottom_n_values.items()}
 
@@ -1921,8 +1918,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         # Ensure garbage collection if needed
         gc.collect()
         return self
-
-
 
     def prc(self, column_pairs):
         """INSPECT::[d.prc([('column1','column2'), ('column3','column4')])] Print correlation for multiple pairs."""
@@ -3642,7 +3637,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Limit to the top n values if specified
             if limit is not None:
                 frequency = frequency.nlargest(limit)
-            
+
             # Sort the frequency data based on specified order
             sorted_frequency = sort_frequency(frequency, order_by)
 
@@ -3682,7 +3677,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
-
     def pnfl(self, n, columns, order_by="FREQ_DESC"):
         """INSPECT::[d.pnfl(5,'Column1,Columns')] Print n frequency linear."""
         columns = [col.strip() for col in columns.split(",")]
@@ -3696,14 +3690,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
                 # Convert the column to string representation
                 frequency = df[current_col].astype(str).value_counts(dropna=False)
-                
+
                 # Replace indices for missing values to be meaningful strings
                 frequency = frequency.rename(index={'nan': 'NaN', 'NaT': 'NaT', 'None': 'None', '': 'Empty'})
-                
+
                 # Limit to top n values if specified
                 if limit is not None:
                     frequency = frequency.nlargest(limit)
-                    
+
                 # Sort the frequency data based on the specified order
                 sorted_frequency = sort_frequency(frequency, order_by)
 
@@ -3728,7 +3722,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(json.dumps(report, indent=2))
 
         return self
-
 
     def rtc(self, columns_to_retain):
         """TINKER::[d.rtc(['column1','column2'])] Retain columns specified and drop the rest."""
@@ -3886,19 +3879,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
                 }
-                
+
                 if "drive.google.com" in image_url:
                     # Add additional logic specific to Google Drive
                     image_url = convert_google_drive_url(image_url)
-                
+
                 # Make a GET request with headers
                 response = requests.get(image_url, headers=headers, allow_redirects=True)
-                
+
                 if response.status_code == 200 and response.content:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
                         tmp_img_file.write(response.content)
                         tmp_img_file.flush()
-                    
+
                     try:
                         with Image.open(tmp_img_file.name) as image:
                             with BytesIO() as output_buffer:
@@ -3914,7 +3907,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             except Exception as e:
                 print(f"Exception during image download or processing: {e}")
             return ""  # Return an empty string on error
-
 
         open_ai_key = load_key('open_ai_key')
         client = OpenAI(api_key=open_ai_key)
@@ -3966,7 +3958,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     batch_input_data.append(request_data)
                 except Exception as e:
                     print(f"Error processing image at index {idx}: {e}")
-        
+
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
         with open(batch_input_file_path, 'w') as batch_input_file:
             for request in batch_input_data:
@@ -3989,8 +3981,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         print(f"Batch ID for {job_name}: {batch.id}")
 
         return batch.id
-        
-
 
     def oaibl(self):
         """OPENAI::[d.oaibl()] OpenAI Batch list. Lists OpenAI batch jobs."""
@@ -4300,11 +4290,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             print(f"Batch job {batch_id} completed")
             if output_file_id:
                 tmp_file_path = download_output_file(output_file_id, open_ai_key)
-                
+
                 # Prepare a full column with default None values
                 data_length = len(self.df.index)
                 new_column_data = [None] * data_length
-                
+
                 with open(tmp_file_path, 'r') as f:
                     for line in f:
                         try:
@@ -4315,10 +4305,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                                 match = re.search(r'request-(\d+)', custom_id)
                                 if not match:
                                     continue
-                                
+
                                 # Convert the string index to an integer
                                 index = int(match.group(1))
-                                
+
                                 # Ensure the extracted index is within the DataFrame's bounds
                                 if 0 <= index < data_length:
                                     message_content = result['response']['body']['choices'][0]['message']['content']
@@ -4326,7 +4316,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                                     match = re.search(r'```json\s*(\{.*?\})\s*```', message_content, re.DOTALL)
                                     if match:
                                         message_content = match.group(1)
-                                    
+
                                     analysis_result = json.loads(message_content).get(batch_column_name, None)
                                     new_column_data[index] = analysis_result
                             else:
@@ -4344,7 +4334,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         self.pr()
         return self
-
 
     def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4):
         """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40), chunk_size (parallel processing of rows in chunks, default is 4)"""
