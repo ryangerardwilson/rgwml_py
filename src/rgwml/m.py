@@ -7,7 +7,7 @@ import time
 import re
 import secrets
 from datetime import datetime, timedelta
-from flask import request, jsonify, make_response
+from flask import jsonify, make_response
 from google.oauth2 import id_token, service_account
 from google.auth.transport import requests as google_requests
 from googleapiclient.discovery import build
@@ -68,7 +68,7 @@ class m:
             if token:
                 idinfo = verify_token(token, google_client_id)
                 if idinfo:
-                    self.send_telegram_message(invoking_function_name, "STEP1", telegram_bot_preset_name)
+                    # self.send_telegram_message(invoking_function_name, "STEP1", telegram_bot_preset_name)
                     google_auth_user_id = idinfo['sub']
                     email = idinfo.get('email', '')
                     name = idinfo.get('name', '')
@@ -79,7 +79,7 @@ class m:
                     conn = sqlite3.connect(sqlite_db_path)
                     create_tables(conn)
 
-                    self.send_telegram_message(invoking_function_name, "STEP2", telegram_bot_preset_name)
+                    # self.send_telegram_message(invoking_function_name, "STEP2", telegram_bot_preset_name)
 
                     try:
                         cursor = conn.cursor()
@@ -87,7 +87,7 @@ class m:
                             "INSERT INTO user (google_auth_user_id, email, name, picture) VALUES (?, ?, ?, ?) "
                             "ON CONFLICT(google_auth_user_id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture",
                             (google_auth_user_id, email, name, picture))
-                        self.send_telegram_message(invoking_function_name, "STEP3", telegram_bot_preset_name)
+                        # self.send_telegram_message(invoking_function_name, "STEP3", telegram_bot_preset_name)
 
                         cursor.execute("SELECT id, email, name FROM user WHERE google_auth_user_id = ?", (google_auth_user_id,))
                         result = cursor.fetchone()
@@ -95,12 +95,12 @@ class m:
                         email_in_user_table = result[1]
                         name_in_user_table = result[2]
 
-                        self.send_telegram_message(invoking_function_name, "STEP4", telegram_bot_preset_name)
+                        # self.send_telegram_message(invoking_function_name, "STEP4", telegram_bot_preset_name)
 
                         cursor.execute("INSERT INTO user_login_logs (user_id, latitude, longitude) VALUES (?, ?, ?)",
                                        (id_in_user_table, user_latitude, user_longitude))
 
-                        self.send_telegram_message(invoking_function_name, "STEP5", telegram_bot_preset_name)
+                        # self.send_telegram_message(invoking_function_name, "STEP5", telegram_bot_preset_name)
                         conn.commit()
 
                     except Exception as e:
@@ -296,6 +296,7 @@ class m:
 
     # Validates temp password
     def validate_password(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
+        """
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -329,11 +330,12 @@ class m:
             if not service_account_credentials_path:
                 raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
             return service_account_credentials_path
+        """
 
         # Load configuration
-        config = load_config()
-        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
-        sender_email_id = gmail_bot_preset_name
+        # config = load_config()
+        # service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        # sender_email_id = gmail_bot_preset_name
 
         operation_data = json.loads(request.form.get('operation_data'))
         email = operation_data.get('email')
@@ -376,6 +378,7 @@ class m:
             conn.close()
 
     def validate_user_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
+        """
         def locate_config_file(filename="rgwml.config"):
             home_dir = os.path.expanduser("~")
             search_paths = [
@@ -409,15 +412,15 @@ class m:
             if not service_account_credentials_path:
                 raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
             return service_account_credentials_path
-
+        """
         def generate_auth_token(length=32):
             characters = string.ascii_letters + string.digits
             return ''.join(random.choice(characters) for i in range(length))
 
         # Load configuration
-        config = load_config()
-        service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
-        sender_email_id = gmail_bot_preset_name
+        # config = load_config()
+        # service_account_credentials_path = get_gmail_bot_details(config, gmail_bot_preset_name)
+        # sender_email_id = gmail_bot_preset_name
 
         operation_data_raw = request.form.get('operation_data')
         operation_data = json.loads(operation_data_raw)

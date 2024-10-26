@@ -49,7 +49,7 @@ from email import encoders
 import base64
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class p:
@@ -326,6 +326,46 @@ class p:
         self.df = df
         self.pr()
         gc.collect()
+        return self
+
+    def fqsp(self, db_abs_path, query):
+        """LOAD::[d.fqsp('your_db.sqlite', 'SELECT * FROM your_table')] From query to sqlite db path."""
+
+        # Connect to the SQLite database
+        conn = sqlite3.connect(db_abs_path)
+        try:
+            # Execute the query
+            cursor = conn.cursor()
+            cursor.execute(query)
+
+            # If the query returns rows, fetch them
+            if cursor.description is not None:
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+            else:
+                # No rows to fetch (e.g., if the query was an INSERT or UPDATE)
+                rows = []
+                columns = []
+
+        except sqlite3.Error as err:
+            print(f"Error: {err}")
+            # Optionally, you could return self or handle the error in a specific way
+            rows = []
+            columns = []
+
+        finally:
+            cursor.close()
+            conn.close()
+            gc.collect()
+
+        # Convert the results to a DataFrame
+        df = pd.DataFrame(rows, columns=columns)
+        self.df = df
+
+        # Optionally print or process the DataFrame
+        self.pr()
+
+        # Return self for method chaining or further operations
         return self
 
     def fslh(self, db_preset_name, query):
@@ -1094,6 +1134,70 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
         return self
 
+    def dbiusp(self, db_abs_path, table_name, unique_columns, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbiusp('your_db.sqlite', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Database insert or update to sqlite3 db path."""
+
+        # Determine columns to insert
+        if insert_columns is None:
+            insert_columns = self.df.columns.tolist()
+        else:
+            insert_columns = [col.strip() for col in insert_columns]
+
+        # Convert complex data types to string
+        for col in insert_columns:
+            self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+
+        # Connect to the SQLite database
+        conn = sqlite3.connect(db_abs_path)
+        cursor = conn.cursor()
+
+        try:
+            # Fetch existing data from the table
+            select_query = f"SELECT {', '.join(unique_columns)} FROM {table_name}"
+            if print_query:
+                print(select_query)
+            cursor.execute(select_query)
+            existing_data = cursor.fetchall()
+            existing_df = pd.DataFrame(existing_data, columns=unique_columns)
+
+            # Ensure column types match for merging
+            for col in unique_columns:
+                self.df[col] = self.df[col].astype(str)
+                existing_df[col] = existing_df[col].astype(str)
+
+            # Determine the unique rows to insert
+            new_data_df = self.df[insert_columns]
+            merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
+            unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
+
+            # Handle NaN and None values in the unique new data
+            unique_new_data_df = unique_new_data_df.fillna('')
+
+            # Ensure data is a list of tuples
+            data = [tuple(row) for row in unique_new_data_df.values]
+
+            # Debugging: print the data to be inserted
+            # print("Data to be inserted:", data)
+
+            # Insert unique new data into the table
+            if data:
+                cols = ", ".join(insert_columns)
+                placeholders = ", ".join(['?'] * len(insert_columns))
+                insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+                if print_query:
+                    print(insert_query)
+                cursor.executemany(insert_query, data)
+                conn.commit()
+
+        except sqlite3.Error as err:
+            print(f"Error: {err}")
+        finally:
+            cursor.close()
+            conn.close()
+            gc.collect()
+
+        return self
+
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
 
@@ -1154,6 +1258,69 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 # Insert data into the table
                 cols = ", ".join(insert_columns)
                 insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
+                if print_query:
+                    print(insert_query)
+                cursor.executemany(insert_query, data_to_insert)
+                conn.commit()
+
+            finally:
+                cursor.close()
+                gc.collect()
+
+        return self
+
+    def dbtaisp(self, db_path, table_name, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbtaisp('/path/to/db.sqlite', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)]
+        Truncate and insert to SQLite db path. Deletes all records in the table and inserts the DataFrame."""
+
+        # Ensure the database path is absolute
+        if not os.path.isabs(db_path):
+            raise ValueError("Please provide an absolute path to the SQLite database file.")
+
+        # Ensure the database file exists
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"The database file {db_path} does not exist.")
+
+        # Determine columns to insert
+        if insert_columns is None:
+            insert_columns = self.df.columns.tolist()
+        else:
+            insert_columns = [col.strip() for col in insert_columns]
+
+        # Handle NaN values by replacing them with None
+        data_to_insert = self.df[insert_columns].replace({np.nan: None})
+
+        # Convert any timestamp columns to string if necessary
+        for col in insert_columns:
+            if pd.api.types.is_datetime64_any_dtype(data_to_insert[col]):
+                data_to_insert[col] = data_to_insert[col].astype(str)
+
+        # Convert DataFrame to list of lists for insertion
+        data_to_insert = data_to_insert.values.tolist()
+
+        # Connect to the SQLite database
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            try:
+                # Delete all records from the table
+                truncate_query = f"DELETE FROM {table_name}"
+                if print_query:
+                    print(truncate_query)
+                cursor.execute(truncate_query)
+                conn.commit()
+
+                # Reset the auto-increment sequence
+                reset_sequence_query = f"DELETE FROM sqlite_sequence WHERE name='{table_name}'"
+                if print_query:
+                    print(reset_sequence_query)
+                cursor.execute(reset_sequence_query)
+                conn.commit()
+
+                # Insert data into the table
+                cols = ", ".join(insert_columns)
+                placeholders = ", ".join("?" * len(insert_columns))
+                insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
                 if print_query:
                     print(insert_query)
                 cursor.executemany(insert_query, data_to_insert)
