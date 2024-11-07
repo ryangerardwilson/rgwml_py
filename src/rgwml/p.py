@@ -1270,8 +1270,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def dbtaisp(self, db_path, table_name, insert_columns=None, print_query=False):
-        """DATABASE::[d.dbtaisp('/path/to/db.sqlite', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)]
-        Truncate and insert to SQLite db path. Deletes all records in the table and inserts the DataFrame."""
+        """DATABASE::[d.dbtaisp('/path/to/db.sqlite', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert to SQLite db path. Deletes all records in the table and inserts the DataFrame."""
 
         # Ensure the database path is absolute
         if not os.path.isabs(db_path):
@@ -1423,6 +1422,73 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 gc.collect()
 
         return self
+
+    def dbuoisp(self, db_path, table_name, update_where_columns, update_at_column_names, print_query=False):
+        """DATABASE::[d.dbuoisp('/path/to/db.sqlite', 'your_table', ['where_column1', 'where_column2'], ['update_column1', 'update_column2'], print_query=False)] Update or insert to SQLite db path. Updates rows based on columns, inserts if no update occurs."""
+
+        # Ensure the database path is absolute
+        if not os.path.isabs(db_path):
+            raise ValueError("Please provide an absolute path to the SQLite database file.")
+        
+        # Ensure the database file exists
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"The database file {db_path} does not exist.")
+        
+        # Connect to the SQLite database
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            try:
+                # Fetch existing data from the table
+                select_query = f"SELECT * FROM {table_name}"
+                if print_query:
+                    print(select_query)
+                cursor.execute(select_query)
+                existing_data = cursor.fetchall()
+                existing_columns = [desc[0] for desc in cursor.description]
+                existing_df = pd.DataFrame(existing_data, columns=existing_columns)
+
+                # Ensure column types match for merging
+                for col in update_where_columns:
+                    self.df[col] = self.df[col].astype(str)
+                    existing_df[col] = existing_df[col].astype(str)
+
+                # Merge new data with existing data
+                merge_df = pd.merge(self.df, existing_df, on=update_where_columns, how='left', suffixes=('', '_existing'), indicator=True)
+                
+                # Determine rows to update and insert
+                rows_to_update = merge_df[merge_df['_merge'] == 'both']
+                rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
+
+                # Prepare update queries
+                for _, row in rows_to_update.iterrows():
+                    set_clause = ", ".join([f"{col} = ?" for col in update_at_column_names])
+                    where_clause = " AND ".join([f"{col} = ?" for col in update_where_columns])
+                    update_query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+                    update_values = [row[f"{col}"] for col in update_at_column_names] + [row[col] for col in update_where_columns]
+                    if print_query:
+                        print(update_query, update_values)
+                    cursor.execute(update_query, update_values)
+
+                # Prepare insert queries
+                if not rows_to_insert.empty:
+                    cols = ", ".join(self.df.columns)
+                    placeholders = ", ".join("?" * len(self.df.columns))
+                    insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+                    if print_query:
+                        print(insert_query)
+                    insert_values = rows_to_insert[self.df.columns].replace({np.nan: None}).values.tolist()
+                    cursor.executemany(insert_query, insert_values)
+
+                conn.commit()
+
+            finally:
+                cursor.close()
+                gc.collect()
+
+        return self
+
+
 
     def fcq(self, db_preset_name, query, chunk_size):
         """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
