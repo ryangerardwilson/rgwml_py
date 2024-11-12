@@ -1147,6 +1147,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         for col in insert_columns:
             self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
 
+            # Additionally, convert timestamps to strings
+            self.df[col] = self.df[col].apply(lambda x: str(x) if pd.api.types.is_datetime64_any_dtype(self.df[col]) else x)
+
         # Connect to the SQLite database
         conn = sqlite3.connect(db_abs_path)
         cursor = conn.cursor()
@@ -1176,9 +1179,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             # Ensure data is a list of tuples
             data = [tuple(row) for row in unique_new_data_df.values]
 
-            # Debugging: print the data to be inserted
-            # print("Data to be inserted:", data)
-
             # Insert unique new data into the table
             if data:
                 cols = ", ".join(insert_columns)
@@ -1197,6 +1197,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             gc.collect()
 
         return self
+
 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
