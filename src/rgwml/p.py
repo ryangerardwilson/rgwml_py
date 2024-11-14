@@ -1056,7 +1056,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         return os.path.join(root, filename)
             raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-        # Read the rgwml.config file from the Desktop
+        # Read the rgwml.config file
         config_path = locate_config_file()
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -1081,7 +1081,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             insert_columns = [col.strip() for col in insert_columns]
 
-        # Convert complex data types to string
+        # Ensure unique columns are included in insert_columns for the merge operation
+        for col in unique_columns:
+            if col not in insert_columns:
+                insert_columns.append(col)
+
+        # Convert complex data types to string for compatibility
         for col in insert_columns:
             self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
 
@@ -1090,113 +1095,118 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             cursor = conn.cursor()
 
             try:
-                # Fetch existing data from the table
-                select_query = f"SELECT {', '.join(unique_columns)} FROM {table_name}"
-                if print_query:
-                    print(select_query)
-                cursor.execute(select_query)
-                existing_data = cursor.fetchall()
-                existing_df = pd.DataFrame(existing_data, columns=unique_columns)
+                # Iterate over DataFrame rows for potential insertion or update
+                for _, row in self.df.iterrows():
+                    # Construct the WHERE clause to find existing rows
+                    where_clause = " AND ".join([f"{col} = %s" for col in unique_columns])
+                    where_values = [row[col] for col in unique_columns]
 
-                # Ensure column types match for merging
-                for col in unique_columns:
-                    self.df[col] = self.df[col].astype(str)
-                    existing_df[col] = existing_df[col].astype(str)
+                    # Check if the row already exists
+                    select_query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
+                    cursor.execute(select_query, where_values)
+                    exists = cursor.fetchone()[0] > 0
 
-                # Determine the unique rows to insert
-                new_data_df = self.df[insert_columns]
-                merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
-                unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
-
-                # Handle NaN and None values in the unique new data
-                unique_new_data_df = unique_new_data_df.fillna('')
-
-                # Ensure data is a list of tuples
-                data = [tuple(row) for row in unique_new_data_df.values]
-
-                # Debugging: print the data to be inserted
-                # print("Data to be inserted:", data)
-
-                # Insert unique new data into the table
-                if data:
-                    cols = ", ".join(insert_columns)
-                    insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({', '.join(['%s'] * len(insert_columns))})"
-                    if print_query:
-                        print(insert_query)
-                    cursor.executemany(insert_query, data)
+                    if exists:
+                        # Update the existing row
+                        set_clause = ", ".join([f"{col} = %s" for col in insert_columns if col not in unique_columns])
+                        update_query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+                        update_values = [row[col] for col in insert_columns if col not in unique_columns] + where_values
+                        if print_query:
+                            print("Update query:", update_query, "Values:", update_values)
+                        cursor.execute(update_query, update_values)
+                    else:
+                        # Insert the new row
+                        cols = ", ".join(insert_columns)
+                        placeholders = ", ".join(['%s'] * len(insert_columns))
+                        insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+                        insert_values = [row[col] for col in insert_columns]
+                        if print_query:
+                            print("Insert query:", insert_query, "Values:", insert_values)
+                        cursor.execute(insert_query, insert_values)
+                    
+                    # Commit changes
                     conn.commit()
 
             except mysql.connector.Error as err:
                 print(f"Error: {err}")
+            
             finally:
                 cursor.close()
                 gc.collect()
 
         return self
 
-    def dbiusp(self, db_abs_path, table_name, unique_columns, insert_columns=None, print_query=False):
-        """DATABASE::[d.dbiusp('your_db.sqlite', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Database insert or update to sqlite3 db path."""
 
-        # Determine columns to insert
+
+    def dbiusp(self, db_abs_path, table_name, unique_columns, insert_columns=None, print_query=False):
+        """DATABASE::[d.dbiusp('/path/to/db.sqlite', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""       
+ 
+        # Establish the columns for insertion
         if insert_columns is None:
-            insert_columns = self.df.columns.tolist()
+            insert_columns = self.df.columns.tolist()  # Use all columns from DataFrame
         else:
             insert_columns = [col.strip() for col in insert_columns]
 
-        # Convert complex data types to string
+        # Ensure unique columns are included in the insert columns for merge operation
+        for col in unique_columns:
+            if col not in insert_columns:
+                insert_columns.append(col)
+
+        # Convert complex data types to string for SQLite compatibility
         for col in insert_columns:
             self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+            if pd.api.types.is_datetime64_any_dtype(self.df[col]):
+                self.df[col] = self.df[col].astype(str)
 
-            # Additionally, convert timestamps to strings
-            self.df[col] = self.df[col].apply(lambda x: str(x) if pd.api.types.is_datetime64_any_dtype(self.df[col]) else x)
+        print("DataFrame to process:", self.df.head())
 
         # Connect to the SQLite database
         conn = sqlite3.connect(db_abs_path)
         cursor = conn.cursor()
 
         try:
-            # Fetch existing data from the table
-            select_query = f"SELECT {', '.join(unique_columns)} FROM {table_name}"
-            if print_query:
-                print(select_query)
-            cursor.execute(select_query)
-            existing_data = cursor.fetchall()
-            existing_df = pd.DataFrame(existing_data, columns=unique_columns)
+            # Iterate over DataFrame rows for potential insertion or update
+            for _, row in self.df.iterrows():
+                # Construct the WHERE clause to find existing rows
+                where_clause = " AND ".join([f"{col} = ?" for col in unique_columns])
+                where_values = [row[col] for col in unique_columns]
 
-            # Ensure column types match for merging
-            for col in unique_columns:
-                self.df[col] = self.df[col].astype(str)
-                existing_df[col] = existing_df[col].astype(str)
-
-            # Determine the unique rows to insert
-            new_data_df = self.df[insert_columns]
-            merged_df = pd.merge(new_data_df, existing_df, on=unique_columns, how='left', indicator=True)
-            unique_new_data_df = merged_df[merged_df['_merge'] == 'left_only'][insert_columns]
-
-            # Handle NaN and None values in the unique new data
-            unique_new_data_df = unique_new_data_df.fillna('')
-
-            # Ensure data is a list of tuples
-            data = [tuple(row) for row in unique_new_data_df.values]
-
-            # Insert unique new data into the table
-            if data:
-                cols = ", ".join(insert_columns)
-                placeholders = ", ".join(['?'] * len(insert_columns))
-                insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
-                if print_query:
-                    print(insert_query)
-                cursor.executemany(insert_query, data)
+                # Check if the row already exists
+                select_query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
+                cursor.execute(select_query, where_values)
+                exists = cursor.fetchone()[0] > 0
+                
+                if exists:
+                    # Update the existing row
+                    set_clause = ", ".join([f"{col} = ?" for col in insert_columns if col not in unique_columns])
+                    update_query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+                    update_values = [row[col] for col in insert_columns if col not in unique_columns] + where_values
+                    if print_query:
+                        print("Update query:", update_query, "Values:", update_values)
+                    cursor.execute(update_query, update_values)
+                else:
+                    # Insert the new row
+                    cols = ", ".join(insert_columns)
+                    placeholders = ", ".join(['?'] * len(insert_columns))
+                    insert_query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+                    insert_values = [row[col] for col in insert_columns]
+                    if print_query:
+                        print("Insert query:", insert_query, "Values:", insert_values)
+                    cursor.execute(insert_query, insert_values)
+                
+                # Commit changes
                 conn.commit()
 
         except sqlite3.Error as err:
-            print(f"Error: {err}")
+            print(f"SQLite Error: {err}")
+            
         finally:
             cursor.close()
             conn.close()
             gc.collect()
 
         return self
+
 
 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
