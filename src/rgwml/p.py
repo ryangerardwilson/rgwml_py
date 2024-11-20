@@ -1158,7 +1158,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             if pd.api.types.is_datetime64_any_dtype(self.df[col]):
                 self.df[col] = self.df[col].astype(str)
 
-        print("DataFrame to process:", self.df.head())
+        # print("DataFrame to process:", self.df.head())
 
         # Connect to the SQLite database
         conn = sqlite3.connect(db_abs_path)
