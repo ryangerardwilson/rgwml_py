@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.340"
+version = "0.0.342"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -24,7 +24,6 @@ dependencies = [
     "clickhouse-connect",
     "google-cloud-bigquery",
     "google-auth",
-    "google-cloud-bigquery-storage",
     "google-cloud-storage",
     "google-auth-oauthlib", 
     "google-auth-httplib2",
@@ -37,13 +36,10 @@ dependencies = [
     "seaborn",
     "scikit-learn",
     "dask[dataframe]",
-    "dask[complete]",
     "pyarrow",
     "distributed",
     "requests",
     "pymysql",
-    "paramiko",
-    "tables",
     "openai",
     "filetype",
     "tqdm",
@@ -52,9 +48,6 @@ dependencies = [
     "openai-whisper",
     "slack-sdk",
     "lxml[html_clean]",
-    "bottle",
-    "Flask",
-    "Flask-CORS"
 ]
 
 dynamic = ["scripts"]

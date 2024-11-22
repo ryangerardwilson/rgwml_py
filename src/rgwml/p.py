@@ -49,7 +49,6 @@ from email import encoders
 import base64
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
-# from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class p:
@@ -275,25 +274,47 @@ class p:
                         rows = cursor.fetchall()
                         columns = [desc[0] for desc in cursor.description]
         elif db_type == 'clickhouse':
-            host = db_preset['host']
-            username = db_preset['username']
-            password = db_preset['password']
-            database = db_preset['database']
+            max_retries = 5
+            retry_delay = 5
+            for attempt in range(max_retries):
+                try:
+                    host = db_preset['host']
+                    username = db_preset['username']
+                    password = db_preset['password']
+                    database = db_preset['database']
 
-            # client = ClickHouseClient(host=host, user=username, password=password, database=database)
-            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password, database=database)
-            data = client.query(query)
-            rows = data.result_rows
-            columns = data.column_names
+                    # Attempt to connect to ClickHouse
+                    client = clickhouse_connect.get_client(
+                        host=host,
+                        port='8123',
+                        username=username,
+                        password=password,
+                        database=database
+                    )
 
-            df = pd.DataFrame(rows, columns=columns)
-            self.df = df
-            self.pr()
-            gc.collect()
-            return self
+                    # Execute the query
+                    data = client.query(query)
+                    rows = data.result_rows
+                    columns = data.column_names
 
-            # columns_query = f"DESCRIBE TABLE {query.split('FROM')[1].strip()}"
-            # columns = [row[0] for row in client.execute(columns_query)]
+                    # Convert the result into a DataFrame
+                    df = pd.DataFrame(rows, columns=columns)
+
+                    # Clean up resources
+                    self.df = df
+                    self.pr()
+
+                    gc.collect()
+                    return self
+
+                except Exception as e:
+                    print(f"Attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        print(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                    else:
+                        print("All attempts failed. Please check the connection and query.")
+
         elif db_type == 'google_big_query':
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
@@ -1123,24 +1144,22 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         if print_query:
                             print("Insert query:", insert_query, "Values:", insert_values)
                         cursor.execute(insert_query, insert_values)
-                    
+
                     # Commit changes
                     conn.commit()
 
             except mysql.connector.Error as err:
                 print(f"Error: {err}")
-            
+
             finally:
                 cursor.close()
                 gc.collect()
 
         return self
 
-
-
     def dbiusp(self, db_abs_path, table_name, unique_columns, insert_columns=None, print_query=False):
-        """DATABASE::[d.dbiusp('/path/to/db.sqlite', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""       
- 
+        """DATABASE::[d.dbiusp('/path/to/db.sqlite', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""
+
         # Establish the columns for insertion
         if insert_columns is None:
             insert_columns = self.df.columns.tolist()  # Use all columns from DataFrame
@@ -1175,7 +1194,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 select_query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
                 cursor.execute(select_query, where_values)
                 exists = cursor.fetchone()[0] > 0
-                
+
                 if exists:
                     # Update the existing row
                     set_clause = ", ".join([f"{col} = ?" for col in insert_columns if col not in unique_columns])
@@ -1193,21 +1212,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     if print_query:
                         print("Insert query:", insert_query, "Values:", insert_values)
                     cursor.execute(insert_query, insert_values)
-                
+
                 # Commit changes
                 conn.commit()
 
         except sqlite3.Error as err:
             print(f"SQLite Error: {err}")
-            
+
         finally:
             cursor.close()
             conn.close()
             gc.collect()
 
         return self
-
-
 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
@@ -1440,15 +1457,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         # Ensure the database path is absolute
         if not os.path.isabs(db_path):
             raise ValueError("Please provide an absolute path to the SQLite database file.")
-        
+
         # Ensure the database file exists
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"The database file {db_path} does not exist.")
-        
+
         # Connect to the SQLite database
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            
+
             try:
                 # Fetch existing data from the table
                 select_query = f"SELECT * FROM {table_name}"
@@ -1466,7 +1483,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
                 # Merge new data with existing data
                 merge_df = pd.merge(self.df, existing_df, on=update_where_columns, how='left', suffixes=('', '_existing'), indicator=True)
-                
+
                 # Determine rows to update and insert
                 rows_to_update = merge_df[merge_df['_merge'] == 'both']
                 rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
@@ -1498,8 +1515,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 gc.collect()
 
         return self
-
-
 
     def fcq(self, db_preset_name, query, chunk_size):
         """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
