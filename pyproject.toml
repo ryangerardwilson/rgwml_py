@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rgwml"
-version = "0.0.342"
+version = "0.0.343"
 authors = [
   { name = "Ryan Gerard Wilson", email = "ryangerardwilson@gmail.com" },
 ]
@@ -35,7 +35,6 @@ dependencies = [
     "scipy",
     "seaborn",
     "scikit-learn",
-    "dask[dataframe]",
     "pyarrow",
     "distributed",
     "requests",
@@ -44,7 +43,6 @@ dependencies = [
     "filetype",
     "tqdm",
     "requests-html",
-    "transformers",
     "openai-whisper",
     "slack-sdk",
     "lxml[html_clean]",
