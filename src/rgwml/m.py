@@ -1,9 +1,9 @@
 import os
 import json
-import inspect
+# import inspect
 import sqlite3
 import requests
-import time
+# import time
 import re
 import secrets
 from datetime import datetime, timedelta
@@ -129,22 +129,12 @@ class m:
             return jsonify({"error": error_message}), 500
 
     def validate_email(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
+            with open(config_path, 'r') as file:
                 return json.load(file)
 
         def get_gmail_bot_preset(config, preset_name):
@@ -296,41 +286,6 @@ class m:
 
     # Validates temp password
     def validate_password(self, invoking_function_name, request, sqlite_db_path, gmail_bot_preset_name, telegram_bot_preset_name):
-        """
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
-                return json.load(file)
-
-        def get_gmail_bot_preset(config, preset_name):
-            presets = config.get("gmail_bot_presets", [])
-            for preset in presets:
-                if preset.get("name") == preset_name:
-                    return preset
-            return None
-
-        def get_gmail_bot_details(config, preset_name):
-            preset = get_gmail_bot_preset(config, preset_name)
-            if not preset:
-                raise RuntimeError(f"Gmail bot preset '{preset_name}' not found in the configuration file")
-            service_account_credentials_path = preset.get("service_account_credentials_path")
-            if not service_account_credentials_path:
-                raise RuntimeError(f"Gmail service_account_credentials_path for '{preset_name}' not found in the configuration file.")
-            return service_account_credentials_path
-        """
 
         # Load configuration
         # config = load_config()
@@ -452,22 +407,12 @@ class m:
 
     def set_first_password(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
+            """Load the configuration from the .rgwfuncsrc file."""
+            with open(config_path, 'r') as file:
                 return json.load(file)
 
         def get_gmail_bot_preset(config, preset_name):
@@ -657,23 +602,12 @@ class m:
 
     def send_telegram_message(self, invoking_function_name, message, preset_name):
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
+            """Load the configuration from the .rgwfuncsrc file."""
+            with open(config_path, 'r') as file:
                 return json.load(file)
 
         def get_telegram_preset(config, preset_name):
@@ -707,22 +641,13 @@ class m:
         response.raise_for_status()
 
     def send_reset_password_link(self, invoking_function_name, request, sqlite_db_path, reset_password_page_url, gmail_bot_preset_name, telegram_bot_preset_name):
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
+            """Load the configuration from the .rgwfuncsrc file."""
+            with open(config_path, 'r') as file:
                 return json.load(file)
 
         def get_gmail_bot_preset(config, preset_name):
@@ -862,22 +787,13 @@ class m:
             conn.close()
 
     def reset_password_and_login(self, invoking_function_name, request, sqlite_db_path, post_authentication_redirect_url, gmail_bot_preset_name, telegram_bot_preset_name):
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_config():
-            config_path = locate_config_file()
-            with open(config_path, "r") as file:
+            """Load the configuration from the .rgwfuncsrc file."""
+            with open(config_path, 'r') as file:
                 return json.load(file)
 
         def get_gmail_bot_preset(config, preset_name):

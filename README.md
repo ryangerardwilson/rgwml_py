@@ -23,17 +23,12 @@ RGWML
     # For the remaining 1%
     d2 = r.d()
     d2.fp('/path/to/your/file')
-    
-3. Create a rgwml.config file
------------------------------
 
-An rgwml.config file is required for MSSQL, CLICKHOUSE, MYSQL, GOOGLE BIG QUERY, OPEN AI, NETLIFY and VERCEL integrations. It allows you to namespace your db connections, so you can query like this:
 
-    import rgwml as r
-    d = r.p()
-    d.fq('mysql_db2','SELECT * FROM your_table')
+3. Create a `.rgwfuncsrc` file
+------------------------------
 
-Set out below is the format of a rgwml.config file. Place it anywhere in your Desktop, Downloads or Documents directories.
+A `.rgwfuncsrc` file (located at `vi ~/.rgwfuncsrc) is required for MSSQL, CLICKHOUSE, MYSQL, GOOGLE BIG QUERY, SLACK, TELEGRAM, and GMAIL integrations.
 
     {
       "db_presets" : [
@@ -68,7 +63,7 @@ Set out below is the format of a rgwml.config file. Place it anywhere in your De
           "project_id": ""
         }
       ],
-    "vm_presets": [
+      "vm_presets": [
         {
           "name": "main_server",
           "host": "",
@@ -76,16 +71,34 @@ Set out below is the format of a rgwml.config file. Place it anywhere in your De
           "ssh_key_path": ""
         }
       ],
-    "cloud_storage_presets": [
+      "cloud_storage_presets": [
         {
           "name": "gcs_bucket_name",
-          "credential_path": "path/to/your/credentials.json"
+          "credential_path": "/path/to/your/credentials.json"
         }
       ],
-    "open_ai_key": "",
-    "netlify_token": "",
-    "vercel_token": ""
-  }
+      "telegram_bot_presets": [
+        {
+          "name": "rgwml-bot",
+          "chat_id": "",
+          "bot_token": ""
+        }
+      ],
+      "slack_bot_presets": [
+        {
+          "name": "labs-channel",
+          "channel_id": "",
+          "bot_token": ""
+        }
+      ],
+      "gmail_bot_presets": [
+        {
+          "name": "info@xyz.com",
+          "service_account_credentials_path": "/path/to/your/credentials.json"
+        }
+      ]
+    }
+
 
 4. `r.p()` Class Methods
 ------------------------
@@ -104,10 +117,10 @@ Instantiate this class by `d = r.p()`
     d.fd()
 
     # From query
-    d.fq('rgwml_config_db_preset_name','SELECT * FROM your_table')
+    d.fq('rgwfucsrc_db_preset_name','SELECT * FROM your_table')
 
     # FROM chunkable query
-    d.fcq('rgwml_config_db_preset_name', 'SELECT * FROM your_table', chunk_size)
+    d.fcq('rgwfuncsrc_db_preset_name', 'SELECT * FROM your_table', chunk_size)
     
 ### 4.2. INSPECT
 

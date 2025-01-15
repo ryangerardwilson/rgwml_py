@@ -30,19 +30,19 @@ import filetype
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import asyncio
-import whisper
-import warnings
+# import whisper
+# import warnings
 import re
 from slack_sdk import WebClient
 import sqlite3
 import subprocess
-import smtplib
-from email.message import EmailMessage
+# import smtplib
+# from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
+# from google.auth.transport.requests import Request
 from email import encoders
 import base64
 from io import BytesIO
@@ -220,23 +220,10 @@ class p:
     def fq(self, db_preset_name, query):
         """LOAD::[d.fq('preset_name','SELECT * FROM your_table')] From query."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
-        # config_path = os.path.expanduser("~/Desktop/rgwml.config")
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -281,7 +268,7 @@ class p:
                     password = db_preset['password']
                     database = db_preset['database']
 
-                    # Attempt to connect to ClickHouse
+                    # Connect to ClickHouse
                     client = clickhouse_connect.get_client(
                         host=host,
                         port='8123',
@@ -390,42 +377,36 @@ class p:
     def fslh(self, db_preset_name, query):
         """LOAD::[d.fslh('preset_name', 'SELECT * FROM tablename')] From SQLite host."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
+        # Retrieve the db_preset matching the given db_preset_name
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Check that the database type is 'sqlite3'
         db_type = db_preset['db_type']
         if db_type != 'sqlite3':
             raise ValueError(f"{db_preset_name}: db_type '{db_type}' is not supported by this method")
 
+        # Extract connection details
         host = db_preset['host']
         ssh_key_path = db_preset['ssh_key_path']
         ssh_user = db_preset['ssh_user']
         db_path = db_preset['db_path']
 
         try:
+            # Prepare a temporary file for the SQLite database
             with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
                 temp_db_file_path = temp_db_file.name
 
+            # Use SCP to copy the SQLite database from the remote host to the local machine
             scp_command = [
                 "scp",
                 "-i", ssh_key_path,
@@ -435,9 +416,11 @@ class p:
 
             subprocess.run(scp_command, check=True)
 
+            # Connect to the local SQLite database and execute the query
             with sqlite3.connect(temp_db_file_path) as conn:
                 self.df = pd.read_sql_query(query, conn)
 
+            # Remove the temporary database file
             os.remove(temp_db_file_path)
 
         except subprocess.CalledProcessError as e:
@@ -445,6 +428,7 @@ class p:
         except sqlite3.Error as e:
             raise ValueError(f"SQLite error: {e}")
 
+        # Process and cleanup
         self.pr()
         gc.collect()
         return self
@@ -452,42 +436,36 @@ class p:
     def sldbq(self, db_preset_name, query):
         """DATABASE::[d.sldbq('preset_name', 'SQL QUERY')] SQLite Database Query. Execute and handle both SELECT and alteration queries."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
+        # Retrieve the db_preset matching the given db_preset_name
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Check that the database type is 'sqlite3'
         db_type = db_preset['db_type']
         if db_type != 'sqlite3':
             raise ValueError(f"{db_preset_name}: db_type '{db_type}' is not supported by this method")
 
+        # Extract connection details
         host = db_preset['host']
         ssh_key_path = db_preset['ssh_key_path']
         ssh_user = db_preset['ssh_user']
         db_path = db_preset['db_path']
 
         try:
+            # Prepare a temporary file for the SQLite database
             with tempfile.NamedTemporaryFile(delete=False) as temp_db_file:
                 temp_db_file_path = temp_db_file.name
 
+            # Use SCP to copy the SQLite database from the remote host to the local machine
             scp_command = [
                 "scp",
                 "-i", ssh_key_path,
@@ -497,15 +475,18 @@ class p:
 
             subprocess.run(scp_command, check=True)
 
+            # Check if the query is an alteration query
             alteration_keywords = ('insert', 'update', 'delete', 'create', 'alter', 'drop', 'rename')
             alteration_query = query.strip().lower().startswith(alteration_keywords)
 
             with sqlite3.connect(temp_db_file_path) as conn:
                 if alteration_query:
+                    # Execute the alteration query
                     conn.execute(query)
                     conn.commit()
                     self.df = pd.DataFrame()
 
+                    # Copy the updated database back to the remote host
                     scp_command = [
                         "scp",
                         "-i", ssh_key_path,
@@ -515,8 +496,10 @@ class p:
 
                     subprocess.run(scp_command, check=True)
                 else:
+                    # Execute a select query and load the results into a DataFrame
                     self.df = pd.read_sql_query(query, conn)
 
+            # Remove the temporary database file
             os.remove(temp_db_file_path)
 
         except subprocess.CalledProcessError as e:
@@ -524,25 +507,22 @@ class p:
         except sqlite3.Error as e:
             raise ValueError(f"SQLite error: {e}")
 
+        # Process and cleanup
         self.pr()
         gc.collect()
         return self
 
     def dbq(self, preset_name, db_or_dataset_name, query):
         """DATABASE::[d.dbq('preset_name', 'db_or_dataset_name', 'YOUR QUERY')] Execute a query on the specified database and print the results if it returns data."""
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
 
-        config_path = locate_config_file()
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
+
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
+        # Retrieve the db_preset matching the given preset_name
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == preset_name), None)
 
@@ -552,9 +532,11 @@ class p:
         # Override the database name
         db_preset['database'] = db_or_dataset_name
 
-        db_type = db_preset['db_type']
+        # Set display options for pandas
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_columns', None)
+
+        db_type = db_preset['db_type']
 
         if db_type == 'mssql':
             host = db_preset['host']
@@ -597,7 +579,6 @@ class p:
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            # database = db_preset.get('database', '')
 
             client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
             data = client.query(query)
@@ -606,7 +587,7 @@ class p:
 
             if rows:
                 if 'FROM' not in query.upper():
-                    # Default handling for queries that are not table-oriented
+                    # Default handling for queries not oriented towards tables
                     if query.upper().startswith('SHOW TABLES'):
                         columns = ['name']
                     elif query.upper().startswith('SHOW DATABASES'):
@@ -635,6 +616,7 @@ class p:
         else:
             raise ValueError(f"Unsupported db_type: {db_type}")
 
+        # Reset pandas display options
         pd.reset_option('display.max_rows')
         pd.reset_option('display.max_columns')
         gc.collect()
@@ -642,22 +624,11 @@ class p:
 
     def dbct(self, db_preset_name, db_name, table_name, columns_str, print_query=False):
         """DATABASE::[d.dbct('preset_name', 'db_name', 'your_table', 'Column1, Column2, Column3[VARCHAR(1000)]', print_query=False)] Create table."""
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -667,15 +638,17 @@ class p:
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Ensure the db_type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
 
-        # Process columns
+        # Process columns from the input string
         columns = columns_str.split(',')
         columns = [col.strip() for col in columns]
         processed_columns = []
@@ -692,9 +665,10 @@ class p:
         processed_columns.append("`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         processed_columns.append("`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 
+        # Construct the CREATE TABLE query
         create_query = f"CREATE TABLE `{table_name}` ({', '.join(processed_columns)})"
 
-        # Connect to the database
+        # Connect to the database and execute the query
         with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
 
@@ -712,22 +686,11 @@ class p:
 
     def dbrct(self, db_preset_name, db_name, table_name, columns_str, print_query=False):
         """DATABASE::[d.dbrct('preset_name', 'db_name', 'your_table', 'Column1, Column2, Column3[VARCHAR(1000)]', print_query=False)] Recreate table. Deletes existing table and recreates it."""
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -737,15 +700,17 @@ class p:
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Check that the database type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
 
-        # Process columns
+        # Process the columns from the input string
         columns = columns_str.split(',')
         columns = [col.strip() for col in columns]
         processed_columns = []
@@ -762,6 +727,7 @@ class p:
         processed_columns.append("`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         processed_columns.append("`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 
+        # Construct the CREATE TABLE query
         create_query = f"CREATE TABLE `{table_name}` ({', '.join(processed_columns)})"
 
         # Connect to the database
@@ -769,14 +735,14 @@ class p:
             cursor = conn.cursor()
 
             try:
-                # Drop the existing table
+                # Drop the existing table if it exists
                 drop_query = f"DROP TABLE IF EXISTS `{table_name}`"
                 if print_query:
                     print(drop_query)
                 cursor.execute(drop_query)
                 conn.commit()
 
-                # Create the table
+                # Create the new table
                 if print_query:
                     print(create_query)
                 cursor.execute(create_query)
@@ -997,24 +963,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def dbi(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
-        """DATABASE::[d.dbi('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3']] Simply insert of all rows in the DataFrame into the specified table."""
+        """DATABASE::[d.dbi('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'])] Simply insert all rows in the DataFrame into the specified table."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -1024,10 +978,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Ensure the db_type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
@@ -1038,7 +994,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         else:
             insert_columns = [col.strip() for col in insert_columns]
 
-        # Connect to the database
+        # Connect to the database and execute the insert query
         with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
 
@@ -1061,22 +1017,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def dbiu(self, db_preset_name, db_name, table_name, unique_columns, insert_columns=None, print_query=False):
         """DATABASE::[d.dbiu('preset_name', 'db_name', 'your_table', unique_columns=['Column1', 'Column2'], insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Insert only unique rows based on specified unique_columns."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -1086,10 +1030,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Ensure the db_type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
@@ -1105,11 +1051,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             if col not in insert_columns:
                 insert_columns.append(col)
 
-        # Convert complex data types to string for compatibility
+        # Convert complex data types to a string for compatibility
         for col in insert_columns:
             self.df[col] = self.df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
 
-        # Connect to the database
+        # Connect to the database and handle row insertion/updating
         with mysql.connector.connect(host=host, user=username, password=password, database=db_name) as conn:
             cursor = conn.cursor()
 
@@ -1227,22 +1173,10 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def dbtai(self, db_preset_name, db_name, table_name, insert_columns=None, print_query=False):
         """DATABASE::[d.dbtai('preset_name', 'db_name', 'your_table', insert_columns=['Column7', 'Column9', 'Column3'], print_query=False)] Truncate and insert. Truncates the table and inserts the DataFrame."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -1252,10 +1186,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Ensure the db_type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
@@ -1358,24 +1294,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def dbuoi(self, db_preset_name, db_name, table_name, update_where_columns, update_at_column_names, print_query=False):
-        """DATABASE::[d.dbuoi('preset_name', 'db_name', 'your_table', ['where_column1', 'where_column2'], ['update_column1', 'update_column2'], print_query=False)] Update or insert. Updates rows based on columns, inserts if no update occurs."""
+        """DATABASE::[d.dbuoi('preset_name', 'db_name', 'your_table', ['where_column1', 'where_column2'], ['update_column1', 'update_column2'], print_query=False)]
+        Update or insert. Updates rows based on columns, inserts if no update occurs."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        # Read the rgwml.config file from the Desktop
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
@@ -1385,10 +1310,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         if not db_preset:
             raise ValueError(f"No matching db_preset found for {db_preset_name}")
 
+        # Ensure the db_type is 'mysql'
         db_type = db_preset['db_type']
         if db_type != 'mysql':
             raise ValueError(f"Unsupported db_type for this method: {db_type}")
 
+        # Retrieve connection details
         host = db_preset['host']
         username = db_preset['username']
         password = db_preset['password']
@@ -1418,9 +1345,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 # Determine rows to update and insert
                 rows_to_update = merge_df[merge_df['_merge'] == 'both']
                 rows_to_insert = merge_df[merge_df['_merge'] == 'left_only']
-
-                # print("Rows to update:", rows_to_update)
-                # print("Rows to insert:", rows_to_insert)
 
                 # Prepare update queries
                 for _, row in rows_to_update.iterrows():
@@ -1517,24 +1441,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def fcq(self, db_preset_name, query, chunk_size):
         """LOAD::[d.fcq('preset_name', 'SELECT * FROM your_table', chunk_size)] From chunkable query."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [
-                os.path.join(home_dir, "Desktop"),
-                os.path.join(home_dir, "Documents"),
-                os.path.join(home_dir, "Downloads"),
-            ]
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
-            for path in search_paths:
-                for root, dirs, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
-
-        config_path = locate_config_file()
+        # Read the .rgwfuncsrc config file from the home directory
         with open(config_path, 'r') as f:
             config = json.load(f)
 
+        # Find the matching db_preset
         db_presets = config.get('db_presets', [])
         db_preset = next((preset for preset in db_presets if preset['name'] == db_preset_name), None)
         if not db_preset:
@@ -1600,11 +1514,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             host = db_preset['host']
             username = db_preset['username']
             password = db_preset['password']
-            database = db_preset.get('database', '')
 
-            client = clickhouse_connect.get_client(host=host, port='8123', username=username, password=password)
+            client = clickhouse_connect.get_client(host=host, port=8123, username=username, password=password)
 
-            # client = ClickHouseClient(host=host, user=username, password=password, database=database)
             total_rows = client.execute(f"SELECT COUNT(*) FROM ({query}) AS total_query")[0][0]
 
             offset = 0
@@ -1626,12 +1538,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             json_file_path = db_preset['json_file_path']
             project_id = db_preset['project_id']
 
-            if not db_preset:
-                raise ValueError(f"No matching Google BigQuery preset found for {db_preset_name}")
-
             credentials = service_account.Credentials.from_service_account_file(json_file_path)
-            query_job = client.query(f"SELECT COUNT(*) FROM ({query}) AS total_query", project=project_id, credentials=credentials)
-            total_rows = [dict(row) for row in query_job.result()][0]['f0_']
+            query_job = pandas_gbq.read_gbq(f"SELECT COUNT(*) AS total FROM ({query}) as total_query", project_id=project_id, credentials=credentials)
+            total_rows = query_job['total'][0]
 
             offset = 0
             while offset < total_rows:
@@ -1711,15 +1620,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def fm(self, preset_name, email_count=50):
         """LOAD::[d.fm('preset-name', 50)] From mail. Fetch recent emails into a DataFrame."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def get_config(config_path):
             """Load the configuration file."""
@@ -1740,7 +1642,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             service = build('gmail', 'v1', credentials=credentials)
             return service
 
-        config_path = locate_config_file()
         config = get_config(config_path)
 
         # Retrieve Gmail preset configuration
@@ -1769,11 +1670,9 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             message = service.users().messages().get(userId='me', id=msg_id, format='metadata').execute()
 
             headers = message['payload'].get('headers', [])
-            # print(headers)
 
             # Extract required data
             email_from = next((header['value'] for header in headers if header['name'].lower() == 'from'), None)
-            # print(f'Extracted From: {email_from}')
             email_subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), None)
             email_date = next((header['value'] for header in headers if header['name'].lower() == 'date'), None)
 
@@ -1911,11 +1810,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def des(self, date_column_name=None, column_aggregation_operations=None):
-        """
-        INSPECT::[d.des(date_column_name='date', column_aggregation_operations={'weight': 'MEAN'})]
-        Describe and calculate additional statistics. Optional: date_column_name, column_aggregation_operations
-        where column_aggregation_operations={'column_name': 'operation'} and operation can be SUM, COUNT, MEAN, MEDIAN.
-        """
+        """INSPECT::[d.des(date_column_name='date', column_aggregation_operations={'weight': 'MEAN'})] Describe and calculate additional statistics. Optional: date_column_name, column_aggregation_operations where column_aggregation_operations={'column_name': 'operation'} and operation can be SUM, COUNT, MEAN, MEDIAN."""
 
         # Set default aggregation operation
         default_aggregation_operation = "SUM"
@@ -2460,22 +2355,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def tg(self, bot_name, message=None, as_file=True, remove_after_send=True):
         """SHARE::[d.tg("bot-name","custom message")] Telegram using the specified bot name."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def get_config(config_path):
             """Load the configuration file."""
             with open(config_path, 'r') as file:
                 return json.load(file)
 
-        config_path = locate_config_file()
         config = get_config(config_path)
 
         # Retrieve bot configuration
@@ -2541,15 +2428,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def gm(self, preset_name, to_email, subject=None, body=None, as_file=True, remove_after_send=True):
         """SHARE::[d.gm("preset-name", "to_email@example.com", "email subject", "custom message body")] Gmail via specified preset."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def get_config(config_path):
             """Load the configuration file."""
@@ -2570,7 +2450,6 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             service = build('gmail', 'v1', credentials=credentials)
             return service
 
-        config_path = locate_config_file()
         config = get_config(config_path)
 
         # Retrieve Gmail preset configuration
@@ -2633,22 +2512,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def slk(self, bot_name, message=None, as_file=True, remove_after_send=True):
         """SHARE::[d.slk("bot-name","custom message")] Slack using the specified bot name."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def get_config(config_path):
             """Load the configuration file."""
             with open(config_path, 'r') as file:
                 return json.load(file)
 
-        config_path = locate_config_file()
         config = get_config(config_path)
 
         # Retrieve bot configuration
@@ -3955,25 +3826,18 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def goaibc(self, job_name, model, columns_to_analyse, classification_options):
-        """OPENAI::[batch_id = d.oaibc('fruit_or_vegetable_classification','gpt-3.5-turbo','Column1, Column3','fruit, vegetable, other')] Get OpenAI Batch Classification. Returns a batch id"""
+        """OPENAI::[batch_id = d.oaibc('fruit_or_vegetable_classification','gpt-3.5-turbo','Column1, Column3','fruit, vegetable, other')] Get OpenAI Batch Classification. Returns a batch id."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
-
             return config.get(key_name)
 
+        # Load the API key for OpenAI
         open_ai_key = load_key('open_ai_key')
         client = OpenAI(api_key=open_ai_key)
 
@@ -3981,7 +3845,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         batch_input_data = []
         for idx, row in self.df.iterrows():
             row_data = {col: row[col] for col in columns_to_analyse.split(', ')}
-            prompt = f"Return a single classification response considering all the data provided below, labelling the entire dataset with one of the following categories: {classification_options}. Data: {row_data}"
+            prompt = (
+                f"Return a single classification response considering all the data provided below, "
+                f"labelling the entire dataset with one of the following categories: {classification_options}. "
+                f"Data: {row_data}"
+            )
             request_data = {
                 "custom_id": f"request-{idx}",
                 "method": "POST",
@@ -3990,15 +3858,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     "model": model,
                     "response_format": {"type": "json_object"},
                     "messages": [
-                        {"role": "system", "content": """You are a helpful assistant that returns a json classifying the user's input in this format: {"classification":"your_response"}."""},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": 'You are a helpful assistant that returns a json classifying the user\'s input in this format: {"classification":"your_response"}.'
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
                     ],
                     "max_tokens": 1000
                 }
             }
             batch_input_data.append(request_data)
-
-        # print(batch_input_data)
 
         # Write the batch input data to a .jsonl file
         batch_input_file_path = tempfile.mktemp(suffix=".jsonl")
@@ -4013,7 +3885,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         )
 
         # Create the batch
-        batch_input_file_id = batch_input_file.id  # Corrected from ['id'] to .id
+        batch_input_file_id = batch_input_file.id  # Corrected attribute access.
         batch = client.batches.create(
             input_file_id=batch_input_file_id,
             endpoint="/v1/chat/completions",
@@ -4029,53 +3901,19 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def oaibiua(self, job_name, model, column_to_analyse, prompt, new_column_name):
         """OPENAI::[batch_id = d.oaibiua('price_analysis','gpt-3.5-turbo','screenshot_of_processing_fees','The image is a transaction screenshot taken from a mobile phone. Extract the price value as an integer', 'price')] Get OpenAI Batch Image URL Analysis. Returns a batch id with optional image URL analysis."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
-
             return config.get(key_name)
 
         def convert_google_drive_url(gdrive_url):
             file_id = gdrive_url.split('id=')[-1]
             return f"https://drive.google.com/uc?export=download&id={file_id}"
 
-        """
-        def download_and_process_image(image_url):
-            try:
-                if "drive.google.com" in image_url:
-                    image_url = convert_google_drive_url(image_url)
-
-                response = requests.get(image_url)
-                if response.status_code == 200 and response.content:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img_file:
-                        tmp_img_file.write(response.content)
-                        tmp_img_file.flush()
-
-                    try:
-                        image = Image.open(tmp_img_file.name)
-                        with BytesIO() as output_buffer:
-                            image.convert("RGB").save(output_buffer, format="JPEG")
-                            base64_image = base64.b64encode(output_buffer.getvalue()).decode("utf-8")
-                            return base64_image
-                    except UnidentifiedImageError:
-                        print(f"Failed to identify image file for URL: {image_url}")
-                    finally:
-                        os.unlink(tmp_img_file.name)
-            except Exception as e:
-                print(f"Exception during image download or processing: {e}")
-            return ""  # Return an empty string on error
-        """
         def download_and_process_image(image_url):
             try:
                 # Define common headers used by browsers
@@ -4188,18 +4026,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def oaibl(self):
         """OPENAI::[d.oaibl()] OpenAI Batch list. Lists OpenAI batch jobs."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4211,14 +4042,14 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         batch_statuses = []
         response = client.batches.list(limit=10)  # Adjust the limit as needed
 
-        for batch_info in response:
+        for batch_info in response['data']:
             batch_statuses.append({
-                "batch_id": batch_info.id,
-                "status": batch_info.status,
-                "created_at": batch_info.created_at,
-                "completed_at": getattr(batch_info, 'completed_at', None),
-                "failed_at": getattr(batch_info, 'failed_at', None),
-                "expired_at": getattr(batch_info, 'expired_at', None)
+                "batch_id": batch_info['id'],
+                "status": batch_info['status'],
+                "created_at": batch_info['created_at'],
+                "completed_at": batch_info.get('completed_at'),
+                "failed_at": batch_info.get('failed_at'),
+                "expired_at": batch_info.get('expired_at')
             })
 
         # Create a DataFrame to display batch statuses
@@ -4231,18 +4062,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def oaibc(self, batch_id):
         """OPENAI::[d.oaibc('batch_id_to_cancel')] OpenAI batch cancel. Cancel a batch and print its status."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4257,12 +4081,12 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         # Retrieve and print the batch info
         batch_info = client.batches.retrieve(batch_id)
         batch_status = {
-            "batch_id": batch_info.id,
-            "status": batch_info.status,
-            "created_at": batch_info.created_at,
-            "completed_at": getattr(batch_info, 'completed_at', None),
-            "failed_at": getattr(batch_info, 'failed_at', None),
-            "expired_at": getattr(batch_info, 'expired_at', None)
+            "batch_id": batch_info['id'],
+            "status": batch_info['status'],
+            "created_at": batch_info['created_at'],
+            "completed_at": batch_info.get('completed_at'),
+            "failed_at": batch_info.get('failed_at'),
+            "expired_at": batch_info.get('expired_at')
         }
 
         # Create a DataFrame to display batch status
@@ -4275,18 +4099,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
     def oaibs(self, batch_id):
         """OPENAI::[d.oaibs('batch_id')] OpenAI Batch status. Checks the status of a specific OpenAI batch job."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4298,29 +4115,22 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         batch_info = client.batches.retrieve(batch_id)
 
         # Extract the status
-        status = batch_info.status
+        status = batch_info['status']
 
         # Print the status
         print(f"Batch Status: {status}")
 
-        # Return the status for method chaining or other use
+        # Return self for method chaining or other use
         return self
 
     def goaibs(self, batch_id):
         """OPENAI::[status, output_file_id = d.goaibs('batch_id')] OpenAI Batch get status. Returns the status of a specific OpenAI batch job."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4332,14 +4142,15 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         batch_info = client.batches.retrieve(batch_id)
 
         # Extract the status
-        status = batch_info.status
-        output_file_id = batch_info.output_file_id
+        status = batch_info['status']
+        output_file_id = batch_info.get('output_file_id')
 
         # Print the status
         print(f"Batch Status: {status}")
-        print(f"Output file id: {output_file_id}")
+        if output_file_id:
+            print(f"Output file id: {output_file_id}")
 
-        # Return the status for method chaining or other use
+        # Return the status and output file ID for method chaining or other use
         return status, output_file_id
 
     def oais(self, file_path, model, columns_to_analyse, classification_options, batch_column_name):
@@ -4376,18 +4187,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             return tmp_file_path
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4398,20 +4202,20 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             try:
                 storer = store.get_storer('df')
                 if not hasattr(storer.attrs, 'metadata'):
-                    print("No harvest meta data found")
+                    print("No harvest metadata found")
                     self.pr()
                     return self
 
                 metadata = storer.attrs.metadata
             except AttributeError:
-                print("No harvest meta data found")
+                print("No harvest metadata found")
                 return self
 
             batch_id = metadata.get('batch_id')
             batch_column_name = metadata.get('batch_column_name')
 
             if not batch_id or not batch_column_name:
-                print("No harvest meta data found")
+                print("No harvest metadata found")
                 self.pr()
                 return self
 
@@ -4430,7 +4234,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 with open(tmp_file_path, 'r') as f:
                     for line in f:
                         result = json.loads(line)
-                        if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
+                        if ('response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0):
                             message_content = result['response']['body']['choices'][0]['message']['content']
                             classification = json.loads(message_content)["classification"]
                             new_column_data.append(classification)
@@ -4449,7 +4253,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def oaihbid(self, batch_id, batch_column_name):
-        """OPENAI::[d.oaihbid('your_batch_id', 'your_batch_column_name')] OpenAI harvest by batch ID. Check the status of the batch job using the given batch ID and process the results."""
+        """OPENAI::[d.oaihbid('your_batch_id', 'your_batch_column_name')]
+        OpenAI harvest by batch ID. Check the status of the batch job using the given batch ID and process the results."""
 
         def download_output_file(output_file_id, open_ai_key):
             client = OpenAI(api_key=open_ai_key)
@@ -4469,18 +4274,11 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
 
             return tmp_file_path
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4502,7 +4300,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     for line in f:
                         try:
                             result = json.loads(line)
-                            if 'response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0:
+                            if ('response' in result and 'body' in result['response'] and 'choices' in result['response']['body'] and len(result['response']['body']['choices']) > 0):
                                 custom_id = result.get('custom_id', '')
                                 # Extract the index from custom_id, e.g., 'request-8'
                                 match = re.search(r'request-(\d+)', custom_id)
@@ -4539,20 +4337,13 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         return self
 
     def oaiatc(self, url_column, transcription_column, participants=None, classify=None, summary_word_length=0, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4):
-        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', participants='customer, agent', classify=[{'emotion': 'happy, unhappy, neutral'}, {'issue': 'internet_issue, payment_issue, other_issue'}], summary_word_length=30, whisper_model="whisper-1", json_mode_model="gpt-4o", chunk_size=4)] OpenAI append transcription columns. Method to append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whister_model (default is whisper-1), json_mode_model (default is gpt-40), chunk_size (parallel processing of rows in chunks, default is 4)"""
+        """OPENAI::[d.oaiatc('audio_url_column_name','transcriptions_new_column_name', ...)] Append transcriptions to DataFrame based on URLs in a specified column. Optional params: participants, classify, whisper_model, json_mode_model, chunk_size."""
 
-        def locate_config_file(filename="rgwml.config"):
-            home_dir = os.path.expanduser("~")
-            search_paths = [os.path.join(home_dir, folder) for folder in ["Desktop", "Documents", "Downloads"]]
-
-            for path in search_paths:
-                for root, _, files in os.walk(path):
-                    if filename in files:
-                        return os.path.join(root, filename)
-            raise FileNotFoundError(f"{filename} not found in Desktop, Documents, or Downloads folders")
+        # Directly set the config path to ~/.rgwfuncsrc
+        config_path = os.path.expanduser("~/.rgwfuncsrc")
 
         def load_key(key_name):
-            config_path = locate_config_file()
+            """Load the key from the configuration file."""
             with open(config_path, 'r') as f:
                 config = json.load(f)
             return config.get(key_name)
@@ -4563,7 +4354,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         async def process_url(session, url):
             try:
                 # Try to download the file directly
-                response = requests.get(url)
+                response = session.get(url)
                 response.raise_for_status()
 
                 # Save the audio file to a temporary file
@@ -4587,45 +4378,8 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                     if kind is None:
                         raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
 
-            except requests.exceptions.RequestException:
-                # If direct download fails, try using requests_html
-                try:
-                    response = await session.get(url)
-                    await response.html.arender()
-
-                    # Find the download URL
-                    download_button = response.html.find('a', containing='Download', first=True)
-                    if not download_button:
-                        raise ValueError("Download button not found on the page")
-                    download_url = download_button.attrs['href']
-
-                    # Download the audio file
-                    response = await session.get(download_url)
-                    response.raise_for_status()
-
-                    # Save the audio file to a temporary file
-                    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-                        tmp_file.write(response.content)
-                        tmp_file_path = tmp_file.name
-
-                    # Determine the file type using filetype
-                    kind = filetype.guess(tmp_file_path)
-                    if kind is None:
-                        # Check the Content-Type header as a fallback
-                        content_type = response.headers.get('Content-Type')
-                        if content_type:
-                            content_types = [ct.strip() for ct in content_type.split(',')]
-                            for ct in content_types:
-                                if ct.startswith('audio/'):
-                                    extension = ct.split('/')[1].split(';')[0]
-                                    if extension in ['flac', 'm4a', 'mp3', 'mp4', 'mpeg', 'mpga', 'oga', 'ogg', 'wav', 'webm']:
-                                        kind = {'extension': extension}
-                                        break
-                        if kind is None:
-                            raise ValueError(f"Unsupported file format from Content-Type: {content_type}")
-
-                except Exception as e:
-                    return None, None, None, {}, url, str(e)
+            except Exception as e:
+                return None, None, None, {}, url, str(e)
 
             # Renaming the file with the correct extension
             new_tmp_file_path = f"{tmp_file_path}.{kind['extension']}"
@@ -4685,6 +4439,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                         )
                         summary_content = summary_response.choices[0].message.content
                         summary = json.loads(summary_content)["summary"]
+
                     # Classify the transcription if classification labels are provided
                     labels_dict = {}
                     if classify:
@@ -4709,7 +4464,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
         def process_chunk(urls):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            session = AsyncHTMLSession(loop=loop)  # Use the event loop created for this thread
+            session = AsyncHTMLSession(loop=loop)
             results = loop.run_until_complete(process_all_urls(session, urls))
             loop.close()
             return results
@@ -4722,7 +4477,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
             return results
 
         urls = self.df[url_column].tolist()
-        num_threads = min(4, len(urls))  # Adjust the number of threads as needed
+        num_threads = min(4, len(urls))
         chunk_size = min(chunk_size, len(urls))
         chunks = np.array_split(urls, chunk_size)
 
@@ -4756,6 +4511,7 @@ SELECT * FROM `project_id.dataset_id.your_table_name` ORDER BY your_date_column 
                 self.df[f"{transcription_column}_{column}"] = labels
         if summary_word_length > 5:
             self.df[f"{transcription_column}_summary"] = summaries
+
         time.sleep(3)
         print()
         self.oc(f'..., {transcription_column}')
